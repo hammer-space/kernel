@@ -18,6 +18,19 @@
 #include <linux/evm.h>
 #include <linux/ima.h>
 
+/*
+ * inode_extended_permission  -  permissions beyond read/write/execute
+ *
+ * Check for permissions that only richacls can currently grant.
+ */
+static int inode_extended_permission(struct user_namespace *mnt_userns,
+				     struct inode *inode, int mask)
+{
+	if (!IS_RICHACL(inode))
+		return -EPERM;
+	return inode_permission(mnt_userns, inode, mask);
+}
+
 /**
  * chown_ok - verify permissions to chown inode
  * @mnt_userns:	user namespace of the mount @inode was found from
@@ -30,8 +43,7 @@
  * permissions. On non-idmapped mounts or if permission checking is to be
  * performed on the raw inode simply passs init_user_ns.
  */
-static bool chown_ok(struct user_namespace *mnt_userns,
-		     const struct inode *inode,
+static bool chown_ok(struct user_namespace *mnt_userns, struct inode *inode,
 		     kuid_t uid)
 {
 	kuid_t kuid = i_uid_into_mnt(mnt_userns, inode);
@@ -41,6 +53,9 @@ static bool chown_ok(struct user_namespace *mnt_userns,
 		return true;
 	if (uid_eq(kuid, INVALID_UID) &&
 	    ns_capable(inode->i_sb->s_user_ns, CAP_CHOWN))
+		return true;
+	if (uid_eq(current_fsuid(), uid) &&
+	    inode_extended_permission(mnt_userns, inode, MAY_TAKE_OWNERSHIP) == 0)
 		return true;
 	return false;
 }
@@ -57,17 +72,44 @@ static bool chown_ok(struct user_namespace *mnt_userns,
  * permissions. On non-idmapped mounts or if permission checking is to be
  * performed on the raw inode simply passs init_user_ns.
  */
-static bool chgrp_ok(struct user_namespace *mnt_userns,
-		     const struct inode *inode, kgid_t gid)
+static bool chgrp_ok(struct user_namespace *mnt_userns, struct inode *inode,
+		     kgid_t gid)
 {
 	kgid_t kgid = i_gid_into_mnt(mnt_userns, inode);
+	int in_group = in_group_p(gid);
 	if (uid_eq(current_fsuid(), i_uid_into_mnt(mnt_userns, inode)) &&
-	    (in_group_p(gid) || gid_eq(gid, inode->i_gid)))
+	    (in_group || gid_eq(gid, inode->i_gid)))
+		return true;
+
+	if (in_group &&
+	    inode_extended_permission(mnt_userns, inode, MAY_TAKE_OWNERSHIP) == 0)
 		return true;
 	if (capable_wrt_inode_uidgid(mnt_userns, inode, CAP_CHOWN))
 		return true;
 	if (gid_eq(kgid, INVALID_GID) &&
 	    ns_capable(inode->i_sb->s_user_ns, CAP_CHOWN))
+		return true;
+	return false;
+}
+
+/**
+ * inode_owner_permitted_or_capable
+ *
+ * Check for permissions implicitly granted to the owner, like MAY_CHMOD or
+ * MAY_SET_TIMES.  Equivalent to inode_owner_or_capable for file systems
+ * without support for those permissions.
+ */
+static bool inode_owner_permitted_or_capable(struct user_namespace *mnt_userns,
+					     struct inode *inode, int mask)
+{
+	struct user_namespace *ns;
+
+	if (uid_eq(current_fsuid(), i_uid_into_mnt(mnt_userns, inode)))
+		return true;
+	if (inode_extended_permission(mnt_userns, inode, mask) == 0)
+		return true;
+	ns = current_user_ns();
+	if (ns_capable(ns, CAP_FOWNER) && kuid_has_mapping(ns, inode->i_uid))
 		return true;
 	return false;
 }
@@ -123,7 +165,7 @@ int setattr_prepare(struct user_namespace *mnt_userns, struct dentry *dentry,
 
 	/* Make sure a caller can chmod. */
 	if (ia_valid & ATTR_MODE) {
-		if (!inode_owner_or_capable(mnt_userns, inode))
+		if (!inode_owner_permitted_or_capable(mnt_userns, inode, MAY_CHMOD))
 			return -EPERM;
 		/* Also check the setgid bit! */
                if (!in_group_p((ia_valid & ATTR_GID) ? attr->ia_gid :
@@ -134,7 +176,7 @@ int setattr_prepare(struct user_namespace *mnt_userns, struct dentry *dentry,
 
 	/* Check for setting the inode time. */
 	if (ia_valid & (ATTR_MTIME_SET | ATTR_ATIME_SET | ATTR_TIMES_SET)) {
-		if (!inode_owner_or_capable(mnt_userns, inode))
+		if (!inode_owner_permitted_or_capable(mnt_userns, inode, MAY_SET_TIMES))
 			return -EPERM;
 	}
 
