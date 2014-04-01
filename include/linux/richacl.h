@@ -186,5 +186,6 @@ extern unsigned int richacl_want_to_mask(unsigned int);
 extern void richacl_compute_max_masks(struct richacl *);
 extern int richacl_permission(struct inode *, const struct richacl *, int);
 extern int richacl_chmod(struct inode *, umode_t);
+extern int richacl_equiv_mode(const struct richacl *, umode_t *);
 
 #endif /* __RICHACL_H */
