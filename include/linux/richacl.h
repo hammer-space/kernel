@@ -188,5 +188,7 @@ extern int richacl_permission(struct user_namespace *, struct inode *,
 			      const struct richacl *, int);
 extern int richacl_chmod(struct user_namespace *, struct inode *, umode_t);
 extern int richacl_equiv_mode(const struct richacl *, umode_t *);
+extern struct richacl *richacl_inherit(const struct richacl *, int);
+extern struct richacl *richacl_create(umode_t *, struct inode *);
 
 #endif /* __RICHACL_H */
