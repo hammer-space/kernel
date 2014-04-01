@@ -38,6 +38,7 @@
 #include <linux/hash.h>
 #include <linux/bitops.h>
 #include <linux/init_task.h>
+#include <linux/richacl.h>
 #include <linux/uaccess.h>
 
 #include "internal.h"
@@ -270,8 +271,42 @@ void putname(struct filename *name)
 		__putname(name);
 }
 
+static int check_richacl(struct user_namespace *mnt_userns, struct inode *inode,
+			 int mask)
+{
+#ifdef CONFIG_FS_RICHACL
+	struct richacl *acl;
+
+	if (mask & MAY_NOT_BLOCK) {
+		acl = get_cached_richacl_rcu(inode);
+		if (!acl)
+			goto no_acl;
+		/* no ->get_richacl() calls in RCU mode... */
+		if (acl == ACL_NOT_CACHED)
+			return -ECHILD;
+		return richacl_permission(mnt_userns, inode, acl, mask & ~MAY_NOT_BLOCK);
+	}
+
+	acl = get_richacl(inode);
+	if (IS_ERR(acl))
+		return PTR_ERR(acl);
+	if (acl) {
+		int error = richacl_permission(mnt_userns, inode, acl, mask);
+		richacl_put(acl);
+		return error;
+	}
+no_acl:
+#endif
+	if (mask & (MAY_DELETE_SELF | MAY_TAKE_OWNERSHIP |
+		    MAY_CHMOD | MAY_SET_TIMES)) {
+		/* File permission bits cannot grant this. */
+		return -EACCES;
+	}
+	return -EAGAIN;
+}
+
 /**
- * check_acl - perform ACL permission checking
+ * check_posix_acl - perform ACL permission checking
  * @mnt_userns:	user namespace of the mount the inode was found from
  * @inode:	inode to check permissions on
  * @mask:	right to check for (%MAY_READ, %MAY_WRITE, %MAY_EXEC ...)
@@ -286,8 +321,8 @@ void putname(struct filename *name)
  * On non-idmapped mounts or if permission checking is to be performed on the
  * raw inode simply passs init_user_ns.
  */
-static int check_acl(struct user_namespace *mnt_userns,
-		     struct inode *inode, int mask)
+static int check_posix_acl(struct user_namespace *mnt_userns,
+			   struct inode *inode, int mask)
 {
 #ifdef CONFIG_FS_POSIX_ACL
 	struct posix_acl *acl;
@@ -345,9 +380,23 @@ static int acl_permission_check(struct user_namespace *mnt_userns,
 		return (mask & ~mode) ? -EACCES : 0;
 	}
 
+	/*
+	 * With POSIX ACLs, the (mode & S_IRWXU) bits exactly match the owner
+	 * permissions, and we can skip checking posix acls for the owner.
+	 * With richacls, the owner may be granted fewer permissions than the
+	 * mode bits seem to suggest (for example, append but not write), and
+	 * we always need to check the richacl.
+	 */
+
+	if (IS_RICHACL(inode)) {
+		int error = check_richacl(mnt_userns, inode, mask);
+		if (error != -EAGAIN)
+			return error;
+	}
+
 	/* Do we have ACL's? */
 	if (IS_POSIXACL(inode) && (mode & S_IRWXG)) {
-		int error = check_acl(mnt_userns, inode, mask);
+		int error = check_posix_acl(mnt_userns, inode, mask);
 		if (error != -EAGAIN)
 			return error;
 	}
