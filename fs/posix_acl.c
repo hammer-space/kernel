@@ -42,7 +42,7 @@ struct posix_acl *get_cached_acl(struct inode *inode, int type)
 	for (;;) {
 		rcu_read_lock();
 		acl = rcu_dereference(*p);
-		if (!acl || is_uncached_base_acl(acl) ||
+		if (!acl || !IS_POSIXACL(inode) || is_uncached_base_acl(acl) ||
 		    refcount_inc_not_zero(&acl->ba_refcount))
 			break;
 		rcu_read_unlock();
