@@ -719,3 +719,154 @@ richacl_equiv_mode(const struct richacl *acl, umode_t *mode_p)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(richacl_equiv_mode);
+
+static inline bool
+ace_inherits_to_directory(const struct richace *ace)
+{
+	if (ace->e_flags & RICHACE_DIRECTORY_INHERIT_ACE)
+		return true;
+	if ((ace->e_flags & RICHACE_FILE_INHERIT_ACE) &&
+	    !(ace->e_flags & RICHACE_NO_PROPAGATE_INHERIT_ACE))
+		return true;
+	return false;
+}
+
+/**
+ * richacl_inherit  -  compute the inherited acl of a new file
+ * @dir_acl:	acl of the containing directory
+ * @isdir:	inherit by a directory or non-directory?
+ *
+ * A directory can have acl entries which files and/or directories created
+ * inside the directory will inherit.  This function computes the acl for such
+ * a new file.  If there is no inheritable acl, it will return %NULL.
+ */
+struct richacl *
+richacl_inherit(const struct richacl *dir_acl, int isdir)
+{
+	const struct richace *dir_ace;
+	struct richacl *acl = NULL;
+	struct richace *ace;
+	int count = 0;
+
+	if (isdir) {
+		richacl_for_each_entry(dir_ace, dir_acl) {
+			if (!ace_inherits_to_directory(dir_ace))
+				continue;
+			count++;
+		}
+		if (!count)
+			return NULL;
+		acl = richacl_alloc(count, GFP_KERNEL);
+		if (!acl)
+			return ERR_PTR(-ENOMEM);
+		ace = acl->a_entries;
+		richacl_for_each_entry(dir_ace, dir_acl) {
+			if (!ace_inherits_to_directory(dir_ace))
+				continue;
+			richace_copy(ace, dir_ace);
+			if (dir_ace->e_flags & RICHACE_NO_PROPAGATE_INHERIT_ACE)
+				ace->e_flags &= ~RICHACE_INHERITANCE_FLAGS;
+			else if (dir_ace->e_flags & RICHACE_DIRECTORY_INHERIT_ACE)
+				ace->e_flags &= ~RICHACE_INHERIT_ONLY_ACE;
+			else
+				ace->e_flags |= RICHACE_INHERIT_ONLY_ACE;
+			ace++;
+		}
+	} else {
+		richacl_for_each_entry(dir_ace, dir_acl) {
+			if (!(dir_ace->e_flags & RICHACE_FILE_INHERIT_ACE))
+				continue;
+			count++;
+		}
+		if (!count)
+			return NULL;
+		acl = richacl_alloc(count, GFP_KERNEL);
+		if (!acl)
+			return ERR_PTR(-ENOMEM);
+		ace = acl->a_entries;
+		richacl_for_each_entry(dir_ace, dir_acl) {
+			if (!(dir_ace->e_flags & RICHACE_FILE_INHERIT_ACE))
+				continue;
+			richace_copy(ace, dir_ace);
+			ace->e_flags &= ~RICHACE_INHERITANCE_FLAGS;
+			/*
+			 * RICHACE_DELETE_CHILD is meaningless for
+			 * non-directories, so clear it.
+			 */
+			ace->e_mask &= ~RICHACE_DELETE_CHILD;
+			ace++;
+		}
+	}
+
+	return acl;
+}
+
+/*
+ * richacl_inherit_inode  -  compute inherited acl and file mode
+ * @dir_acl:	acl of the containing directory
+ * @mode_p:	mode of the new inode
+ *
+ * The file permission bits in @mode_p must be set to the create mode by the
+ * caller.
+ *
+ * If there is an inheritable acl, the maximum permissions that the acl grants
+ * are computed and the file masks of the new acl are set accordingly.
+ */
+static struct richacl *
+richacl_inherit_inode(const struct richacl *dir_acl, umode_t *mode_p)
+{
+	struct richacl *acl;
+	umode_t mode = *mode_p;
+
+	acl = richacl_inherit(dir_acl, S_ISDIR(mode));
+	if (acl) {
+		if (richacl_equiv_mode(acl, &mode) == 0) {
+			*mode_p &= mode;
+			richacl_put(acl);
+			acl = NULL;
+		} else {
+			richacl_compute_max_masks(acl);
+			/*
+			 * Ensure that the acl will not grant any permissions
+			 * beyond the create mode.
+			 */
+			acl->a_flags |= RICHACL_MASKED;
+			acl->a_owner_mask &=
+				richacl_mode_to_mask(mode >> 6);
+			acl->a_group_mask &=
+				richacl_mode_to_mask(mode >> 3);
+			acl->a_other_mask &=
+				richacl_mode_to_mask(mode);
+		}
+	} else
+		*mode_p &= ~current_umask();
+
+	return acl;
+}
+
+/**
+ * richacl_create  -  filesystem create helper
+ * @mode_p:	mode of the new inode
+ * @dir:	containing directory
+ *
+ * Compute the inherited acl for a new inode.  If there is no acl to inherit,
+ * apply the umask.  Use when creating a new inode on a richacl enabled file
+ * system.
+ */
+struct richacl *richacl_create(umode_t *mode_p, struct inode *dir)
+{
+	struct richacl *dir_acl, *acl = NULL;
+
+	if (S_ISLNK(*mode_p))
+		return NULL;
+	dir_acl = get_richacl(dir);
+	if (dir_acl) {
+		if (IS_ERR(dir_acl))
+			return dir_acl;
+		acl = richacl_inherit_inode(dir_acl, mode_p);
+		richacl_put(dir_acl);
+	} else
+		*mode_p &= ~current_umask();
+	return acl;
+}
+EXPORT_SYMBOL_GPL(richacl_create);
