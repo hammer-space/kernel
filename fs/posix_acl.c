@@ -105,12 +105,12 @@ struct posix_acl *get_acl(struct inode *inode, int type)
 	 * It is guaranteed that is_uncached_acl(sentinel) is true.
 	 */
 
+	if (!IS_POSIXACL(inode))
+		return NULL;
+
 	acl = get_cached_acl(inode, type);
 	if (!is_uncached_acl(acl))
 		return acl;
-
-	if (!IS_POSIXACL(inode))
-		return NULL;
 
 	sentinel = uncached_acl_sentinel(current);
 	p = acl_by_type(inode, type);
