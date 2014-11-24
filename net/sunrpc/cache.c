@@ -698,6 +698,8 @@ static bool cache_defer_req(struct cache_req *req, struct cache_head *item)
 		if (!test_bit(CACHE_PENDING, &item->flags))
 			return false;
 	}
+	if (!req->defer)
+		return false;
 	dreq = req->defer(req);
 	if (dreq == NULL)
 		return false;
