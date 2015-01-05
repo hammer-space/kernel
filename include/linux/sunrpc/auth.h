@@ -13,6 +13,7 @@
 #ifdef __KERNEL__
 
 #include <linux/sunrpc/sched.h>
+#include <linux/sunrpc/svcauth.h>
 #include <linux/sunrpc/msg_prot.h>
 #include <linux/sunrpc/xdr.h>
 
@@ -155,6 +156,9 @@ struct rpc_credops {
 						void *, __be32 *, void *);
 	int			(*crkey_timeout)(struct rpc_cred *);
 	bool			(*crkey_to_expire)(struct rpc_cred *);
+	bool			(*crmap_to_svc_cred)(struct rpc_auth *,
+						     struct rpc_cred *,
+						     struct svc_cred *);
 	char *			(*crstringify_acceptor)(struct rpc_cred *);
 };
 
@@ -200,6 +204,9 @@ void			rpcauth_clear_credcache(struct rpc_cred_cache *);
 int			rpcauth_key_timeout_notify(struct rpc_auth *,
 						struct rpc_cred *);
 bool			rpcauth_cred_key_to_expire(struct rpc_auth *, struct rpc_cred *);
+bool			rpcauth_map_to_svc_cred(struct rpc_auth *,
+						struct rpc_cred *,
+						struct svc_cred *);
 char *			rpcauth_stringify_acceptor(struct rpc_cred *);
 
 static inline

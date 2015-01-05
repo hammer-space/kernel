@@ -368,6 +368,16 @@ rpcauth_cred_key_to_expire(struct rpc_auth *auth, struct rpc_cred *cred)
 }
 EXPORT_SYMBOL_GPL(rpcauth_cred_key_to_expire);
 
+bool
+rpcauth_map_to_svc_cred(struct rpc_auth *auth, struct rpc_cred *cred,
+			struct svc_cred *scred)
+{
+	if (!cred->cr_ops->crmap_to_svc_cred)
+		return false;
+	return cred->cr_ops->crmap_to_svc_cred(auth, cred, scred);
+}
+EXPORT_SYMBOL_GPL(rpcauth_map_to_svc_cred);
+
 char *
 rpcauth_stringify_acceptor(struct rpc_cred *cred)
 {
