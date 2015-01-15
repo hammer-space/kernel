@@ -1146,6 +1146,7 @@ static int nfs_server_list_show(struct seq_file *m, void *v)
 {
 	struct nfs_client *clp;
 	struct nfs_net *nn = net_generic(seq_file_net(m), nfs_net_id);
+	char more[10];
 
 	/* display header on line 1 */
 	if (v == &nn->nfs_client_list) {
@@ -1160,13 +1161,16 @@ static int nfs_server_list_show(struct seq_file *m, void *v)
 	if (clp->cl_cons_state != NFS_CS_READY)
 		return 0;
 
+	snprintf(more, 1024, " %s",
+		test_bit(NFS_CS_LOCAL_IO, &clp->cl_flags) ? "local_io " : "");
+
 	rcu_read_lock();
-	seq_printf(m, "v%u %s %s %3d %s\n",
+	seq_printf(m, "v%u %s %s %3d %-20s %s\n",
 		   clp->rpc_ops->version,
 		   rpc_peeraddr2str(clp->cl_rpcclient, RPC_DISPLAY_HEX_ADDR),
 		   rpc_peeraddr2str(clp->cl_rpcclient, RPC_DISPLAY_HEX_PORT),
 		   refcount_read(&clp->cl_count),
-		   clp->cl_hostname);
+		   clp->cl_hostname, more);
 	rcu_read_unlock();
 
 	return 0;
