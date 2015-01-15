@@ -1743,7 +1743,8 @@ static const struct rpc_call_ops ff_layout_commit_call_ops_v4 = {
 };
 
 static enum pnfs_try_status
-ff_layout_read_pagelist(struct nfs_pgio_header *hdr)
+ff_layout_read_pagelist(struct nfs_pageio_descriptor *desc,
+			struct nfs_pgio_header *hdr)
 {
 	struct pnfs_layout_segment *lseg = hdr->lseg;
 	struct nfs4_pnfs_ds *ds;
@@ -1795,7 +1796,7 @@ ff_layout_read_pagelist(struct nfs_pgio_header *hdr)
 	hdr->mds_offset = offset;
 
 	/* Perform an asynchronous read to ds */
-	nfs_initiate_pgio(ds->ds_clp, ds_clnt, hdr, ds_cred,
+	nfs_initiate_pgio(desc, ds->ds_clp, ds_clnt, hdr, ds_cred,
 			  ds->ds_clp->rpc_ops,
 			  vers == 3 ? &ff_layout_read_call_ops_v3 :
 				      &ff_layout_read_call_ops_v4,
@@ -1814,7 +1815,8 @@ out_failed:
 
 /* Perform async writes. */
 static enum pnfs_try_status
-ff_layout_write_pagelist(struct nfs_pgio_header *hdr, int sync)
+ff_layout_write_pagelist(struct nfs_pageio_descriptor *desc,
+			 struct nfs_pgio_header *hdr, int sync)
 {
 	struct pnfs_layout_segment *lseg = hdr->lseg;
 	struct nfs4_pnfs_ds *ds;
@@ -1864,7 +1866,7 @@ ff_layout_write_pagelist(struct nfs_pgio_header *hdr, int sync)
 	hdr->args.offset = offset;
 
 	/* Perform an asynchronous write */
-	nfs_initiate_pgio(ds->ds_clp, ds_clnt, hdr, ds_cred,
+	nfs_initiate_pgio(desc, ds->ds_clp, ds_clnt, hdr, ds_cred,
 			  ds->ds_clp->rpc_ops,
 			  vers == 3 ? &ff_layout_write_call_ops_v3 :
 				      &ff_layout_write_call_ops_v4,
