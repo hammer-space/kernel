@@ -155,6 +155,13 @@ struct pnfs_layoutdriver_type {
 				     struct nfs_commit_info *cinfo);
 	struct nfs_page * (*search_commit_reqs)(struct nfs_commit_info *cinfo,
 						struct page *page);
+	struct file * (*local_open_fh)(struct pnfs_layout_segment *lseg,
+				       u32 ds_idx,
+				       struct nfs_client *clp,
+				       struct rpc_cred *cred,
+				       struct nfs_fh *fh,
+				       fmode_t mode);
+
 	int (*commit_pagelist)(struct inode *inode,
 			       struct list_head *mds_pages,
 			       int how,
@@ -488,6 +495,18 @@ pnfs_search_commit_reqs(struct inode *inode, struct nfs_commit_info *cinfo,
 	return ld->search_commit_reqs(cinfo, page);
 }
 
+static inline struct file *
+pnfs_local_open_fh(struct nfs_server *server, struct pnfs_layout_segment *lseg,
+		   u32 ds_idx, struct nfs_client *clp, struct rpc_cred *cred,
+		   struct nfs_fh *fh, fmode_t mode)
+{
+	struct pnfs_layoutdriver_type *ld = server->pnfs_curr_ld;
+
+	if (ld == NULL || ld->local_open_fh == NULL)
+		return NULL;
+	return ld->local_open_fh(lseg, ds_idx, clp, cred, fh, mode);
+}
+
 /* Should the pNFS client commit and return the layout upon a setattr */
 static inline bool
 pnfs_ld_layoutret_on_setattr(struct inode *inode)
@@ -747,6 +766,14 @@ pnfs_scan_commit_lists(struct inode *inode, struct nfs_commit_info *cinfo,
 static inline struct nfs_page *
 pnfs_search_commit_reqs(struct inode *inode, struct nfs_commit_info *cinfo,
 			struct page *page)
+{
+	return NULL;
+}
+
+static inline struct file *
+pnfs_local_open_fh(struct nfs_server *server, struct pnfs_layout_segment *lseg,
+		   u32 ds_idx, struct nfs_client *clp, struct rpc_cred *cred,
+		   struct nfs_fh *fh, fmode_t mode)
 {
 	return NULL;
 }
