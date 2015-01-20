@@ -15,6 +15,7 @@
 #include <linux/nfs_xdr.h>
 
 #include "internal.h"
+#include "pnfs.h"
 
 #define NFSDBG_FACILITY		NFSDBG_VFS
 
@@ -318,13 +319,16 @@ nfs_local_file_open_cached(struct nfs_client *clp, const struct cred *cred,
 static struct file *
 nfs_local_file_open(struct nfs_client *clp, const struct cred *cred,
 		    struct nfs_fh *fh, const fmode_t mode,
-		    struct nfs_open_context *ctx)
+		    struct nfs_open_context *ctx,
+		    struct pnfs_layout_segment *lseg, u32 ds_idx)
 {
 	struct nfs_server *s = NFS_SERVER(ctx->dentry->d_inode);
 	struct file *filp;
 
-	filp = nfs_local_file_open_cached(clp, cred, fh, mode, ctx);
-
+	filp = pnfs_local_open_fh(s, lseg, ds_idx, clp, cred, fh, mode);
+	/* check bit again because pnfs call might have disabled local io */
+	if (!filp && test_bit(NFS_CS_LOCAL_IO, &clp->cl_flags))
+		filp = nfs_local_file_open_cached(clp, cred, fh, mode, ctx);
 	return filp;
 }
 
@@ -333,7 +337,8 @@ nfs_local_file_open_cdata(struct nfs_client *clp, const struct cred *cred,
 			  struct nfs_fh *fh, const fmode_t mode,
 			  struct nfs_commit_data *cdata)
 {
-        return nfs_local_file_open(clp, cred, fh, mode, cdata->context);
+        return nfs_local_file_open(clp, cred, fh, mode, cdata->context,
+				   cdata->lseg, cdata->ds_commit_index);
 }
 
 static struct file *
@@ -341,7 +346,8 @@ nfs_local_file_open_hdr(struct nfs_client *clp, const struct cred *cred,
 			struct nfs_fh *fh, const fmode_t mode,
 			struct nfs_pgio_header *hdr)
 {
-        return nfs_local_file_open(clp, cred, fh, mode, hdr->args.context);
+        return nfs_local_file_open(clp, cred, fh, mode, hdr->args.context,
+				   hdr->lseg, hdr->ds_commit_idx);
 }
 
 int
