@@ -461,6 +461,10 @@ EXPORT_SYMBOL_GPL(nfs_wait_on_request);
 static struct nfs_client *
 nfs_pgio_get_clp(struct nfs_pageio_descriptor *desc, struct nfs_page *req)
 {
+	struct nfs_client *clp = pnfs_get_nfs_client(desc, req);
+	if (!clp)
+		return clp;
+
 	return NFS_SERVER(page_file_mapping(req->wb_page)->host)->nfs_client;
 }
 

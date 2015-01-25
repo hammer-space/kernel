@@ -166,6 +166,8 @@ struct pnfs_layoutdriver_type {
 				       const struct cred *cred,
 				       struct nfs_fh *fh,
 				       fmode_t mode);
+	struct nfs_client * (*get_nfs_client)(struct nfs_pageio_descriptor *desc,
+				       struct nfs_page *req);
 
 	int (*commit_pagelist)(struct inode *inode,
 			       struct list_head *mds_pages,
@@ -522,6 +524,18 @@ pnfs_local_open_fh(struct nfs_server *server, struct pnfs_layout_segment *lseg,
 	return ld->local_open_fh(lseg, ds_idx, clp, cred, fh, mode);
 }
 
+static inline struct nfs_client *
+pnfs_get_nfs_client(struct nfs_pageio_descriptor *desc, struct nfs_page *req)
+{
+	struct pnfs_layoutdriver_type *ld;
+
+	ld = NFS_SERVER(page_file_mapping(req->wb_page)->host)->pnfs_curr_ld;
+
+	if (ld == NULL || ld->get_nfs_client == NULL)
+		return NULL;
+	return ld->get_nfs_client(desc, req);
+}
+
 /* Should the pNFS client commit and return the layout upon a setattr */
 static inline bool
 pnfs_ld_layoutret_on_setattr(struct inode *inode)
@@ -789,6 +803,12 @@ static inline struct file *
 pnfs_local_open_fh(struct nfs_server *server, struct pnfs_layout_segment *lseg,
 		   u32 ds_idx, struct nfs_client *clp, const struct cred *cred,
 		   struct nfs_fh *fh, fmode_t mode)
+{
+	return NULL;
+}
+
+static inline struct nfs_client *
+pnfs_get_nfs_client(struct nfs_pageio_descriptor *desc, struct nfs_page *req)
 {
 	return NULL;
 }
