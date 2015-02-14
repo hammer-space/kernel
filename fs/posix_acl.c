@@ -22,7 +22,7 @@
 #include <linux/export.h>
 #include <linux/user_namespace.h>
 
-static struct posix_acl **acl_by_type(struct inode *inode, int type)
+static struct base_acl **acl_by_type(struct inode *inode, int type)
 {
 	switch (type) {
 	case ACL_TYPE_ACCESS:
@@ -36,47 +36,48 @@ static struct posix_acl **acl_by_type(struct inode *inode, int type)
 
 struct posix_acl *get_cached_acl(struct inode *inode, int type)
 {
-	struct posix_acl **p = acl_by_type(inode, type);
-	struct posix_acl *acl;
+	struct base_acl **p = acl_by_type(inode, type);
+	struct base_acl *acl;
 
 	for (;;) {
 		rcu_read_lock();
 		acl = rcu_dereference(*p);
-		if (!acl || is_uncached_acl(acl) ||
-		    refcount_inc_not_zero(&acl->a_refcount))
+		if (!acl || is_uncached_base_acl(acl) ||
+		    refcount_inc_not_zero(&acl->ba_refcount))
 			break;
 		rcu_read_unlock();
 		cpu_relax();
 	}
 	rcu_read_unlock();
-	return acl;
+	return container_of(acl, struct posix_acl, a_base);
 }
 EXPORT_SYMBOL(get_cached_acl);
 
 struct posix_acl *get_cached_acl_rcu(struct inode *inode, int type)
 {
-	return rcu_dereference(*acl_by_type(inode, type));
+	struct base_acl *acl = rcu_dereference(*acl_by_type(inode, type));
+	return container_of(acl, struct posix_acl, a_base);
 }
 EXPORT_SYMBOL(get_cached_acl_rcu);
 
 void set_cached_acl(struct inode *inode, int type, struct posix_acl *acl)
 {
-	struct posix_acl **p = acl_by_type(inode, type);
-	struct posix_acl *old;
+	struct base_acl **p = acl_by_type(inode, type);
+	struct base_acl *old;
 
-	old = xchg(p, posix_acl_dup(acl));
-	if (!is_uncached_acl(old))
-		posix_acl_release(old);
+	old = xchg(p, &posix_acl_dup(acl)->a_base);
+	if (!is_uncached_base_acl(old))
+		base_acl_put(old);
 }
 EXPORT_SYMBOL(set_cached_acl);
 
-static void __forget_cached_acl(struct posix_acl **p)
+static void __forget_cached_acl(struct base_acl **p)
 {
-	struct posix_acl *old;
+	struct base_acl *old;
 
 	old = xchg(p, ACL_NOT_CACHED);
-	if (!is_uncached_acl(old))
-		posix_acl_release(old);
+	if (!is_uncached_base_acl(old))
+		base_acl_put(old);
 }
 
 void forget_cached_acl(struct inode *inode, int type)
@@ -95,7 +96,7 @@ EXPORT_SYMBOL(forget_all_cached_acls);
 struct posix_acl *get_acl(struct inode *inode, int type)
 {
 	void *sentinel;
-	struct posix_acl **p;
+	struct base_acl **p;
 	struct posix_acl *acl;
 
 	/*
@@ -152,7 +153,7 @@ struct posix_acl *get_acl(struct inode *inode, int type)
 	 * Cache the result, but only if our sentinel is still in place.
 	 */
 	posix_acl_dup(acl);
-	if (unlikely(cmpxchg(p, sentinel, acl) != sentinel))
+	if (unlikely(cmpxchg(p, sentinel, &acl->a_base) != sentinel))
 		posix_acl_release(acl);
 	return acl;
 }
@@ -164,7 +165,7 @@ EXPORT_SYMBOL(get_acl);
 void
 posix_acl_init(struct posix_acl *acl, int count)
 {
-	refcount_set(&acl->a_refcount, 1);
+	base_acl_init(&acl->a_base);
 	acl->a_count = count;
 }
 EXPORT_SYMBOL(posix_acl_init);
@@ -197,7 +198,7 @@ posix_acl_clone(const struct posix_acl *acl, gfp_t flags)
 		           sizeof(struct posix_acl_entry);
 		clone = kmemdup(acl, size, flags);
 		if (clone)
-			refcount_set(&clone->a_refcount, 1);
+			base_acl_init(&clone->a_base);
 	}
 	return clone;
 }
@@ -419,7 +420,7 @@ static int posix_acl_create_masq(struct posix_acl *acl, umode_t *mode_p)
 	umode_t mode = *mode_p;
 	int not_equiv = 0;
 
-	/* assert(atomic_read(acl->a_refcount) == 1); */
+	/* assert(base_acl_refcount(&acl->a_base) == 1); */
 
 	FOREACH_ACL_ENTRY(pa, acl, pe) {
                 switch(pa->e_tag) {
@@ -474,7 +475,7 @@ static int __posix_acl_chmod_masq(struct posix_acl *acl, umode_t mode)
 	struct posix_acl_entry *group_obj = NULL, *mask_obj = NULL;
 	struct posix_acl_entry *pa, *pe;
 
-	/* assert(atomic_read(acl->a_refcount) == 1); */
+	/* assert(base_acl_refcount(&acl->a_base) == 1); */
 
 	FOREACH_ACL_ENTRY(pa, acl, pe) {
 		switch(pa->e_tag) {

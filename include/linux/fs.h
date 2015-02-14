@@ -36,6 +36,7 @@
 #include <linux/delayed_call.h>
 #include <linux/uuid.h>
 #include <linux/errseq.h>
+#include <linux/refcount.h>
 #include <linux/ioprio.h>
 #include <linux/fs_types.h>
 #include <linux/build_bug.h>
@@ -593,18 +594,22 @@ static inline void mapping_allow_writable(struct address_space *mapping)
 #define i_size_ordered_init(inode) do { } while (0)
 #endif
 
+struct base_acl {
+	refcount_t ba_refcount;
+	struct rcu_head ba_rcu;
+};
 struct posix_acl;
 #define ACL_NOT_CACHED ((void *)(-1))
 #define ACL_DONT_CACHE ((void *)(-3))
 
-static inline struct posix_acl *
+static inline struct base_acl *
 uncached_acl_sentinel(struct task_struct *task)
 {
 	return (void *)task + 1;
 }
 
 static inline bool
-is_uncached_acl(struct posix_acl *acl)
+is_uncached_base_acl(struct base_acl *acl)
 {
 	return (long)acl & 1;
 }
@@ -629,9 +634,9 @@ struct inode {
 	kgid_t			i_gid;
 	unsigned int		i_flags;
 
-#ifdef CONFIG_FS_POSIX_ACL
-	struct posix_acl	*i_acl;
-	struct posix_acl	*i_default_acl;
+#if defined(CONFIG_FS_POSIX_ACL)
+	struct base_acl		*i_acl;
+	struct base_acl		*i_default_acl;
 #endif
 
 	const struct inode_operations	*i_op;
@@ -3562,5 +3567,30 @@ static inline struct sock *io_uring_get_socket(struct file *file)
 	return NULL;
 }
 #endif
+
+extern bool path_noexec(const struct path *path);
+extern void inode_nohighmem(struct inode *inode);
+
+static inline void base_acl_get(struct base_acl *acl)
+{
+	if (acl)
+		refcount_inc(&acl->ba_refcount);
+}
+
+static inline void base_acl_put(struct base_acl *acl)
+{
+	if (acl && refcount_dec_and_test(&acl->ba_refcount))
+		kfree_rcu(acl, ba_rcu);
+}
+
+static inline void base_acl_init(struct base_acl *acl)
+{
+	refcount_set(&acl->ba_refcount, 1);
+}
+
+static inline int base_acl_refcount(struct base_acl *acl)
+{
+	return refcount_read(&acl->ba_refcount);
+}
 
 #endif /* _LINUX_FS_H */

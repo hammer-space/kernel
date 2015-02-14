@@ -12,7 +12,6 @@
 #include <linux/bug.h>
 #include <linux/slab.h>
 #include <linux/rcupdate.h>
-#include <linux/refcount.h>
 #include <uapi/linux/posix_acl.h>
 
 struct posix_acl_entry {
@@ -25,8 +24,7 @@ struct posix_acl_entry {
 };
 
 struct posix_acl {
-	refcount_t		a_refcount;
-	struct rcu_head		a_rcu;
+	struct base_acl		a_base;  /* must be first, see posix_acl_release() */
 	unsigned int		a_count;
 	struct posix_acl_entry	a_entries[0];
 };
@@ -35,14 +33,19 @@ struct posix_acl {
 	for(pa=(acl)->a_entries, pe=pa+(acl)->a_count; pa<pe; pa++)
 
 
+static inline bool
+is_uncached_acl(struct posix_acl *acl)
+{
+	return is_uncached_base_acl(&acl->a_base);
+}
+
 /*
  * Duplicate an ACL handle.
  */
 static inline struct posix_acl *
 posix_acl_dup(struct posix_acl *acl)
 {
-	if (acl)
-		refcount_inc(&acl->a_refcount);
+	base_acl_get(&acl->a_base);
 	return acl;
 }
 
@@ -52,8 +55,8 @@ posix_acl_dup(struct posix_acl *acl)
 static inline void
 posix_acl_release(struct posix_acl *acl)
 {
-	if (acl && refcount_dec_and_test(&acl->a_refcount))
-		kfree_rcu(acl, a_rcu);
+	BUILD_BUG_ON(offsetof(struct posix_acl, a_base) != 0);
+	base_acl_put(&acl->a_base);
 }
 
 
