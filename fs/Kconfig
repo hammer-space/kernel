@@ -364,6 +364,12 @@ config NFS_V4_2_SSC_HELPER
 	bool
 	default y if NFS_V4_2
 
+config NFS_RICHACL
+	bool
+	depends on NFSD_V4 || NFS_V4
+	select FS_RICHACL
+	default y
+
 source "net/sunrpc/Kconfig"
 source "fs/ceph/Kconfig"
 
