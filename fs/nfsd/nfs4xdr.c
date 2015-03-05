@@ -314,41 +314,35 @@ nfsd4_decode_bitmap4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen)
 }
 
 static __be32
-nfsd4_decode_nfsace4(struct nfsd4_compoundargs *argp, struct nfs4_ace *ace)
+nfsd4_decode_nfsace4(struct nfsd4_compoundargs *argp, struct richace *ace)
 {
-	__be32 *p, status;
+	__be32 *p;
+	u32 dummy32;
 	u32 length;
 
-	if (xdr_stream_decode_u32(argp->xdr, &ace->type) < 0)
+	if (xdr_stream_decode_u32(argp->xdr, &dummy32) < 0)
 		return nfserr_bad_xdr;
-	if (xdr_stream_decode_u32(argp->xdr, &ace->flag) < 0)
+	ace->e_type = dummy32;
+	if (xdr_stream_decode_u32(argp->xdr, &dummy32) < 0)
 		return nfserr_bad_xdr;
-	if (xdr_stream_decode_u32(argp->xdr, &ace->access_mask) < 0)
+	ace->e_flags = dummy32;
+	if (xdr_stream_decode_u32(argp->xdr, &dummy32) < 0)
 		return nfserr_bad_xdr;
+	ace->e_mask = dummy32;
 
 	if (xdr_stream_decode_u32(argp->xdr, &length) < 0)
 		return nfserr_bad_xdr;
 	p = xdr_inline_decode(argp->xdr, length);
 	if (!p)
 		return nfserr_bad_xdr;
-	ace->whotype = nfs4_acl_get_whotype((char *)p, length);
-	if (ace->whotype != NFS4_ACL_WHO_NAMED)
-		status = nfs_ok;
-	else if (ace->flag & NFS4_ACE_IDENTIFIER_GROUP)
-		status = nfsd_map_name_to_gid(argp->rqstp,
-				(char *)p, length, &ace->who_gid);
-	else
-		status = nfsd_map_name_to_uid(argp->rqstp,
-				(char *)p, length, &ace->who_uid);
-
-	return status;
+	return nfsd4_decode_ace_who(ace, argp->rqstp, (char *)p, length);
 }
 
 /* A counted array of nfsace4's */
 static noinline __be32
-nfsd4_decode_acl(struct nfsd4_compoundargs *argp, struct nfs4_acl **acl)
+nfsd4_decode_acl(struct nfsd4_compoundargs *argp, struct richacl **acl)
 {
-	struct nfs4_ace *ace;
+	struct richace *ace;
 	__be32 status;
 	u32 count;
 
@@ -363,12 +357,11 @@ nfsd4_decode_acl(struct nfsd4_compoundargs *argp, struct nfs4_acl **acl)
 		 */
 		return nfserr_fbig;
 
-	*acl = svcxdr_tmpalloc(argp, nfs4_acl_bytes(count));
+	*acl = svcxdr_alloc_richacl(argp, count);
 	if (*acl == NULL)
 		return nfserr_jukebox;
 
-	(*acl)->naces = count;
-	for (ace = (*acl)->aces; ace < (*acl)->aces + count; ace++) {
+	richacl_for_each_entry(ace, *acl) {
 		status = nfsd4_decode_nfsace4(argp, ace);
 		if (status)
 			return status;
@@ -406,7 +399,7 @@ nfsd4_decode_security_label(struct nfsd4_compoundargs *argp,
 
 static __be32
 nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
-		    struct iattr *iattr, struct nfs4_acl **acl,
+		    struct iattr *iattr, struct richacl **acl,
 		    struct xdr_netobj *label, int *umask)
 {
 	unsigned int starting_pos;
@@ -2705,18 +2698,6 @@ static u32 nfs4_file_type(umode_t mode)
 }
 
 static inline __be32
-nfsd4_encode_aclname(struct xdr_stream *xdr, struct svc_rqst *rqstp,
-		     struct nfs4_ace *ace)
-{
-	if (ace->whotype != NFS4_ACL_WHO_NAMED)
-		return nfs4_acl_write_who(xdr, ace->whotype);
-	else if (ace->flag & NFS4_ACE_IDENTIFIER_GROUP)
-		return nfsd4_encode_group(xdr, rqstp, ace->who_gid);
-	else
-		return nfsd4_encode_user(xdr, rqstp, ace->who_uid);
-}
-
-static inline __be32
 nfsd4_encode_layout_types(struct xdr_stream *xdr, u32 layout_types)
 {
 	__be32		*p;
@@ -2858,7 +2839,7 @@ nfsd4_encode_fattr(struct xdr_stream *xdr, struct svc_fh *fhp,
 	u32 rdattr_err = 0;
 	__be32 status;
 	int err;
-	struct nfs4_acl *acl = NULL;
+	struct richacl *acl = NULL;
 #ifdef CONFIG_NFSD_V4_SECURITY_LABEL
 	void *context = NULL;
 	int contextlen;
@@ -2904,7 +2885,7 @@ nfsd4_encode_fattr(struct xdr_stream *xdr, struct svc_fh *fhp,
 		fhp = tempfh;
 	}
 	if (bmval0 & FATTR4_WORD0_ACL) {
-		err = nfsd4_get_nfs4_acl(rqstp, dentry, &acl);
+		err = nfsd4_get_acl(rqstp, dentry, &acl);
 		if (err == -EOPNOTSUPP)
 			bmval0 &= ~FATTR4_WORD0_ACL;
 		else if (err == -EINVAL) {
@@ -3062,7 +3043,7 @@ nfsd4_encode_fattr(struct xdr_stream *xdr, struct svc_fh *fhp,
 		*p++ = cpu_to_be32(rdattr_err);
 	}
 	if (bmval0 & FATTR4_WORD0_ACL) {
-		struct nfs4_ace *ace;
+		struct richace *ace;
 
 		if (acl == NULL) {
 			p = xdr_reserve_space(xdr, 4);
@@ -3075,17 +3056,16 @@ nfsd4_encode_fattr(struct xdr_stream *xdr, struct svc_fh *fhp,
 		p = xdr_reserve_space(xdr, 4);
 		if (!p)
 			goto out_resource;
-		*p++ = cpu_to_be32(acl->naces);
+		*p++ = cpu_to_be32(acl->a_count);
 
-		for (ace = acl->aces; ace < acl->aces + acl->naces; ace++) {
+		richacl_for_each_entry(ace, acl) {
 			p = xdr_reserve_space(xdr, 4*3);
 			if (!p)
 				goto out_resource;
-			*p++ = cpu_to_be32(ace->type);
-			*p++ = cpu_to_be32(ace->flag);
-			*p++ = cpu_to_be32(ace->access_mask &
-							NFS4_ACE_MASK_ALL);
-			status = nfsd4_encode_aclname(xdr, rqstp, ace);
+			*p++ = cpu_to_be32(ace->e_type);
+			*p++ = cpu_to_be32(ace->e_flags & ~RICHACE_SPECIAL_WHO);
+			*p++ = cpu_to_be32(ace->e_mask & NFS4_ACE_MASK_ALL);
+			status = nfsd4_encode_ace_who(xdr, rqstp, ace);
 			if (status)
 				goto out;
 		}
@@ -3364,7 +3344,7 @@ out:
 	if (context)
 		security_release_secctx(context, contextlen);
 #endif /* CONFIG_NFSD_V4_SECURITY_LABEL */
-	kfree(acl);
+	richacl_put(acl);
 	if (tempfh) {
 		fh_put(tempfh);
 		kfree(tempfh);
