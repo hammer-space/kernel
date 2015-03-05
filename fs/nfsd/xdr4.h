@@ -682,10 +682,17 @@ struct svcxdr_tmpbuf {
 	char buf[];
 };
 
+struct svcxdr_richacl {
+	struct svcxdr_richacl *next;
+	struct richacl *acl;
+};
+
 struct nfsd4_compoundargs {
 	/* scratch variables for XDR decode */
 	struct xdr_stream		*xdr;
 	struct svcxdr_tmpbuf		*to_free;
+	struct svcxdr_richacl		*acls;
+
 	struct svc_rqst			*rqstp;
 
 	u32				taglen;
