@@ -308,6 +308,12 @@ config NFS_COMMON
 	depends on NFSD || NFS_FS || LOCKD
 	default y
 
+config NFS_RICHACL
+	bool
+	depends on NFSD_V4 || NFS_V4
+	select FS_RICHACL
+	default y
+
 source "net/sunrpc/Kconfig"
 source "fs/ceph/Kconfig"
 source "fs/cifs/Kconfig"
