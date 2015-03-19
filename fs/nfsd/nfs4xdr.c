@@ -322,12 +322,19 @@ nfsd4_decode_nfsace4(struct nfsd4_compoundargs *argp, struct richace *ace)
 
 	if (xdr_stream_decode_u32(argp->xdr, &dummy32) < 0)
 		return nfserr_bad_xdr;
+	if (dummy32 > RICHACE_ACCESS_DENIED_ACE_TYPE)
+		return nfserr_inval;
 	ace->e_type = dummy32;
 	if (xdr_stream_decode_u32(argp->xdr, &dummy32) < 0)
 		return nfserr_bad_xdr;
+	if (dummy32 & (~RICHACE_VALID_FLAGS | RICHACE_INHERITED_ACE |
+		       RICHACE_SPECIAL_WHO))
+		return nfserr_inval;
 	ace->e_flags = dummy32;
 	if (xdr_stream_decode_u32(argp->xdr, &dummy32) < 0)
 		return nfserr_bad_xdr;
+	if (dummy32 & ~NFS4_ACE_MASK_ALL)
+		return nfserr_inval;
 	ace->e_mask = dummy32;
 
 	if (xdr_stream_decode_u32(argp->xdr, &length) < 0)
@@ -2885,7 +2892,11 @@ nfsd4_encode_fattr(struct xdr_stream *xdr, struct svc_fh *fhp,
 		fhp = tempfh;
 	}
 	if (bmval0 & FATTR4_WORD0_ACL) {
-		err = nfsd4_get_acl(rqstp, dentry, &acl);
+		acl = nfsd4_get_acl(rqstp, dentry);
+		if (IS_ERR(acl)) {
+			err = PTR_ERR(acl);
+			acl = NULL;
+		}
 		if (err == -EOPNOTSUPP)
 			bmval0 &= ~FATTR4_WORD0_ACL;
 		else if (err == -EINVAL) {
@@ -2928,7 +2939,7 @@ nfsd4_encode_fattr(struct xdr_stream *xdr, struct svc_fh *fhp,
 
 		memcpy(supp, nfsd_suppattrs[minorversion], sizeof(supp));
 
-		if (!IS_POSIXACL(dentry->d_inode))
+		if (!IS_ACL(dentry->d_inode))
 			supp[0] &= ~FATTR4_WORD0_ACL;
 		if (!contextsupport)
 			supp[2] &= ~FATTR4_WORD2_SECURITY_LABEL;
@@ -3063,7 +3074,8 @@ nfsd4_encode_fattr(struct xdr_stream *xdr, struct svc_fh *fhp,
 			if (!p)
 				goto out_resource;
 			*p++ = cpu_to_be32(ace->e_type);
-			*p++ = cpu_to_be32(ace->e_flags & ~RICHACE_SPECIAL_WHO);
+			*p++ = cpu_to_be32(ace->e_flags &
+				~(RICHACE_SPECIAL_WHO | RICHACE_INHERITED_ACE));
 			*p++ = cpu_to_be32(ace->e_mask & NFS4_ACE_MASK_ALL);
 			status = nfsd4_encode_ace_who(xdr, rqstp, ace);
 			if (status)
@@ -3075,7 +3087,7 @@ out_acl:
 		p = xdr_reserve_space(xdr, 4);
 		if (!p)
 			goto out_resource;
-		*p++ = cpu_to_be32(IS_POSIXACL(dentry->d_inode) ?
+		*p++ = cpu_to_be32(IS_ACL(d_inode(dentry)) ?
 			ACL4_SUPPORT_ALLOW_ACL|ACL4_SUPPORT_DENY_ACL : 0);
 	}
 	if (bmval0 & FATTR4_WORD0_CANSETTIME) {
