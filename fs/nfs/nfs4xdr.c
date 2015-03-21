@@ -52,6 +52,10 @@
 #include <linux/nfs.h>
 #include <linux/nfs4.h>
 #include <linux/nfs_fs.h>
+#include <linux/nfs_idmap.h>
+#include <linux/richacl.h>
+#include <linux/richacl_xattr.h>  /* for RICHACL_XATTR_MAX_COUNT */
+#include <linux/nfs4acl.h>
 
 #include "nfs4_fs.h"
 #include "nfs4trace.h"
@@ -1673,16 +1677,24 @@ static void
 encode_setacl(struct xdr_stream *xdr, const struct nfs_setaclargs *arg,
 		struct compound_hdr *hdr)
 {
-	__be32 *p;
+	int attrlen_offset;
+	__be32 attrlen, *p;
 
 	encode_op_hdr(xdr, OP_SETATTR, decode_setacl_maxsz, hdr);
 	encode_nfs4_stateid(xdr, &zero_stateid);
+
+	/* Encode attribute bitmap. */
 	p = reserve_space(xdr, 2*4);
 	*p++ = cpu_to_be32(1);
 	*p = cpu_to_be32(FATTR4_WORD0_ACL);
-	p = reserve_space(xdr, 4);
-	*p = cpu_to_be32(arg->acl_len);
+
+	attrlen_offset = xdr->buf->len;
+	xdr_reserve_space(xdr, 4);  /* to be backfilled later */
+
 	xdr_write_pages(xdr, arg->acl_pages, 0, arg->acl_len);
+
+	attrlen = htonl(xdr->buf->len - attrlen_offset - 4);
+	write_bytes_to_xdr_buf(xdr->buf, attrlen_offset, &attrlen, 4);
 }
 
 static void
@@ -2576,8 +2588,9 @@ static void nfs4_xdr_enc_getacl(struct rpc_rqst *req, struct xdr_stream *xdr,
 	struct compound_hdr hdr = {
 		.minorversion = nfs4_xdr_minorversion(&args->seq_args),
 	};
-	const __u32 nfs4_acl_bitmap[1] = {
+	const __u32 nfs4_acl_bitmap[2] = {
 		[0] = FATTR4_WORD0_ACL,
+		[1] = FATTR4_WORD1_MODE,
 	};
 	uint32_t replen;
 
@@ -5266,50 +5279,156 @@ decode_restorefh(struct xdr_stream *xdr)
 	return decode_op_hdr(xdr, OP_RESTOREFH);
 }
 
+static int
+nfs4_decode_ace_who(struct richace *ace,
+		    const char **unmapped, unsigned int *unmapped_len,
+		    const struct nfs_server *server,
+		    struct xdr_stream *xdr)
+{
+	char *who;
+	u32 len;
+	int special_id;
+	__be32 *p;
+	int error;
+
+	p = xdr_inline_decode(xdr, 4);
+	if (!p)
+		return -ENOMEM;  /* acl truncated */
+	len = be32_to_cpup(p++);
+	if (len >= XDR_MAX_NETOBJ) {
+		dprintk("%s: name too long (%u)!\n",
+			__func__, len);
+		return -EIO;
+	}
+	who = (char *)xdr_inline_decode(xdr, len);
+	if (!who)
+		return -ENOMEM;  /* acl truncated */
+
+	special_id = nfs4acl_who_to_special_id(who, len);
+	if (special_id >= 0) {
+		ace->e_flags |= RICHACE_SPECIAL_WHO;
+		ace->e_flags &= ~RICHACE_IDENTIFIER_GROUP;
+		ace->e_id.special = special_id;
+		return 0;
+	}
+	if (ace->e_flags & RICHACE_IDENTIFIER_GROUP) {
+		error = nfs_map_group_to_gid(server, who, len, &ace->e_id.gid);
+		if (error && error != -ENOENT) {
+			dprintk("%s: nfs_map_group_to_gid failed!\n",
+					__func__);
+			return error;
+		}
+	} else {
+		error = nfs_map_name_to_uid(server, who, len, &ace->e_id.uid);
+		if (error && error != -ENOENT) {
+			dprintk("%s: nfs_map_name_to_uid failed!\n",
+					__func__);
+			return error;
+		}
+	}
+	if (error == -ENOENT) {
+		*unmapped = who;
+		*unmapped_len = len;
+	}
+	return 0;
+}
+
+static struct richacl *
+decode_acl_entries(struct xdr_stream *xdr, const struct nfs_server *server)
+{
+	struct richacl *acl;
+	struct richace *ace;
+	uint32_t count;
+	__be32 *p;
+	int status;
+
+	p = xdr_inline_decode(xdr, 4);
+	if (unlikely(!p))
+		return ERR_PTR(-ENOMEM);  /* acl truncated */
+	count = be32_to_cpup(p);
+	if (count > RICHACL_XATTR_MAX_COUNT)
+		return ERR_PTR(-EIO);
+	acl = richacl_alloc(count, GFP_NOFS);
+	if (!acl)
+		return ERR_PTR(-ENOMEM);
+	richacl_for_each_entry(ace, acl) {
+		const char *unmapped = NULL;
+		unsigned int unmapped_len;
+
+		p = xdr_inline_decode(xdr, 4*3);
+		status = -ENOMEM;
+		if (unlikely(!p))
+			goto out;  /* acl truncated */
+		ace->e_type = be32_to_cpup(p++);
+		ace->e_flags = be32_to_cpup(p++);
+		status = -EIO;
+		if (ace->e_flags &
+		    (RICHACE_SPECIAL_WHO | RICHACE_UNMAPPED_WHO))
+			goto out;
+		ace->e_mask = be32_to_cpup(p++);
+		status = nfs4_decode_ace_who(ace, &unmapped,
+					     &unmapped_len, server,
+					     xdr);
+		if (status)
+			goto out;
+		if (unmapped) {
+			status = -ENOMEM;
+			if (richacl_add_unmapped_identifier(&acl, &ace,
+					unmapped, unmapped_len,
+					GFP_NOFS))
+				goto out;
+		}
+	}
+	status = 0;
+
+out:
+	if (status) {
+		richacl_put(acl);
+		acl = ERR_PTR(status);
+	}
+	return acl;
+}
+
 static int decode_getacl(struct xdr_stream *xdr, struct rpc_rqst *req,
 			 struct nfs_getaclres *res)
 {
 	unsigned int savep;
 	uint32_t attrlen,
 		 bitmap[3] = {0};
+	struct richacl *acl = NULL;
 	int status;
-	unsigned int pg_offset;
 
-	res->acl_len = 0;
 	if ((status = decode_op_hdr(xdr, OP_GETATTR)) != 0)
-		goto out;
-
-	xdr_enter_page(xdr, xdr->buf->page_len);
-
-	/* Calculate the offset of the page data */
-	pg_offset = xdr->buf->head[0].iov_len;
-
+		return status;
 	if ((status = decode_attr_bitmap(xdr, bitmap)) != 0)
-		goto out;
+		return status;
 	if ((status = decode_attr_length(xdr, &attrlen, &savep)) != 0)
-		goto out;
+		return status;
 
 	if (unlikely(bitmap[0] & (FATTR4_WORD0_ACL - 1U)))
 		return -EIO;
 	if (likely(bitmap[0] & FATTR4_WORD0_ACL)) {
-
-		/* The bitmap (xdr len + bitmaps) and the attr xdr len words
-		 * are stored with the acl data to handle the problem of
-		 * variable length bitmaps.*/
-		res->acl_data_offset = xdr_stream_pos(xdr) - pg_offset;
-		res->acl_len = attrlen;
-
-		/* Check for receive buffer overflow */
-		if (res->acl_len > (xdr->nwords << 2) ||
-		    res->acl_len + res->acl_data_offset > xdr->buf->page_len) {
-			res->acl_flags |= NFS4_ACL_TRUNC;
-			dprintk("NFS: acl reply: attrlen %u > page_len %u\n",
-					attrlen, xdr->nwords << 2);
-		}
+		acl = decode_acl_entries(xdr, res->server);
+		if (IS_ERR(acl))
+			return PTR_ERR(acl);
+		bitmap[0] &= ~FATTR4_WORD0_ACL;
 	} else
-		status = -EOPNOTSUPP;
+		return -EOPNOTSUPP;
+
+	status = -EIO;
+	if (unlikely(bitmap[0]))
+		goto out;
+
+	status = decode_attr_mode(xdr, bitmap, &res->mode);
+	if (status < 0)
+		goto out;
+	status = 0;
 
 out:
+	if (status)
+		richacl_put(acl);
+	else
+		res->acl = acl;
 	return status;
 }
 

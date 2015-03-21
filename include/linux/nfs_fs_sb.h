@@ -265,5 +265,7 @@ struct nfs_server {
 #define NFS_CAP_COPY		(1U << 24)
 #define NFS_CAP_OFFLOAD_CANCEL	(1U << 25)
 #define NFS_CAP_LAYOUTERROR	(1U << 26)
+#define NFS_CAP_ALLOW_ACLS	(1U << 27)
+#define NFS_CAP_DENY_ACLS	(1U << 28)
 
 #endif

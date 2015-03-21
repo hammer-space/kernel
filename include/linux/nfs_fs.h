@@ -172,7 +172,6 @@ struct nfs_inode {
 	struct mutex		commit_mutex;
 
 #if IS_ENABLED(CONFIG_NFS_V4)
-	struct nfs4_cached_acl	*nfs4_acl;
         /* NFSv4 state */
 	struct list_head	open_states;
 	struct nfs_delegation __rcu *delegation;

@@ -55,6 +55,9 @@
 #include <linux/utsname.h>
 #include <linux/freezer.h>
 #include <linux/iversion.h>
+#include <linux/richacl.h>
+#include <linux/richacl_xattr.h>
+#include <linux/nfs4acl.h>
 
 #include "nfs4_fs.h"
 #include "delegation.h"
@@ -3620,15 +3623,18 @@ static int _nfs4_server_capabilities(struct nfs_server *server, struct nfs_fh *f
 			res.attr_bitmask[2] &= FATTR4_WORD2_NFS42_MASK;
 		}
 		memcpy(server->attr_bitmask, res.attr_bitmask, sizeof(server->attr_bitmask));
-		server->caps &= ~(NFS_CAP_ACLS|NFS_CAP_HARDLINKS|
-				NFS_CAP_SYMLINKS|NFS_CAP_FILEID|
+		server->caps &= ~(NFS_CAP_ALLOW_ACLS|NFS_CAP_DENY_ACLS|
+				NFS_CAP_HARDLINKS|NFS_CAP_SYMLINKS|NFS_CAP_FILEID|
 				NFS_CAP_MODE|NFS_CAP_NLINK|NFS_CAP_OWNER|
 				NFS_CAP_OWNER_GROUP|NFS_CAP_ATIME|
 				NFS_CAP_CTIME|NFS_CAP_MTIME|
 				NFS_CAP_SECURITY_LABEL);
-		if (res.attr_bitmask[0] & FATTR4_WORD0_ACL &&
-				res.acl_bitmask & ACL4_SUPPORT_ALLOW_ACL)
-			server->caps |= NFS_CAP_ACLS;
+		if (res.attr_bitmask[0] & FATTR4_WORD0_ACL) {
+			if (res.acl_bitmask & ACL4_SUPPORT_ALLOW_ACL)
+				server->caps |= NFS_CAP_ALLOW_ACLS;
+			if (res.acl_bitmask & ACL4_SUPPORT_DENY_ACL)
+				server->caps |= NFS_CAP_DENY_ACLS;
+		}
 		if (res.has_links != 0)
 			server->caps |= NFS_CAP_HARDLINKS;
 		if (res.has_symlinks != 0)
@@ -5303,45 +5309,11 @@ static int nfs4_proc_renew(struct nfs_client *clp, const struct cred *cred)
 	return 0;
 }
 
-static inline int nfs4_server_supports_acls(struct nfs_server *server)
-{
-	return server->caps & NFS_CAP_ACLS;
-}
-
-/* Assuming that XATTR_SIZE_MAX is a multiple of PAGE_SIZE, and that
- * it's OK to put sizeof(void) * (XATTR_SIZE_MAX/PAGE_SIZE) bytes on
- * the stack.
+/* A arbitrary limit; we allocate at most DIV_ROUND_UP(NFS4ACL_SIZE_MAX,
+ * PAGE_SIZE) pages and put an array of DIV_ROUND_UP(NFS4ACL_SIZE_MAX,
+ * PAGE_SIZE) pages on the stack when encoding or decoding acls.
  */
-#define NFS4ACL_MAXPAGES DIV_ROUND_UP(XATTR_SIZE_MAX, PAGE_SIZE)
-
-static int buf_to_pages_noslab(const void *buf, size_t buflen,
-		struct page **pages)
-{
-	struct page *newpage, **spages;
-	int rc = 0;
-	size_t len;
-	spages = pages;
-
-	do {
-		len = min_t(size_t, PAGE_SIZE, buflen);
-		newpage = alloc_page(GFP_KERNEL);
-
-		if (newpage == NULL)
-			goto unwind;
-		memcpy(page_address(newpage), buf, len);
-		buf += len;
-		buflen -= len;
-		*pages++ = newpage;
-		rc++;
-	} while (buflen != 0);
-
-	return rc;
-
-unwind:
-	for(; rc > 0; rc--)
-		__free_page(spages[rc-1]);
-	return -ENOMEM;
-}
+#define NFS4ACL_SIZE_MAX 65536
 
 struct nfs4_cached_acl {
 	int cached;
@@ -5349,66 +5321,9 @@ struct nfs4_cached_acl {
 	char data[0];
 };
 
-static void nfs4_set_cached_acl(struct inode *inode, struct nfs4_cached_acl *acl)
-{
-	struct nfs_inode *nfsi = NFS_I(inode);
-
-	spin_lock(&inode->i_lock);
-	kfree(nfsi->nfs4_acl);
-	nfsi->nfs4_acl = acl;
-	spin_unlock(&inode->i_lock);
-}
-
 static void nfs4_zap_acl_attr(struct inode *inode)
 {
-	nfs4_set_cached_acl(inode, NULL);
-}
-
-static inline ssize_t nfs4_read_cached_acl(struct inode *inode, char *buf, size_t buflen)
-{
-	struct nfs_inode *nfsi = NFS_I(inode);
-	struct nfs4_cached_acl *acl;
-	int ret = -ENOENT;
-
-	spin_lock(&inode->i_lock);
-	acl = nfsi->nfs4_acl;
-	if (acl == NULL)
-		goto out;
-	if (buf == NULL) /* user is just asking for length */
-		goto out_len;
-	if (acl->cached == 0)
-		goto out;
-	ret = -ERANGE; /* see getxattr(2) man page */
-	if (acl->len > buflen)
-		goto out;
-	memcpy(buf, acl->data, acl->len);
-out_len:
-	ret = acl->len;
-out:
-	spin_unlock(&inode->i_lock);
-	return ret;
-}
-
-static void nfs4_write_cached_acl(struct inode *inode, struct page **pages, size_t pgbase, size_t acl_len)
-{
-	struct nfs4_cached_acl *acl;
-	size_t buflen = sizeof(*acl) + acl_len;
-
-	if (buflen <= PAGE_SIZE) {
-		acl = kmalloc(buflen, GFP_KERNEL);
-		if (acl == NULL)
-			goto out;
-		acl->cached = 1;
-		_copy_from_pages(acl->data, pages, pgbase, acl_len);
-	} else {
-		acl = kmalloc(sizeof(*acl), GFP_KERNEL);
-		if (acl == NULL)
-			goto out;
-		acl->cached = 0;
-	}
-	acl->len = acl_len;
-out:
-	nfs4_set_cached_acl(inode, acl);
+	forget_cached_richacl(inode);
 }
 
 /*
@@ -5421,117 +5336,269 @@ out:
  * length. The next getxattr call will then produce another round trip to
  * the server, this time with the input buf of the required size.
  */
-static ssize_t __nfs4_get_acl_uncached(struct inode *inode, void *buf, size_t buflen)
+static struct richacl *__nfs4_get_acl_uncached(struct inode *inode)
 {
-	struct page *pages[NFS4ACL_MAXPAGES + 1] = {NULL, };
+	struct nfs_server *server = NFS_SERVER(inode);
+	struct page *pages[DIV_ROUND_UP(NFS4ACL_SIZE_MAX, PAGE_SIZE)] = {};
 	struct nfs_getaclargs args = {
 		.fh = NFS_FH(inode),
 		.acl_pages = pages,
-		.acl_len = buflen,
+		.acl_len = ARRAY_SIZE(pages) * PAGE_SIZE,
 	};
 	struct nfs_getaclres res = {
-		.acl_len = buflen,
+		.server = server,
 	};
 	struct rpc_message msg = {
 		.rpc_proc = &nfs4_procedures[NFSPROC4_CLNT_GETACL],
 		.rpc_argp = &args,
 		.rpc_resp = &res,
 	};
-	unsigned int npages = DIV_ROUND_UP(buflen, PAGE_SIZE) + 1;
-	int ret = -ENOMEM, i;
+	int err, i;
 
-	if (npages > ARRAY_SIZE(pages))
-		return -ERANGE;
-
-	for (i = 0; i < npages; i++) {
-		pages[i] = alloc_page(GFP_KERNEL);
-		if (!pages[i])
+	if (ARRAY_SIZE(pages) > 1) {
+		/* for decoding across pages */
+		res.acl_scratch = alloc_page(GFP_KERNEL);
+		err = -ENOMEM;
+		if (!res.acl_scratch)
 			goto out_free;
 	}
 
-	/* for decoding across pages */
-	res.acl_scratch = alloc_page(GFP_KERNEL);
-	if (!res.acl_scratch)
-		goto out_free;
-
-	args.acl_len = npages * PAGE_SIZE;
-
-	dprintk("%s  buf %p buflen %zu npages %d args.acl_len %zu\n",
-		__func__, buf, buflen, npages, args.acl_len);
-	ret = nfs4_call_sync(NFS_SERVER(inode)->client, NFS_SERVER(inode),
+	dprintk("%s  args.acl_len %zu\n",
+		__func__, args.acl_len);
+	err = nfs4_call_sync(NFS_SERVER(inode)->client, NFS_SERVER(inode),
 			     &msg, &args.seq_args, &res.seq_res, 0);
-	if (ret)
+	if (err)
 		goto out_free;
 
-	/* Handle the case where the passed-in buffer is too short */
-	if (res.acl_flags & NFS4_ACL_TRUNC) {
-		/* Did the user only issue a request for the acl length? */
-		if (buf == NULL)
-			goto out_ok;
-		ret = -ERANGE;
-		goto out_free;
-	}
-	nfs4_write_cached_acl(inode, pages, res.acl_data_offset, res.acl_len);
-	if (buf) {
-		if (res.acl_len > buflen) {
-			ret = -ERANGE;
-			goto out_free;
-		}
-		_copy_from_pages(buf, pages, res.acl_data_offset, res.acl_len);
-	}
-out_ok:
-	ret = res.acl_len;
+	richacl_compute_max_masks(res.acl);
+	/* FIXME: Set inode->i_mode from res->mode?  */
+	set_cached_richacl(inode, res.acl);
+	err = 0;
+
 out_free:
-	for (i = 0; i < npages; i++)
-		if (pages[i])
-			__free_page(pages[i]);
+	if (err) {
+		richacl_put(res.acl);
+		res.acl = ERR_PTR(err);
+	}
+	for (i = 0; i < ARRAY_SIZE(pages) && pages[i]; i++)
+		__free_page(pages[i]);
 	if (res.acl_scratch)
 		__free_page(res.acl_scratch);
-	return ret;
+	return res.acl;
 }
 
-static ssize_t nfs4_get_acl_uncached(struct inode *inode, void *buf, size_t buflen)
+static struct richacl *nfs4_get_acl_uncached(struct inode *inode)
 {
 	struct nfs4_exception exception = { };
-	ssize_t ret;
+	struct richacl *acl;
 	do {
-		ret = __nfs4_get_acl_uncached(inode, buf, buflen);
-		trace_nfs4_get_acl(inode, ret);
-		if (ret >= 0)
+		acl = __nfs4_get_acl_uncached(inode);
+		trace_nfs4_get_acl(inode, IS_ERR(acl) ? PTR_ERR(acl) : 0);
+		if (!IS_ERR(acl))
 			break;
-		ret = nfs4_handle_exception(NFS_SERVER(inode), ret, &exception);
+		acl = ERR_PTR(nfs4_handle_exception(NFS_SERVER(inode),
+			      PTR_ERR(acl), &exception));
 	} while (exception.retry);
-	return ret;
+	return acl;
 }
 
-static ssize_t nfs4_proc_get_acl(struct inode *inode, void *buf, size_t buflen)
+static struct richacl *nfs4_proc_get_acl(struct inode *inode)
 {
 	struct nfs_server *server = NFS_SERVER(inode);
+	struct richacl *acl;
 	int ret;
 
-	if (!nfs4_server_supports_acls(server))
-		return -EOPNOTSUPP;
+	if (!(server->caps & (NFS_CAP_ALLOW_ACLS | NFS_CAP_DENY_ACLS)))
+		return ERR_PTR(-EOPNOTSUPP);
 	ret = nfs_revalidate_inode(server, inode);
 	if (ret < 0)
-		return ret;
+		return ERR_PTR(ret);
 	if (NFS_I(inode)->cache_validity & NFS_INO_INVALID_ACL)
 		nfs_zap_acl_cache(inode);
-	ret = nfs4_read_cached_acl(inode, buf, buflen);
-	if (ret != -ENOENT)
-		/* -ENOENT is returned if there is no ACL or if there is an ACL
-		 * but no cached acl data, just the acl length */
-		return ret;
-	return nfs4_get_acl_uncached(inode, buf, buflen);
+	acl = get_cached_richacl(inode);
+	if (acl != ACL_NOT_CACHED)
+		return acl;
+	return nfs4_get_acl_uncached(inode);
 }
 
-static int __nfs4_proc_set_acl(struct inode *inode, const void *buf, size_t buflen)
+static int
+richacl_supported(struct nfs_server *server, struct richacl *acl)
+{
+	struct richace *ace;
+
+	if (!(server->caps & (NFS_CAP_ALLOW_ACLS | NFS_CAP_DENY_ACLS)))
+		return -EOPNOTSUPP;
+
+	richacl_for_each_entry(ace, acl) {
+		if (richace_is_allow(ace)) {
+			if (!(server->caps & NFS_CAP_ALLOW_ACLS))
+				return -EINVAL;
+		} else if (richace_is_deny(ace)) {
+			if (!(server->caps & NFS_CAP_DENY_ACLS))
+				return -EINVAL;
+		} else
+			return -EINVAL;
+	}
+	return 0;
+}
+
+static int
+nfs4_encode_user(struct xdr_stream *xdr, const struct nfs_server *server,
+		 kuid_t uid)
+{
+	char name[IDMAP_NAMESZ];
+	int len;
+	__be32 *p;
+
+	len = nfs_map_uid_to_name(server, uid, name, IDMAP_NAMESZ);
+	if (len < 0) {
+		dprintk("nfs: couldn't resolve uid %d to string\n",
+				from_kuid(&init_user_ns, uid));
+		return -ENOENT;
+	}
+	p = xdr_reserve_space(xdr, 4 + len);
+	if (!p)
+		return -EIO;
+	p = xdr_encode_opaque(p, name, len);
+	return 0;
+}
+
+static int
+nfs4_encode_group(struct xdr_stream *xdr, const struct nfs_server *server,
+		  kgid_t gid)
+{
+	char name[IDMAP_NAMESZ];
+	int len;
+	__be32 *p;
+
+	len = nfs_map_gid_to_group(server, gid, name, IDMAP_NAMESZ);
+	if (len < 0) {
+		dprintk("nfs: couldn't resolve gid %d to string\n",
+				from_kgid(&init_user_ns, gid));
+		return -ENOENT;
+	}
+	p = xdr_reserve_space(xdr, 4 + len);
+	if (!p)
+		return -EIO;
+	p = xdr_encode_opaque(p, name, len);
+	return 0;
+}
+
+static unsigned int
+nfs4_ace_mask(int minorversion)
+{
+	return minorversion == 0 ? NFS40_ACE_MASK_ALL : NFS4_ACE_MASK_ALL;
+}
+
+static int
+nfs4_encode_ace_who(struct xdr_stream *xdr, const struct nfs_server *server,
+		    struct richace *ace, struct richacl *acl)
+{
+	const char *who;
+	__be32 *p;
+
+	if (ace->e_flags & RICHACE_SPECIAL_WHO) {
+		unsigned int special_id = ace->e_id.special;
+		const char *who;
+		unsigned int len;
+
+		if (!nfs4acl_special_id_to_who(special_id, &who, &len)) {
+			WARN_ON_ONCE(1);
+			return -EIO;
+		}
+		p = xdr_reserve_space(xdr, 4 + len);
+		if (!p)
+			return -EIO;
+		xdr_encode_opaque(p, who, len);
+		return 0;
+	} else {
+		who = richace_unmapped_identifier(ace, acl);
+		if (who) {
+			unsigned int len = strlen(who);
+
+			p = xdr_reserve_space(xdr, 4 + len);
+			if (!p)
+				return -EIO;
+			xdr_encode_opaque(p, who, len);
+			return 0;
+		} else if (ace->e_flags & RICHACE_IDENTIFIER_GROUP)
+			return nfs4_encode_group(xdr, server, ace->e_id.gid);
+		else
+			return nfs4_encode_user(xdr, server, ace->e_id.uid);
+	}
+}
+
+static int
+nfs4_encode_acl(struct page **pages, unsigned int len, struct richacl *acl,
+		const struct nfs_server *server)
+{
+	int minorversion = server->nfs_client->cl_minorversion;
+	unsigned int ace_mask = nfs4_ace_mask(minorversion);
+	struct xdr_stream xdr;
+	struct xdr_buf buf;
+	__be32 *p;
+	struct richace *ace;
+
+	/* Reject acls not understood by the server */
+	if (server->attr_bitmask[1] & FATTR4_WORD1_DACL) {
+		BUILD_BUG_ON(NFS4_ACE_MASK_ALL != RICHACE_VALID_MASK);
+	} else {
+		if (acl->a_flags)
+			return -EINVAL;
+		richacl_for_each_entry(ace, acl) {
+			if (ace->e_flags & RICHACE_INHERITED_ACE)
+				return -EINVAL;
+		}
+	}
+	richacl_for_each_entry(ace, acl) {
+		if (ace->e_mask & ~ace_mask)
+			return -EINVAL;
+	}
+
+	xdr_init_encode_pages(&xdr, &buf, pages, len);
+
+	if (server->attr_bitmask[1] & FATTR4_WORD1_DACL) {
+		p = xdr_reserve_space(&xdr, 4);
+		if (!p)
+			goto fail;
+		*p = cpu_to_be32(acl ? acl->a_flags : 0);
+	}
+
+	p = xdr_reserve_space(&xdr, 4);
+	if (!p)
+		goto fail;
+	if (!acl) {
+		*p++ = cpu_to_be32(0);
+		return buf.len;
+	}
+	*p++ = cpu_to_be32(acl->a_count);
+
+	richacl_for_each_entry(ace, acl) {
+		p = xdr_reserve_space(&xdr, 4*3);
+		if (!p)
+			goto fail;
+		*p++ = cpu_to_be32(ace->e_type);
+		*p++ = cpu_to_be32(ace->e_flags &
+			~(RICHACE_SPECIAL_WHO | RICHACE_UNMAPPED_WHO));
+		*p++ = cpu_to_be32(ace->e_mask & NFS4_ACE_MASK_ALL);
+		if (nfs4_encode_ace_who(&xdr, server, ace, acl) != 0)
+			goto fail;
+	}
+
+	return buf.len;
+
+fail:
+	return -ENOMEM;
+}
+
+static int __nfs4_proc_set_acl(struct inode *inode, struct richacl *acl)
 {
 	struct nfs_server *server = NFS_SERVER(inode);
-	struct page *pages[NFS4ACL_MAXPAGES];
+	struct page *pages[DIV_ROUND_UP(NFS4ACL_SIZE_MAX, PAGE_SIZE) + 1 /* scratch */] = {};
 	struct nfs_setaclargs arg = {
+		.server		= server,
 		.fh		= NFS_FH(inode),
 		.acl_pages	= pages,
-		.acl_len	= buflen,
 	};
 	struct nfs_setaclres res;
 	struct rpc_message msg = {
@@ -5539,16 +5606,25 @@ static int __nfs4_proc_set_acl(struct inode *inode, const void *buf, size_t bufl
 		.rpc_argp	= &arg,
 		.rpc_resp	= &res,
 	};
-	unsigned int npages = DIV_ROUND_UP(buflen, PAGE_SIZE);
 	int ret, i;
 
-	if (!nfs4_server_supports_acls(server))
-		return -EOPNOTSUPP;
-	if (npages > ARRAY_SIZE(pages))
-		return -ERANGE;
-	i = buf_to_pages_noslab(buf, buflen, arg.acl_pages);
-	if (i < 0)
-		return i;
+	ret = richacl_supported(server, acl);
+	if (ret)
+		return ret;
+
+	/*
+	 * Note that the pages array is NULL initialized.  The XDR layer
+	 * allocates pages as needed; we are responsible for freeing those
+	 * pages when we no longer need them.
+	 */
+	ret = nfs4_encode_acl(pages, NFS4ACL_SIZE_MAX, acl, server);
+	if (ret < 0) {
+		for (i = 0; i < ARRAY_SIZE(pages) && pages[i]; i++)
+			put_page(pages[i]);
+		return ret;
+	}
+	arg.acl_len = ret;
+
 	nfs4_inode_make_writeable(inode);
 	ret = nfs4_call_sync(server->client, server, &msg, &arg.seq_args, &res.seq_res, 1);
 
@@ -5556,8 +5632,8 @@ static int __nfs4_proc_set_acl(struct inode *inode, const void *buf, size_t bufl
 	 * Free each page after tx, so the only ref left is
 	 * held by the network stack
 	 */
-	for (; i > 0; i--)
-		put_page(pages[i-1]);
+	for (i = 0; i < ARRAY_SIZE(pages) && pages[i]; i++)
+		put_page(pages[i]);
 
 	/*
 	 * Acl update can result in inode attribute update.
@@ -5573,12 +5649,12 @@ static int __nfs4_proc_set_acl(struct inode *inode, const void *buf, size_t bufl
 	return ret;
 }
 
-static int nfs4_proc_set_acl(struct inode *inode, const void *buf, size_t buflen)
+static int nfs4_proc_set_acl(struct inode *inode, struct richacl *acl)
 {
 	struct nfs4_exception exception = { };
 	int err;
 	do {
-		err = __nfs4_proc_set_acl(inode, buf, buflen);
+		err = __nfs4_proc_set_acl(inode, acl);
 		trace_nfs4_set_acl(inode, err);
 		err = nfs4_handle_exception(NFS_SERVER(inode), err,
 				&exception);
@@ -7116,26 +7192,289 @@ nfs4_release_lockowner(struct nfs_server *server, struct nfs4_lock_state *lsp)
 	rpc_call_async(server->client, &msg, 0, &nfs4_release_lockowner_ops, data);
 }
 
+static int nfs4_xattr_set_richacl(const struct xattr_handler *handler,
+				  struct dentry *dentry, struct inode *inode,
+				  const char *name, const void *buf,
+				  size_t buflen, int flags)
+{
+	struct richacl *acl;
+	int error;
+
+	if (buf) {
+		acl = richacl_from_xattr(&init_user_ns, buf, buflen, -EINVAL);
+		if (IS_ERR(acl))
+			return PTR_ERR(acl);
+		error = richacl_apply_masks(&acl, inode->i_uid);
+	} else {
+		/*
+		 * "Remove the acl"; only permissions granted by the mode
+		 * remain.  We are using the cached mode here which could be
+		 * outdated; should we do a GETATTR first to narrow down the
+		 * race window?
+		 */
+		acl = richacl_from_mode(inode->i_mode);
+		error = 0;
+	}
+
+	if (!error)
+		error = nfs4_proc_set_acl(inode, acl);
+	richacl_put(acl);
+	return error;
+}
+
+static int nfs4_xattr_get_richacl(const struct xattr_handler *handler,
+				  struct dentry *dentry, struct inode *inode,
+				  const char *name, void *buf, size_t buflen)
+{
+	struct richacl *acl;
+	int error;
+	umode_t mode = inode->i_mode & S_IFMT;
+
+	acl = nfs4_proc_get_acl(inode);
+	if (IS_ERR(acl))
+		return PTR_ERR(acl);
+	if (acl == NULL)
+		return -ENODATA;
+	error = -ENODATA;
+	if (richacl_equiv_mode(acl, &mode) == 0 &&
+	    ((mode ^ inode->i_mode) & S_IRWXUGO) == 0)
+		goto out;
+	error = richacl_to_xattr(&init_user_ns, acl, buf, buflen);
+out:
+	richacl_put(acl);
+	return error;
+}
+
+static bool nfs4_xattr_list_acls(struct dentry *dentry)
+{
+	struct nfs_server *server = NFS_SERVER(d_inode(dentry));
+
+	return server->caps & (NFS_CAP_ALLOW_ACLS | NFS_CAP_DENY_ACLS);
+}
+
 #define XATTR_NAME_NFSV4_ACL "system.nfs4_acl"
+
+static __be32 *richacl_put_nfs4_ace(__be32 *p, const struct richace *ace)
+{
+	*p++ = cpu_to_be32(ace->e_type);
+	*p++ = cpu_to_be32(ace->e_flags &
+			   ~(RICHACE_INHERITED_ACE |
+			     RICHACE_UNMAPPED_WHO |
+			     RICHACE_SPECIAL_WHO));
+	*p++ = cpu_to_be32(ace->e_mask);
+
+	return p;
+}
+
+static __be32 *richacl_put_name(__be32 *p, const char *who, int who_len)
+{
+	unsigned int padding = -who_len & 3;
+
+	*p++ = cpu_to_be32(who_len);
+	memcpy(p, who, who_len);
+	memset((char *)p + who_len, 0, padding);
+	p += DIV_ROUND_UP(who_len, 4);
+
+	return p;
+}
+
+static int richacl_to_nfs4_acl(struct nfs_server *server,
+			       const struct richacl *acl,
+			       void *buf, size_t buflen)
+{
+	const struct richace *ace;
+	__be32 *p = buf;
+	size_t size = 0;
+
+	size += 4;
+	if (buflen >= size)
+		*p++ = cpu_to_be32(acl->a_count);
+
+	richacl_for_each_entry(ace, acl) {
+		char who_buf[IDMAP_NAMESZ];
+		const char *who = who_buf;
+		int who_len;
+
+		size += 3 * 4;
+		if (buflen >= size)
+			p = richacl_put_nfs4_ace(p, ace);
+
+		if (richace_is_unix_user(ace)) {
+			who_len = nfs_map_uid_to_name(server, ace->e_id.uid,
+						      who_buf, sizeof(who_buf));
+			if (who_len < 0)
+				return -EIO;
+		} else if (richace_is_unix_group(ace)) {
+			who_len = nfs_map_gid_to_group(server, ace->e_id.gid,
+						       who_buf, sizeof(who_buf));
+			if (who_len < 0)
+				return -EIO;
+		} else if (ace->e_flags & RICHACE_SPECIAL_WHO) {
+			if (!nfs4acl_special_id_to_who(ace->e_id.special,
+						       &who, &who_len))
+				return -EIO;
+		} else {
+			who = richace_unmapped_identifier(ace, acl);
+			if (who)
+				who_len = strlen(who);
+			else
+				return -EIO;
+		}
+
+		size += 4 + ALIGN(who_len, 4);
+		if (buflen >= size)
+			p = richacl_put_name(p, who, who_len);
+	}
+	if (buflen && buflen < size)
+		return -ERANGE;
+	return size;
+}
+
+static int richace_get_nfs4_ace(struct richace *ace, const __be32 **pp,
+				size_t *buflen)
+{
+	const __be32 *p = *pp;
+
+	if (*buflen < 3 * 4)
+		return -EINVAL;
+	ace->e_type = be32_to_cpu(*p++);
+	ace->e_flags = be32_to_cpu(*p++);
+	if (ace->e_flags & (RICHACE_SPECIAL_WHO | RICHACE_UNMAPPED_WHO))
+		return -EINVAL;
+	ace->e_mask = be32_to_cpu(*p++);
+	*pp = p;
+	*buflen -= 3 * 4;
+
+	return 0;
+}
+
+static ssize_t richace_get_who(struct nfs_server *server, struct richacl *acl,
+			       struct richace *ace, const __be32 **pp,
+			       size_t *buflen)
+{
+	const __be32 *p = *pp;
+	u32 who_len, size;
+	int err, special_id;
+	char *who;
+
+	if (*buflen < 4)
+		return -EINVAL;
+	who_len = be32_to_cpu(*p++);
+	*buflen -= 4;
+	size = ALIGN(who_len, 4);
+	if (*buflen < size || size == 0)
+		return -EINVAL;
+	who = (char *)p;
+	special_id = nfs4acl_who_to_special_id(who, who_len);
+	if (special_id >= 0) {
+		ace->e_flags |= RICHACE_SPECIAL_WHO;
+		ace->e_id.special = special_id;
+		goto out;
+	}
+
+	if (ace->e_flags & RICHACE_IDENTIFIER_GROUP) {
+		err = nfs_map_group_to_gid(server, who, who_len,
+					   &ace->e_id.gid);
+		if (err && err != -ENOENT) {
+			dprintk("%s: nfs_map_group_to_gid "
+				"failed!\n", __func__);
+			return err;
+		}
+	} else {
+		err = nfs_map_name_to_uid(server, who, who_len,
+					  &ace->e_id.uid);
+		if (err && err != -ENOENT) {
+			dprintk("%s: nfs_map_name_to_gid "
+				"failed!\n", __func__);
+			return err;
+		}
+	}
+
+	if (err == -ENOENT) {
+		err = -ENOMEM;
+		if (richacl_add_unmapped_identifier(&acl, &ace,
+			who, who_len, GFP_NOFS))
+			return err;
+	}
+
+out:
+	*pp = p + size / 4;
+	*buflen -= size;
+	return 0;
+}
+
+static struct richacl *richacl_from_nfs4_acl(struct nfs_server *server,
+					     const void *buf, size_t buflen)
+{
+	struct richacl *acl = NULL;
+	struct richace *ace;
+	const __be32 *p = buf;
+	int count, err;
+
+	if (buflen < 4)
+		return ERR_PTR(-EINVAL);
+	count = be32_to_cpu(*p++);
+	if (count > RICHACL_XATTR_MAX_COUNT)
+		return ERR_PTR(-EINVAL);
+	buflen -= 4;
+	acl = richacl_alloc(count, GFP_NOFS);
+	if (!acl)
+		return ERR_PTR(-ENOMEM);
+	richacl_for_each_entry(ace, acl) {
+		err = richace_get_nfs4_ace(ace, &p, &buflen);
+		if (err)
+			goto out;
+		err = richace_get_who(server, acl, ace, &p, &buflen);
+		if (err)
+			goto out;
+
+	}
+	err = -EINVAL;
+	if (buflen != 0)
+		goto out;
+	err = 0;
+
+out:
+	if (err) {
+		richacl_put(acl);
+		acl = ERR_PTR(err);
+	}
+	return acl;
+}
 
 static int nfs4_xattr_set_nfs4_acl(const struct xattr_handler *handler,
 				   struct dentry *unused, struct inode *inode,
-				   const char *key, const void *buf,
+				   const char *name, const void *buf,
 				   size_t buflen, int flags)
 {
-	return nfs4_proc_set_acl(inode, buf, buflen);
+	struct richacl *acl;
+	int error;
+
+	if (!buf)
+		return -EINVAL;
+
+	acl = richacl_from_nfs4_acl(NFS_SERVER(inode), (void *)buf, buflen);
+	if (IS_ERR(acl))
+		return PTR_ERR(acl);
+	error = nfs4_proc_set_acl(inode, acl);
+	richacl_put(acl);
+	return error;
 }
 
 static int nfs4_xattr_get_nfs4_acl(const struct xattr_handler *handler,
 				   struct dentry *unused, struct inode *inode,
-				   const char *key, void *buf, size_t buflen)
+				   const char *name, void *buf, size_t buflen)
 {
-	return nfs4_proc_get_acl(inode, buf, buflen);
-}
-
-static bool nfs4_xattr_list_nfs4_acl(struct dentry *dentry)
-{
-	return nfs4_server_supports_acls(NFS_SERVER(d_inode(dentry)));
+	struct richacl *acl;
+	int error;
+	acl = nfs4_proc_get_acl(inode);
+	if (IS_ERR(acl))
+		return PTR_ERR(acl);
+	if (acl == NULL)
+		return -ENODATA;
+	error = richacl_to_nfs4_acl(NFS_SERVER(inode), acl, buf, buflen);
+	richacl_put(acl);
+	return error;
 }
 
 #ifdef CONFIG_NFS_V4_SECURITY_LABEL
@@ -9829,14 +10168,22 @@ const struct nfs_rpc_ops nfs_v4_clientops = {
 	.clone_server	= nfs_clone_server,
 };
 
+static const struct xattr_handler nfs4_xattr_richacl_handler = {
+	.name	= XATTR_NAME_RICHACL,
+	.list	= nfs4_xattr_list_acls,
+	.get	= nfs4_xattr_get_richacl,
+	.set	= nfs4_xattr_set_richacl,
+};
+
 static const struct xattr_handler nfs4_xattr_nfs4_acl_handler = {
 	.name	= XATTR_NAME_NFSV4_ACL,
-	.list	= nfs4_xattr_list_nfs4_acl,
+	.list	= nfs4_xattr_list_acls,
 	.get	= nfs4_xattr_get_nfs4_acl,
 	.set	= nfs4_xattr_set_nfs4_acl,
 };
 
 const struct xattr_handler *nfs4_xattr_handlers[] = {
+	&nfs4_xattr_richacl_handler,
 	&nfs4_xattr_nfs4_acl_handler,
 #ifdef CONFIG_NFS_V4_SECURITY_LABEL
 	&nfs4_xattr_nfs4_label_handler,
