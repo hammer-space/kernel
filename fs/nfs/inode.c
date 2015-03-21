@@ -2243,9 +2243,6 @@ struct inode *nfs_alloc_inode(struct super_block *sb)
 		return NULL;
 	nfsi->flags = 0UL;
 	nfsi->cache_validity = 0UL;
-#if IS_ENABLED(CONFIG_NFS_V4)
-	nfsi->nfs4_acl = NULL;
-#endif /* CONFIG_NFS_V4 */
 #ifdef CONFIG_NFS_V4_2
 	nfsi->xattr_cache = NULL;
 #endif

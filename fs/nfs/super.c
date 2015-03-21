@@ -1055,7 +1055,7 @@ static void nfs_fill_super(struct super_block *sb, struct nfs_fs_context *ctx)
 		/* The VFS shouldn't apply the umask to mode bits. We will do
 		 * so ourselves when necessary.
 		 */
-		sb->s_flags |= SB_POSIXACL;
+		sb->s_flags |= SB_RICHACL;
 		sb->s_time_gran = 1;
 		sb->s_export_op = &nfs_export_ops;
 	} else
@@ -1078,6 +1078,13 @@ static void nfs_fill_super(struct super_block *sb, struct nfs_fs_context *ctx)
 	if (sb->s_blocksize == 0)
 		sb->s_blocksize = nfs_block_bits(server->wsize,
 						 &sb->s_blocksize_bits);
+
+	if (server->nfs_client->rpc_ops->version != 2) {
+		/* The VFS shouldn't apply the umask to mode bits. We will do
+		 * so ourselves when necessary.
+		 */
+		sb->s_flags |= SB_RICHACL;
+	}
 
 	nfs_super_set_maxbytes(sb, server->maxfilesize);
 	server->has_sec_mnt_opts = ctx->has_sec_mnt_opts;
