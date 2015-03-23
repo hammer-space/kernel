@@ -972,6 +972,15 @@ static __be32 *xdr_get_next_encode_buffer(struct xdr_stream *xdr,
 	 * space at the end of the previous buffer:
 	 */
 	xdr_set_scratch_buffer(xdr, xdr->p, frag1bytes);
+
+	if (!*xdr->page_ptr) {
+		struct page *page = alloc_page(GFP_NOFS);
+
+		if (!page)
+			return NULL;
+		*xdr->page_ptr = page;
+	}
+
 	p = page_address(*xdr->page_ptr);
 	/*
 	 * Note this is where the next encode will start after we've
