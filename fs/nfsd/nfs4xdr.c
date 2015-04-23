@@ -313,8 +313,15 @@ nfsd4_decode_bitmap4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen)
 	return nfs_ok;
 }
 
+static unsigned int
+nfsd4_ace_mask(int minorversion)
+{
+	return minorversion == 0 ?  NFS40_ACE_MASK_ALL : NFS4_ACE_MASK_ALL;
+}
+
 static __be32
-nfsd4_decode_nfsace4(struct nfsd4_compoundargs *argp, struct richace *ace)
+nfsd4_decode_nfsace4(struct nfsd4_compoundargs *argp, struct richace *ace,
+		     unsigned short flags_mask, unsigned int ace_mask)
 {
 	__be32 *p;
 	u32 dummy32;
@@ -327,13 +334,12 @@ nfsd4_decode_nfsace4(struct nfsd4_compoundargs *argp, struct richace *ace)
 	ace->e_type = dummy32;
 	if (xdr_stream_decode_u32(argp->xdr, &dummy32) < 0)
 		return nfserr_bad_xdr;
-	if (dummy32 & (~RICHACE_VALID_FLAGS | RICHACE_INHERITED_ACE |
-		       RICHACE_SPECIAL_WHO))
+	if (dummy32 & ~flags_mask)
 		return nfserr_inval;
 	ace->e_flags = dummy32;
 	if (xdr_stream_decode_u32(argp->xdr, &dummy32) < 0)
 		return nfserr_bad_xdr;
-	if (dummy32 & ~NFS4_ACE_MASK_ALL)
+	if (dummy32 & ~ace_mask)
 		return nfserr_inval;
 	ace->e_mask = dummy32;
 
@@ -347,7 +353,8 @@ nfsd4_decode_nfsace4(struct nfsd4_compoundargs *argp, struct richace *ace)
 
 /* A counted array of nfsace4's */
 static noinline __be32
-nfsd4_decode_acl(struct nfsd4_compoundargs *argp, struct richacl **acl)
+nfsd4_decode_acl(struct nfsd4_compoundargs *argp, struct richacl **acl,
+		 unsigned short flags_mask, unsigned int ace_mask)
 {
 	struct richace *ace;
 	__be32 status;
@@ -369,7 +376,7 @@ nfsd4_decode_acl(struct nfsd4_compoundargs *argp, struct richacl **acl)
 		return nfserr_jukebox;
 
 	richacl_for_each_entry(ace, *acl) {
-		status = nfsd4_decode_nfsace4(argp, ace);
+		status = nfsd4_decode_nfsace4(argp, ace, flags_mask, ace_mask);
 		if (status)
 			return status;
 	}
@@ -414,6 +421,7 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 	__be32 *p, status;
 
 	iattr->ia_valid = 0;
+	*acl = NULL;
 	status = nfsd4_decode_bitmap4(argp, bmval, bmlen);
 	if (status)
 		return nfserr_bad_xdr;
@@ -439,11 +447,16 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 		iattr->ia_valid |= ATTR_SIZE;
 	}
 	if (bmval[0] & FATTR4_WORD0_ACL) {
-		status = nfsd4_decode_acl(argp, acl);
+		if (bmval[1] & FATTR4_WORD1_DACL)
+			return nfserr_inval;
+		status = nfsd4_decode_acl(argp, acl,
+					  ~NFS4_ACE_INHERITED_ACE,
+					  nfsd4_ace_mask(argp->minorversion));
 		if (status)
 			return status;
-	} else
-		*acl = NULL;
+		else if (*acl == NULL)
+			return nfserr_jukebox;
+	}
 	if (bmval[1] & FATTR4_WORD1_MODE) {
 		u32 mode;
 
@@ -519,6 +532,22 @@ nfsd4_decode_fattr4(struct nfsd4_compoundargs *argp, u32 *bmval, u32 bmlen,
 			return nfserr_bad_xdr;
 		}
 	}
+	if (bmval[1] & FATTR4_WORD1_DACL) {
+		u32 dummy32;
+
+		if (xdr_stream_decode_u32(argp->xdr, &dummy32))
+			return nfserr_bad_xdr;
+		if (dummy32 & (~RICHACL_VALID_FLAGS | RICHACL_MASKED))
+			return nfserr_inval;
+		status = nfsd4_decode_acl(argp, acl, ~0,
+					  nfsd4_ace_mask(argp->minorversion));
+		if (status)
+			return status;
+		else if (*acl == NULL)
+			return nfserr_jukebox;
+		(*acl)->a_flags = dummy32;
+	}
+
 	label->len = 0;
 	if (IS_ENABLED(CONFIG_NFSD_V4_SECURITY_LABEL) &&
 	    bmval[2] & FATTR4_WORD2_SECURITY_LABEL) {
@@ -2821,6 +2850,42 @@ out_resource:
 	return nfserr_resource;
 }
 
+static __be32 nfsd4_encode_acl_entries(struct xdr_stream *xdr,
+		struct richacl *acl, struct svc_rqst *rqstp,
+		unsigned short flags_mask, unsigned int ace_mask)
+{
+	__be32 *p;
+
+	flags_mask &= ~RICHACE_SPECIAL_WHO;
+
+	p = xdr_reserve_space(xdr, 4);
+	if (!p)
+		return nfserr_resource;
+
+	if (acl == NULL) {
+		*p++ = cpu_to_be32(0);
+	} else {
+		struct richace *ace;
+
+		*p++ = cpu_to_be32(acl->a_count);
+
+		richacl_for_each_entry(ace, acl) {
+			__be32 status;
+
+			p = xdr_reserve_space(xdr, 4*3);
+			if (!p)
+				return nfserr_resource;
+			*p++ = cpu_to_be32(ace->e_type);
+			*p++ = cpu_to_be32(ace->e_flags & flags_mask);
+			*p++ = cpu_to_be32(ace->e_mask & ace_mask);
+			status = nfsd4_encode_ace_who(xdr, rqstp, ace);
+			if (status)
+				return status;
+		}
+	}
+	return 0;
+}
+
 /*
  * Note: @fhp can be NULL; in this case, we might have to compose the filehandle
  * ourselves.
@@ -2891,15 +2956,16 @@ nfsd4_encode_fattr(struct xdr_stream *xdr, struct svc_fh *fhp,
 			goto out;
 		fhp = tempfh;
 	}
-	if (bmval0 & FATTR4_WORD0_ACL) {
+	if ((bmval0 & FATTR4_WORD0_ACL) || (bmval1 & FATTR4_WORD1_DACL)) {
 		acl = nfsd4_get_acl(rqstp, dentry);
 		if (IS_ERR(acl)) {
 			err = PTR_ERR(acl);
 			acl = NULL;
 		}
-		if (err == -EOPNOTSUPP)
+		if (err == -EOPNOTSUPP) {
 			bmval0 &= ~FATTR4_WORD0_ACL;
-		else if (err == -EINVAL) {
+			bmval1 &= ~FATTR4_WORD1_DACL;
+		} else if (err == -EINVAL) {
 			status = nfserr_attrnotsupp;
 			goto out;
 		} else if (err != 0)
@@ -2941,6 +3007,8 @@ nfsd4_encode_fattr(struct xdr_stream *xdr, struct svc_fh *fhp,
 
 		if (!IS_ACL(dentry->d_inode))
 			supp[0] &= ~FATTR4_WORD0_ACL;
+		if (!IS_RICHACL(d_inode(dentry)))
+			supp[1] &= ~FATTR4_WORD1_DACL;
 		if (!contextsupport)
 			supp[2] &= ~FATTR4_WORD2_SECURITY_LABEL;
 		if (!supp[2]) {
@@ -3054,35 +3122,12 @@ nfsd4_encode_fattr(struct xdr_stream *xdr, struct svc_fh *fhp,
 		*p++ = cpu_to_be32(rdattr_err);
 	}
 	if (bmval0 & FATTR4_WORD0_ACL) {
-		struct richace *ace;
-
-		if (acl == NULL) {
-			p = xdr_reserve_space(xdr, 4);
-			if (!p)
-				goto out_resource;
-
-			*p++ = cpu_to_be32(0);
-			goto out_acl;
-		}
-		p = xdr_reserve_space(xdr, 4);
-		if (!p)
-			goto out_resource;
-		*p++ = cpu_to_be32(acl->a_count);
-
-		richacl_for_each_entry(ace, acl) {
-			p = xdr_reserve_space(xdr, 4*3);
-			if (!p)
-				goto out_resource;
-			*p++ = cpu_to_be32(ace->e_type);
-			*p++ = cpu_to_be32(ace->e_flags &
-				~(RICHACE_SPECIAL_WHO | RICHACE_INHERITED_ACE));
-			*p++ = cpu_to_be32(ace->e_mask & NFS4_ACE_MASK_ALL);
-			status = nfsd4_encode_ace_who(xdr, rqstp, ace);
-			if (status)
-				goto out;
-		}
+		status = nfsd4_encode_acl_entries(xdr, acl, rqstp,
+				~NFS4_ACE_INHERITED_ACE,
+				nfsd4_ace_mask(minorversion));
+		if (status)
+			goto out;
 	}
-out_acl:
 	if (bmval0 & FATTR4_WORD0_ACLSUPPORT) {
 		p = xdr_reserve_space(xdr, 4);
 		if (!p)
@@ -3295,6 +3340,16 @@ out_acl:
 			ino = parent_stat.ino;
 		}
 		p = xdr_encode_hyper(p, ino);
+	}
+	if (bmval1 & FATTR4_WORD1_DACL) {
+		p = xdr_reserve_space(xdr, 4);
+		if (!p)
+			goto out_resource;
+		*p++ = cpu_to_be32(acl->a_flags);
+		status = nfsd4_encode_acl_entries(xdr, acl, rqstp,
+				~0, nfsd4_ace_mask(minorversion));
+		if (status)
+			goto out;
 	}
 #ifdef CONFIG_NFSD_PNFS
 	if (bmval1 & FATTR4_WORD1_FS_LAYOUT_TYPES) {
