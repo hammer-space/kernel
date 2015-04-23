@@ -123,7 +123,8 @@
 #define NFS4_ACE_GENERIC_READ                 0x00120081
 #define NFS4_ACE_GENERIC_WRITE                0x00160106
 #define NFS4_ACE_GENERIC_EXECUTE              0x001200A0
-#define NFS4_ACE_MASK_ALL                     0x001F01FF
+#define NFS40_ACE_MASK_ALL                    0x001F01FF
+#define NFS4_ACE_MASK_ALL                     0x001F07FF
 
 #define EXCHGID4_FLAG_SUPP_MOVED_REFER		0x00000001
 #define EXCHGID4_FLAG_SUPP_MOVED_MIGR		0x00000002

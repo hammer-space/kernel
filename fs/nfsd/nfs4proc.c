@@ -2114,7 +2114,8 @@ static inline u32 nfsd4_getattr_rsize(struct svc_rqst *rqstp,
 	u32 bmap0 = bmap[0], bmap1 = bmap[1], bmap2 = bmap[2];
 	u32 ret = 0;
 
-	if (bmap0 & FATTR4_WORD0_ACL)
+	if (bmap0 & FATTR4_WORD0_ACL ||
+	    bmap1 & FATTR4_WORD1_DACL)
 		return svc_max_payload(rqstp);
 	if (bmap0 & FATTR4_WORD0_FS_LOCATIONS)
 		return svc_max_payload(rqstp);
