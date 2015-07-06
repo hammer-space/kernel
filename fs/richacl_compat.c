@@ -71,11 +71,13 @@ richacl_insert_entry(struct richacl_alloc *alloc, struct richace **ace)
 {
 	struct richacl *acl = alloc->acl;
 	unsigned int index = *ace - acl->a_entries;
-	size_t tail_size = (acl->a_count - index) * sizeof(struct richace);
+	size_t tail_size = (acl->a_count - index) * sizeof(struct richace) +
+			   acl->a_unmapped_size;
 
 	if (alloc->count == acl->a_count) {
 		size_t new_size = sizeof(struct richacl) +
-			(acl->a_count + 1) * sizeof(struct richace);
+			(acl->a_count + 1) * sizeof(struct richace) +
+			acl->a_unmapped_size;
 
 		acl = krealloc(acl, new_size, GFP_KERNEL);
 		if (!acl)
@@ -103,10 +105,6 @@ struct richace *richacl_append_entry(struct richacl_alloc *alloc)
 	struct richacl *acl = alloc->acl;
 	struct richace *ace = acl->a_entries + acl->a_count;
 
-	if (alloc->count > alloc->acl->a_count) {
-		acl->a_count++;
-		return ace;
-	}
 	return richacl_insert_entry(alloc, &ace) ? NULL : ace;
 }
 EXPORT_SYMBOL_GPL(richacl_append_entry);
@@ -261,12 +259,12 @@ __richacl_propagate_everyone(struct richacl_alloc *alloc, struct richace *who,
 		if (richace_is_inherit_only(ace))
 			continue;
 		if (richace_is_allow(ace)) {
-			if (richace_is_same_identifier(ace, who)) {
+			if (richace_is_same_identifier(acl, ace, who)) {
 				allow &= ~ace->e_mask;
 				allow_last = ace;
 			}
 		} else if (richace_is_deny(ace)) {
-			if (richace_is_same_identifier(ace, who))
+			if (richace_is_same_identifier(acl, ace, who))
 				allow &= ~ace->e_mask;
 			else if (allow & ace->e_mask)
 				allow_last = NULL;
@@ -613,7 +611,7 @@ __richacl_isolate_who(struct richacl_alloc *alloc, struct richace *who,
 	richacl_for_each_entry(ace, acl) {
 		if (richace_is_inherit_only(ace))
 			continue;
-		if (richace_is_same_identifier(ace, who))
+		if (richace_is_same_identifier(acl, ace, who))
 			deny &= ~ace->e_mask;
 	}
 	if (!deny)
@@ -629,7 +627,7 @@ __richacl_isolate_who(struct richacl_alloc *alloc, struct richace *who,
 		if (richace_is_inherit_only(ace))
 			continue;
 		if (richace_is_deny(ace)) {
-			if (richace_is_same_identifier(ace, who))
+			if (richace_is_same_identifier(acl, ace, who))
 				return richace_change_mask(alloc, &ace,
 							   ace->e_mask | deny);
 		} else if (richace_is_allow(ace) &&
