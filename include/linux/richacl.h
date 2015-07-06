@@ -27,6 +27,7 @@ struct richace {
 		kuid_t		uid;
 		kgid_t		gid;
 		unsigned int	special;
+		unsigned short	offs;  /* unmapped offset */
 	} e_id;
 };
 
@@ -37,6 +38,7 @@ struct richacl {
 	unsigned int	a_other_mask;
 	unsigned short	a_count;
 	unsigned short	a_flags;
+	unsigned short	a_unmapped_size;
 	struct richace	a_entries[0];
 };
 
@@ -182,14 +184,28 @@ richace_is_deny(const struct richace *ace)
  * richace_is_same_identifier  -  are both identifiers the same?
  */
 static inline bool
-richace_is_same_identifier(const struct richace *a, const struct richace *b)
+richace_is_same_identifier(const struct richacl *acl,
+			   const struct richace *ace1,
+			   const struct richace *ace2)
 {
-	return !((a->e_flags ^ b->e_flags) &
-		 (RICHACE_SPECIAL_WHO | RICHACE_IDENTIFIER_GROUP)) &&
-	       !memcmp(&a->e_id, &b->e_id, sizeof(a->e_id));
+	const char *unmapped = (char *)(acl->a_entries + acl->a_count);
+
+	return !((ace1->e_flags ^ ace2->e_flags) &
+		 (RICHACE_SPECIAL_WHO |
+		  RICHACE_IDENTIFIER_GROUP |
+		  RICHACE_UNMAPPED_WHO)) &&
+	       ((ace1->e_flags & RICHACE_UNMAPPED_WHO) ?
+		!strcmp(unmapped + ace1->e_id.offs,
+			unmapped + ace2->e_id.offs) :
+		!memcmp(&ace1->e_id, &ace2->e_id, sizeof(ace1->e_id)));
 }
 
-extern struct richacl *richacl_alloc(int, gfp_t);
+extern struct richacl *__richacl_alloc(unsigned int, size_t, gfp_t);
+static inline struct richacl *richacl_alloc(unsigned int count, gfp_t gfp)
+{
+	return __richacl_alloc(count, 0, gfp);
+}
+
 extern struct richacl *richacl_clone(const struct richacl *, gfp_t);
 extern void richace_copy(struct richace *, const struct richace *);
 extern int richacl_masks_to_mode(const struct richacl *);
@@ -201,6 +217,11 @@ extern int richacl_chmod(struct inode *, umode_t);
 extern int richacl_equiv_mode(const struct richacl *, umode_t *);
 extern struct richacl *richacl_inherit(const struct richacl *, int);
 extern struct richacl *richacl_create(umode_t *, struct inode *);
+extern int richacl_add_unmapped_identifier(struct richacl **, struct richace **,
+					   const char *, unsigned int, gfp_t);
+extern const char *richace_unmapped_identifier(const struct richace *,
+					       const struct richacl *);
+extern bool richacl_has_unmapped_identifiers(struct richacl *);
 
 /* richacl_compat.c */
 extern int richacl_apply_masks(struct richacl **, kuid_t);

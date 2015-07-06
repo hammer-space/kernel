@@ -99,22 +99,25 @@ struct richacl *get_richacl(struct inode *inode)
 EXPORT_SYMBOL_GPL(get_richacl);
 
 /**
- * richacl_alloc  -  allocate a richacl
+ * __richacl_alloc  -  allocate a richacl
  * @count:	number of entries
+ * @unmapped_size:	size to reserve for unmapped identifiers
  */
 struct richacl *
-richacl_alloc(int count, gfp_t gfp)
+__richacl_alloc(unsigned int count, size_t unmapped_size, gfp_t gfp)
 {
-	size_t size = sizeof(struct richacl) + count * sizeof(struct richace);
+	size_t size = sizeof(struct richacl) + count * sizeof(struct richace) +
+		      unmapped_size;
 	struct richacl *acl = kzalloc(size, gfp);
 
 	if (acl) {
 		base_acl_init(&acl->a_base);
 		acl->a_count = count;
+		acl->a_unmapped_size = unmapped_size;
 	}
 	return acl;
 }
-EXPORT_SYMBOL_GPL(richacl_alloc);
+EXPORT_SYMBOL_GPL(__richacl_alloc);
 
 /**
  * richacl_clone  -  create a copy of a richacl
@@ -123,7 +126,8 @@ struct richacl *
 richacl_clone(const struct richacl *acl, gfp_t gfp)
 {
 	int count = acl->a_count;
-	size_t size = sizeof(struct richacl) + count * sizeof(struct richace);
+	size_t size = sizeof(struct richacl) + count * sizeof(struct richace) +
+		      acl->a_unmapped_size;
 	struct richacl *dup = kmalloc(size, gfp);
 
 	if (dup) {
@@ -135,12 +139,91 @@ richacl_clone(const struct richacl *acl, gfp_t gfp)
 
 /**
  * richace_copy  -  copy an acl entry
+ *
+ * If @from has an unmapped who value (from->e_flags & RICHACE_UNMAPPED_WHO),
+ * it can only be copied within the same acl!
  */
 void
 richace_copy(struct richace *to, const struct richace *from)
 {
 	memcpy(to, from, sizeof(struct richace));
 }
+
+/**
+ * richacl_add_unmapped_identifier
+ * @pacl:	Pointer to an acl
+ * @pace:	acl entry within @acl
+ * @who:	unmapped identifier
+ * @len:	length of @who
+ * @gfp:	memory allocation flags
+ *
+ * Add an unmapped identifier to an acl, possibly reallocating the acl.
+ */
+int richacl_add_unmapped_identifier(struct richacl **pacl,
+				    struct richace **pace,
+				    const char *who,
+				    unsigned int len, gfp_t gfp)
+{
+	struct richacl *acl = *pacl;
+	size_t size = sizeof(struct richacl) +
+		      acl->a_count * sizeof(struct richace) +
+		      acl->a_unmapped_size + len + 1;
+	unsigned int index = *pace - acl->a_entries;
+
+	acl = krealloc(*pacl, size, gfp);
+	if (acl) {
+		char *unmapped = (char *)(acl->a_entries + acl->a_count);
+		struct richace *ace = acl->a_entries + index;
+
+		ace->e_flags |= RICHACE_UNMAPPED_WHO;
+		ace->e_flags &= ~RICHACE_SPECIAL_WHO;
+		ace->e_id.offs = acl->a_unmapped_size;
+		memcpy(unmapped + ace->e_id.offs, who, len);
+		unmapped[ace->e_id.offs + len] = 0;
+		acl->a_unmapped_size += len + 1;
+		*pace = ace;
+		*pacl = acl;
+		return 0;
+	}
+	return -1;
+}
+EXPORT_SYMBOL_GPL(richacl_add_unmapped_identifier);
+
+/**
+ * richace_unmapped_identifier  -  get unmapped identifier
+ * @acl:	acl containing @ace
+ * @ace:	acl entry
+ *
+ * Get the unmapped identifier of @ace as a NUL-terminated string, or NULL if
+ * @ace doesn't have an unmapped identifier.
+ */
+const char *richace_unmapped_identifier(const struct richace *ace,
+					const struct richacl *acl)
+{
+	const char *unmapped = (char *)(acl->a_entries + acl->a_count);
+
+	if (!(ace->e_flags & RICHACE_UNMAPPED_WHO))
+		return NULL;
+	return unmapped + ace->e_id.offs;
+}
+EXPORT_SYMBOL(richace_unmapped_identifier);
+
+/**
+ * richacl_has_unmapped_identifiers
+ *
+ * Check if an acl has unmapped identifiers.
+ */
+bool richacl_has_unmapped_identifiers(struct richacl *acl)
+{
+	struct richace *ace;
+
+	richacl_for_each_entry(ace, acl) {
+		if (ace->e_flags & RICHACE_UNMAPPED_WHO)
+			return true;
+	}
+	return false;
+}
+EXPORT_SYMBOL_GPL(richacl_has_unmapped_identifiers);
 
 /*
  * richacl_mask_to_mode  -  compute the file permission bits from mask
@@ -290,7 +373,7 @@ static unsigned int richacl_allowed_to_who(struct richacl *acl,
 	richacl_for_each_entry_reverse(ace, acl) {
 		if (richace_is_inherit_only(ace))
 			continue;
-		if (richace_is_same_identifier(ace, who) ||
+		if (richace_is_same_identifier(acl, ace, who) ||
 		    richace_is_everyone(ace)) {
 			if (richace_is_allow(ace))
 				allowed |= ace->e_mask;
@@ -483,8 +566,10 @@ richacl_permission(struct inode *inode, const struct richacl *acl,
 		} else if (richace_is_unix_group(ace)) {
 			if (!in_group_p(ace->e_id.gid))
 				continue;
-		} else
+		} else if (richace_is_everyone(ace))
 			goto entry_matches_everyone;
+		else
+			continue;
 
 		/*
 		 * Apply the group file mask to entries other than owner@ and
@@ -749,23 +834,32 @@ richacl_inherit(const struct richacl *dir_acl, int isdir)
 	const struct richace *dir_ace;
 	struct richacl *acl = NULL;
 	struct richace *ace;
-	int count = 0;
+	unsigned int count = 0, unmapped_size = 0, offset = 0;
+	const char *dir_unmapped;
+	char *unmapped;
 
 	if (isdir) {
 		richacl_for_each_entry(dir_ace, dir_acl) {
 			if (!ace_inherits_to_directory(dir_ace))
 				continue;
+
 			count++;
+			dir_unmapped =
+				richace_unmapped_identifier(dir_ace, dir_acl);
+			if (dir_unmapped)
+				unmapped_size += strlen(dir_unmapped) + 1;
 		}
 		if (!count)
 			return NULL;
-		acl = richacl_alloc(count, GFP_KERNEL);
+		acl = __richacl_alloc(count, unmapped_size, GFP_KERNEL);
 		if (!acl)
 			return ERR_PTR(-ENOMEM);
 		ace = acl->a_entries;
+		unmapped = (char *)(acl->a_entries + acl->a_count);
 		richacl_for_each_entry(dir_ace, dir_acl) {
 			if (!ace_inherits_to_directory(dir_ace))
 				continue;
+
 			richace_copy(ace, dir_ace);
 			if (dir_ace->e_flags & RICHACE_NO_PROPAGATE_INHERIT_ACE)
 				ace->e_flags &= ~RICHACE_INHERITANCE_FLAGS;
@@ -773,23 +867,41 @@ richacl_inherit(const struct richacl *dir_acl, int isdir)
 				ace->e_flags &= ~RICHACE_INHERIT_ONLY_ACE;
 			else
 				ace->e_flags |= RICHACE_INHERIT_ONLY_ACE;
+
+			dir_unmapped =
+				richace_unmapped_identifier(dir_ace, dir_acl);
+			if (dir_unmapped) {
+				size_t sz = strlen(dir_unmapped) + 1;
+
+				ace->e_id.offs = offset;
+				memcpy(unmapped, dir_unmapped, sz);
+				unmapped += sz;
+				offset += sz;
+			}
 			ace++;
 		}
 	} else {
 		richacl_for_each_entry(dir_ace, dir_acl) {
 			if (!(dir_ace->e_flags & RICHACE_FILE_INHERIT_ACE))
 				continue;
+
 			count++;
+			dir_unmapped =
+				richace_unmapped_identifier(dir_ace, dir_acl);
+			if (dir_unmapped)
+				unmapped_size += strlen(dir_unmapped) + 1;
 		}
 		if (!count)
 			return NULL;
-		acl = richacl_alloc(count, GFP_KERNEL);
+		acl = __richacl_alloc(count, unmapped_size, GFP_KERNEL);
 		if (!acl)
 			return ERR_PTR(-ENOMEM);
 		ace = acl->a_entries;
+		unmapped = (char *)(acl->a_entries + acl->a_count);
 		richacl_for_each_entry(dir_ace, dir_acl) {
 			if (!(dir_ace->e_flags & RICHACE_FILE_INHERIT_ACE))
 				continue;
+
 			richace_copy(ace, dir_ace);
 			ace->e_flags &= ~RICHACE_INHERITANCE_FLAGS;
 			/*
@@ -797,6 +909,17 @@ richacl_inherit(const struct richacl *dir_acl, int isdir)
 			 * non-directories, so clear it.
 			 */
 			ace->e_mask &= ~RICHACE_DELETE_CHILD;
+
+			dir_unmapped =
+				richace_unmapped_identifier(dir_ace, dir_acl);
+			if (dir_unmapped) {
+				size_t sz = strlen(dir_unmapped) + 1;
+
+				ace->e_id.offs = offset;
+				memcpy(unmapped, dir_unmapped, sz);
+				unmapped += sz;
+				offset += sz;
+			}
 			ace++;
 		}
 	}
