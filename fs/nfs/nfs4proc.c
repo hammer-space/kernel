@@ -6277,6 +6277,22 @@ static int nfs4_proc_getlk(struct nfs4_state *state, int cmd, struct file_lock *
 	return err;
 }
 
+static int do_vfs_lock_no_wait(struct inode *inode, struct file_lock *fl)
+{
+	int res = 0;
+	switch (fl->fl_flags & (FL_POSIX|FL_FLOCK)) {
+		case FL_POSIX:
+			res = posix_lock_inode(inode, fl, NULL);
+			break;
+		case FL_FLOCK:
+			res = flock_lock_inode(inode, fl);
+			break;
+		default:
+			BUG();
+	}
+	return res;
+}
+
 struct nfs4_unlockdata {
 	struct nfs_locku_args arg;
 	struct nfs_locku_res res;
@@ -6802,8 +6818,10 @@ static int _nfs4_proc_setlk(struct nfs4_state *state, int cmd, struct file_lock 
 	int status;
 
 	request->fl_flags |= FL_ACCESS;
-	status = locks_lock_inode_wait(state->inode, request);
-	if (status < 0)
+	/* don't put us on a waiting list */
+	request->fl_flags &= ~FL_SLEEP;
+	status = do_vfs_lock_no_wait(state->inode, request);
+	if (status)
 		goto out;
 	mutex_lock(&sp->so_delegreturn_mutex);
 	down_read(&nfsi->rwsem);
