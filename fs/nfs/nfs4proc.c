@@ -3322,6 +3322,8 @@ static void nfs4_close_done(struct rpc_task *task, void *data)
 	 */
 	switch (task->tk_status) {
 		case 0:
+			/* lock stateid cannot live beyound close. */
+			nfs4_clear_lock_state(state);
 			res_stateid = &calldata->res.stateid;
 			renew_lease(server, calldata->timestamp);
 			break;

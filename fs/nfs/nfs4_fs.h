@@ -451,6 +451,7 @@ int nfs4_discover_server_trunking(struct nfs_client *clp,
 			struct nfs_client **);
 int nfs40_discover_server_trunking(struct nfs_client *clp,
 			struct nfs_client **, const struct cred *);
+void nfs4_clear_lock_state(struct nfs4_state *state);
 #if defined(CONFIG_NFS_V4_1)
 int nfs41_discover_server_trunking(struct nfs_client *clp,
 			struct nfs_client **, const struct cred *);

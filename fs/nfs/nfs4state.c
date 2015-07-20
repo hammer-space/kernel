@@ -1681,20 +1681,25 @@ out_err:
 	return status;
 }
 
-static void nfs4_clear_open_state(struct nfs4_state *state)
+void nfs4_clear_lock_state(struct nfs4_state *state)
 {
 	struct nfs4_lock_state *lock;
 
-	clear_bit(NFS_DELEGATED_STATE, &state->flags);
-	clear_bit(NFS_O_RDONLY_STATE, &state->flags);
-	clear_bit(NFS_O_WRONLY_STATE, &state->flags);
-	clear_bit(NFS_O_RDWR_STATE, &state->flags);
 	spin_lock(&state->state_lock);
 	list_for_each_entry(lock, &state->lock_states, ls_locks) {
 		lock->ls_seqid.flags = 0;
 		clear_bit(NFS_LOCK_INITIALIZED, &lock->ls_flags);
 	}
 	spin_unlock(&state->state_lock);
+}
+
+static void nfs4_clear_open_state(struct nfs4_state *state)
+{
+	clear_bit(NFS_DELEGATED_STATE, &state->flags);
+	clear_bit(NFS_O_RDONLY_STATE, &state->flags);
+	clear_bit(NFS_O_WRONLY_STATE, &state->flags);
+	clear_bit(NFS_O_RDWR_STATE, &state->flags);
+	nfs4_clear_lock_state(state);
 }
 
 static void nfs4_reset_seqids(struct nfs_server *server,
