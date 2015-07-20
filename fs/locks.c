@@ -1036,7 +1036,7 @@ static int posix_locks_deadlock(struct file_lock *caller_fl,
  * whether or not a lock was successfully freed by testing the return
  * value for -ENOENT.
  */
-static int flock_lock_inode(struct inode *inode, struct file_lock *request)
+int flock_lock_inode(struct inode *inode, struct file_lock *request)
 {
 	struct file_lock *new_fl = NULL;
 	struct file_lock *fl;
@@ -1107,6 +1107,7 @@ out:
 	trace_flock_lock_inode(inode, request, error);
 	return error;
 }
+EXPORT_SYMBOL_GPL(flock_lock_inode);
 
 static int posix_lock_inode(struct inode *inode, struct file_lock *request,
 			    struct file_lock *conflock)
