@@ -5341,7 +5341,7 @@ static struct richacl *__nfs4_get_acl_uncached(struct inode *inode)
 	struct nfs_server *server = NFS_SERVER(inode);
 	struct page *pages[DIV_ROUND_UP(NFS4ACL_SIZE_MAX, PAGE_SIZE)] = {};
 	struct nfs_getaclargs args = {
-		.fh = NFS_FH(inode),
+		.inode = inode,
 		.acl_pages = pages,
 		.acl_len = ARRAY_SIZE(pages) * PAGE_SIZE,
 	};

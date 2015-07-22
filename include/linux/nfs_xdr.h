@@ -793,7 +793,7 @@ struct nfs_setaclres {
 
 struct nfs_getaclargs {
 	struct nfs4_sequence_args 	seq_args;
-	struct nfs_fh *			fh;
+	struct inode *			inode;
 	size_t				acl_len;
 	struct page **			acl_pages;
 };
