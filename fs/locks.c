@@ -1109,8 +1109,8 @@ out:
 }
 EXPORT_SYMBOL_GPL(flock_lock_inode);
 
-static int posix_lock_inode(struct inode *inode, struct file_lock *request,
-			    struct file_lock *conflock)
+int posix_lock_inode(struct inode *inode, struct file_lock *request,
+		     struct file_lock *conflock)
 {
 	struct file_lock *fl, *tmp;
 	struct file_lock *new_fl = NULL;
@@ -1331,6 +1331,7 @@ static int posix_lock_inode(struct inode *inode, struct file_lock *request,
 
 	return error;
 }
+EXPORT_SYMBOL(posix_lock_inode);
 
 /**
  * posix_lock_file - Apply a POSIX-style lock to a file
