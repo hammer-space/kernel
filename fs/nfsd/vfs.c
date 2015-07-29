@@ -1212,6 +1212,8 @@ nfsd_create_locked(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	__be32		err;
 	__be32		err2;
 	int		host_err;
+	int access = (type == S_IFDIR) ?
+		NFSD_MAY_CREATE_DIR : NFSD_MAY_CREATE_FILE;
 
 	dentry = fhp->fh_dentry;
 	dirp = d_inode(dentry);
@@ -1224,7 +1226,7 @@ nfsd_create_locked(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		goto out;
 	}
 
-	err = nfsd_permission(rqstp, fhp->fh_export, dentry, NFSD_MAY_CREATE);
+	err = nfsd_permission(rqstp, fhp->fh_export, dentry, access);
 	if (err)
 		goto out;
 
@@ -1397,7 +1399,7 @@ do_nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	/* If file doesn't exist, check for permissions to create one */
 	if (d_really_is_negative(dchild)) {
-		err = fh_verify(rqstp, fhp, S_IFDIR, NFSD_MAY_CREATE);
+		err = fh_verify(rqstp, fhp, S_IFDIR, NFSD_MAY_CREATE_FILE);
 		if (err)
 			goto out;
 	}
@@ -1573,7 +1575,7 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (isdotent(fname, flen))
 		goto out;
 
-	err = fh_verify(rqstp, fhp, S_IFDIR, NFSD_MAY_CREATE);
+	err = fh_verify(rqstp, fhp, S_IFDIR, NFSD_MAY_CREATE_FILE);
 	if (err)
 		goto out;
 
@@ -1622,7 +1624,7 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	int		retry = true;
 
 try_again:
-	err = fh_verify(rqstp, ffhp, S_IFDIR, NFSD_MAY_CREATE);
+	err = fh_verify(rqstp, ffhp, S_IFDIR, NFSD_MAY_CREATE_FILE);
 	if (err)
 		goto out;
 	err = fh_verify(rqstp, tfhp, 0, NFSD_MAY_NOP);
@@ -1700,11 +1702,12 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	__be32		err;
 	int		host_err;
 	bool		close_cached = false;
+	int		access;
 
 	err = fh_verify(rqstp, ffhp, S_IFDIR, NFSD_MAY_REMOVE);
 	if (err)
 		goto out;
-	err = fh_verify(rqstp, tfhp, S_IFDIR, NFSD_MAY_CREATE);
+	err = fh_verify(rqstp, tfhp, S_IFDIR, NFSD_MAY_NOP);
 	if (err)
 		goto out;
 
@@ -1744,6 +1747,13 @@ retry:
 	if (odentry == trap)
 		goto out_dput_old;
 
+	host_err = 0;
+	access = S_ISDIR(d_inode(odentry)->i_mode) ?
+		NFSD_MAY_CREATE_DIR : NFSD_MAY_CREATE_FILE;
+	err = fh_verify(rqstp, tfhp, S_IFDIR, access);
+	if (err)
+		goto out_dput_old;
+
 	ndentry = lookup_one_len(tname, tdentry, tlen);
 	host_err = PTR_ERR(ndentry);
 	if (IS_ERR(ndentry))
@@ -1775,7 +1785,8 @@ retry:
  out_dput_old:
 	dput(odentry);
  out_nfserr:
-	err = nfserrno(host_err);
+	if (host_err)
+		err = nfserrno(host_err);
 	/*
 	 * We cannot rely on fh_unlock on the two filehandles,
 	 * as that would do the wrong thing if the two directories
@@ -2115,8 +2126,9 @@ nfsd_permission(struct svc_rqst *rqstp, struct svc_export *exp,
 	    uid_eq(inode->i_uid, current_fsuid()))
 		return 0;
 
-	/* This assumes  NFSD_MAY_{READ,WRITE,EXEC} == MAY_{READ,WRITE,EXEC} */
-	err = inode_permission(inode, acc & (MAY_READ|MAY_WRITE|MAY_EXEC));
+	/* This assumes NFSD_MAY_{READ,WRITE,EXEC} == MAY_{READ,WRITE,EXEC}. */
+	err = inode_permission(inode, acc & (MAY_READ|MAY_WRITE|MAY_EXEC|
+					     MAY_CREATE_DIR|MAY_CREATE_FILE));
 
 	/* Allow read access to binaries even when mode 111 */
 	if (err == -EACCES && S_ISREG(inode->i_mode) &&

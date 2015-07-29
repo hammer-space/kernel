@@ -346,10 +346,10 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, umode_t type, int access)
 	/*
 	 * We still have to do all these permission checks, even when
 	 * fh_dentry is already set:
-	 * 	- fh_verify may be called multiple times with different
-	 * 	  "access" arguments (e.g. nfsd_proc_create calls
-	 * 	  fh_verify(...,NFSD_MAY_EXEC) first, then later (in
-	 * 	  nfsd_create) calls fh_verify(...,NFSD_MAY_CREATE).
+	 *	- fh_verify may be called multiple times with different
+	 *	  "access" arguments (e.g. nfsd_proc_create calls
+	 *	  fh_verify(...,NFSD_MAY_EXEC) first, then later (in
+	 *	  nfsd_create) calls fh_verify(...,NFSD_MAY_CREATE_FILE).
 	 *	- in the NFSv4 case, the filehandle may have been filled
 	 *	  in by fh_compose, and given a dentry, but further
 	 *	  compound operations performed with that filehandle
