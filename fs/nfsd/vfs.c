@@ -268,8 +268,12 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	 * dentry may be negative, it may need to be updated.
 	 */
 	err = fh_compose(resfh, exp, dentry, fhp);
-	if (!err && d_really_is_negative(dentry))
-		err = nfserr_noent;
+	if (!err) {
+		if (d_really_is_negative(dentry))
+			err = nfserr_noent;
+		else if (IS_AUTOMOUNT(dentry->d_inode))
+			err = nfserr_remote;
+	}
 out:
 	dput(dentry);
 	exp_put(exp);
