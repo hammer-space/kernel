@@ -130,7 +130,7 @@ int pnfs_generic_scan_commit_lists(struct nfs_commit_info *cinfo,
 }
 EXPORT_SYMBOL_GPL(pnfs_generic_scan_commit_lists);
 
-/* Pull everything off the committing lists and dump into @dst.  */
+/* Pull everything off the written lists and dump into @dst.  */
 void pnfs_generic_recover_commit_reqs(struct list_head *dst,
 				      struct nfs_commit_info *cinfo)
 {
