@@ -709,6 +709,7 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, umode_t type,
 	int		flags = O_RDONLY|O_LARGEFILE;
 	__be32		err;
 	int		host_err = 0;
+	bool		retried = false;
 
 	validate_process_creds();
 
@@ -725,6 +726,7 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, umode_t type,
 	 */
 	if (type == S_IFREG)
 		may_flags |= NFSD_MAY_OWNER_OVERRIDE;
+retry:
 	err = fh_verify(rqstp, fhp, type, may_flags);
 	if (err)
 		goto out;
@@ -763,6 +765,11 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, umode_t type,
 
 	file = dentry_open(&path, flags, current_cred());
 	if (IS_ERR(file)) {
+		if (file == ERR_PTR(-EOPENSTALE) && !retried) {
+			retried = true;
+			fh_put(fhp);
+			goto retry;
+		}
 		host_err = PTR_ERR(file);
 		goto out_nfserr;
 	}
