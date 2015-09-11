@@ -208,7 +208,7 @@ static __be32 *
 encode_post_op_attr(struct svc_rqst *rqstp, __be32 *p, struct svc_fh *fhp)
 {
 	struct dentry *dentry = fhp->fh_dentry;
-	if (dentry && d_really_is_positive(dentry)) {
+	if (!fhp->fh_no_wcc && dentry && d_really_is_positive(dentry)) {
 	        __be32 err;
 		struct kstat stat;
 
@@ -263,7 +263,7 @@ void fill_pre_wcc(struct svc_fh *fhp)
 	struct kstat	stat;
 	__be32 err;
 
-	if (fhp->fh_pre_saved)
+	if (fhp->fh_no_wcc || fhp->fh_pre_saved)
 		return;
 
 	inode = d_inode(fhp->fh_dentry);
@@ -288,6 +288,9 @@ void fill_pre_wcc(struct svc_fh *fhp)
 void fill_post_wcc(struct svc_fh *fhp)
 {
 	__be32 err;
+
+	if (fhp->fh_no_wcc)
+		return;
 
 	if (fhp->fh_post_saved)
 		printk("nfsd: inode locked twice during operation.\n");
