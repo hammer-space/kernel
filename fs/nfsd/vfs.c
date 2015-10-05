@@ -956,6 +956,16 @@ __be32 nfsd_readv(struct file *file, loff_t offset, struct kvec *vec, int vlen,
 	return nfsd_finish_read(file, count, host_err);
 }
 
+static __be32
+nfsd_vfs_read(struct svc_rqst *rqstp, struct file *file,
+         loff_t offset, struct kvec *vec, int vlen, unsigned long *count)
+{
+	if (file->f_op->splice_read && test_bit(RQ_SPLICE_OK, &rqstp->rq_flags))
+		return nfsd_splice_read(rqstp, file, offset, count);
+	else
+		return nfsd_readv(file, offset, vec, vlen, count);
+}
+
 /*
  * Gathered writes: If another process is currently writing to the file,
  * there's a high chance this is another nfsd (triggered by a bulk write
@@ -1055,30 +1065,18 @@ out_nfserr:
 __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	loff_t offset, struct kvec *vec, int vlen, unsigned long *count)
 {
-	struct file *file;
-	struct raparms	*ra;
-	__be32 err;
+	__be32			err;
+	struct nfsd_file	*nf;
 
 	trace_read_start(rqstp, fhp, offset, vlen);
-	err = nfsd_open(rqstp, fhp, S_IFREG, NFSD_MAY_READ, &file);
-	if (err)
-		return err;
-
-	ra = nfsd_init_raparms(file);
-
-	trace_read_opened(rqstp, fhp, offset, vlen);
-
-	if (file->f_op->splice_read && test_bit(RQ_SPLICE_OK, &rqstp->rq_flags))
-		err = nfsd_splice_read(rqstp, file, offset, count);
-	else
-		err = nfsd_readv(file, offset, vec, vlen, count);
-
-	trace_read_io_done(rqstp, fhp, offset, vlen);
-
-	if (ra)
-		nfsd_put_raparams(file, ra);
-	fput(file);
-
+	err = nfsd_file_acquire(rqstp, fhp, NFSD_MAY_READ, &nf);
+	if (err == nfs_ok) {
+		trace_read_opened(rqstp, fhp, offset, vlen);
+		err = nfsd_vfs_read(rqstp, nf->nf_file, offset, vec, vlen,
+					count);
+		trace_read_io_done(rqstp, fhp, offset, vlen);
+		nfsd_file_put(nf);
+	}
 	trace_read_done(rqstp, fhp, offset, vlen);
 
 	return err;
