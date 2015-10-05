@@ -44,6 +44,7 @@
 
 #include "nfsd.h"
 #include "vfs.h"
+#include "filecache.h"
 #include "trace.h"
 
 #define NFSDDBG_FACILITY		NFSDDBG_FILEOP
@@ -1092,20 +1093,18 @@ __be32
 nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	   struct kvec *vec, int vlen, unsigned long *cnt, int stable)
 {
-	struct file *file = NULL;
 	__be32 err = 0;
+	struct nfsd_file	*nf;
 
 	trace_write_start(rqstp, fhp, offset, vlen);
-
-	err = nfsd_open(rqstp, fhp, S_IFREG, NFSD_MAY_WRITE, &file);
-	if (err)
-		goto out;
-
-	trace_write_opened(rqstp, fhp, offset, vlen);
-	err = nfsd_vfs_write(rqstp, fhp, file, offset, vec, vlen, cnt, stable);
-	trace_write_io_done(rqstp, fhp, offset, vlen);
-	fput(file);
-out:
+	err = nfsd_file_acquire(rqstp, fhp, NFSD_MAY_WRITE, &nf);
+	if (err == nfs_ok) {
+		trace_write_opened(rqstp, fhp, offset, vlen);
+		err = nfsd_vfs_write(rqstp, fhp, nf->nf_file, offset, vec,
+					vlen, cnt, stable);
+		trace_write_io_done(rqstp, fhp, offset, vlen);
+		nfsd_file_put(nf);
+	}
 	trace_write_done(rqstp, fhp, offset, vlen);
 	return err;
 }
