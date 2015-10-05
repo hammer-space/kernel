@@ -27,6 +27,7 @@
 #include "cache.h"
 #include "vfs.h"
 #include "netns.h"
+#include "filecache.h"
 
 #define NFSDDBG_FACILITY	NFSDDBG_SVC
 
@@ -244,11 +245,17 @@ static int nfsd_startup_generic(int nrservs)
 	if (ret)
 		goto dec_users;
 
-	ret = nfs4_state_start();
+	ret = nfsd_file_cache_init();
 	if (ret)
 		goto out_racache;
+
+	ret = nfs4_state_start();
+	if (ret)
+		goto out_file_cache;
 	return 0;
 
+out_file_cache:
+	nfsd_file_cache_shutdown();
 out_racache:
 	nfsd_racache_shutdown();
 dec_users:
@@ -262,6 +269,7 @@ static void nfsd_shutdown_generic(void)
 		return;
 
 	nfs4_state_shutdown();
+	nfsd_file_cache_shutdown();
 	nfsd_racache_shutdown();
 }
 
