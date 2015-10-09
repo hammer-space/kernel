@@ -417,7 +417,7 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap,
 	int		host_err;
 	bool		get_write_count;
 	bool		size_change = (iap->ia_valid & ATTR_SIZE);
-	int		retry = 0;
+	bool		retry = false;
 
 	if (iap->ia_valid & ATTR_SIZE) {
 		accmode |= NFSD_MAY_WRITE|NFSD_MAY_OWNER_OVERRIDE;
@@ -513,7 +513,7 @@ try_again:
 out_unlock:
 	fh_unlock(fhp);
 	if (!retry && nfsd_cached_files_handle_vfs_error(dentry, host_err)) {
-		retry++;
+		retry = true;
 		goto try_again;
 	}
 	if (size_change)
@@ -1051,7 +1051,7 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct nfsd_file	*nf;
 	struct file *file;
 	__be32 err;
-	int			retry = 0;
+	int			retry = false;
 
 try_again:
 	trace_nfsd_read_start(rqstp, fhp, offset, *count);
@@ -1068,7 +1068,7 @@ try_again:
 	nfsd_file_put(nf);
 	if (!retry &&
 	    nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err)) {
-		retry++;
+		retry = true;
 		goto try_again;
 	}
 	trace_nfsd_read_done(rqstp, fhp, offset, *count);
@@ -1087,7 +1087,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 {
 	struct nfsd_file *nf;
 	__be32 err;
-	int			retry = 0;
+	bool			retry = false;
 
 try_again:
 	trace_nfsd_write_start(rqstp, fhp, offset, *cnt);
@@ -1100,7 +1100,7 @@ try_again:
 			vlen, cnt, stable);
 	nfsd_file_put(nf);
 	if (!retry && nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err)) {
-		retry++;
+		retry = true;
 		goto try_again;
 	}
 out:
@@ -1125,7 +1125,7 @@ nfsd_commit(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct nfsd_file	*nf;
 	loff_t			end = LLONG_MAX;
 	__be32			err = nfserr_inval;
-	int			retry = 0;
+	bool			retry = false;
 
 	if (offset < 0)
 		goto out;
@@ -1145,7 +1145,7 @@ try_again:
 
 		if (!retry && nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err)) {
 			nfsd_file_put(nf);
-			retry++;
+			retry = true;
 			goto try_again;
 		}
 		if (err2 != -EINVAL)
@@ -1614,7 +1614,7 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	struct inode	*dirp;
 	__be32		err;
 	int		host_err;
-	int		retry = 0;
+	int		retry = true;
 
 try_again:
 	err = fh_verify(rqstp, ffhp, S_IFDIR, NFSD_MAY_CREATE);
@@ -1671,7 +1671,7 @@ out_unlock:
 	fh_drop_write(tfhp);
 	if (!retry &&
 	    nfsd_cached_files_handle_vfs_error(tfhp->fh_dentry, host_err)) {
-		retry++;
+		retry = true;
 		goto try_again;
 	}
 out:
