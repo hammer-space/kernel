@@ -440,6 +440,36 @@ nfsd_file_find_locked(struct inode *inode, unsigned int may_flags,
 }
 
 /**
+ * nfsd_file_is_cached - are there any cached open files for this fh?
+ * @inode: inode of the file to check
+ *
+ * Scan the hashtable for open files that match this fh. Returns true if there
+ * are any, and false if not.
+ */
+bool
+nfsd_file_is_cached(struct inode *inode)
+{
+	bool			ret = false;
+	struct nfsd_file	*nf;
+	unsigned int		hashval;
+
+        hashval = (unsigned int)hash_long(inode->i_ino, NFSD_FILE_HASH_BITS);
+
+	rcu_read_lock();
+	hlist_for_each_entry_rcu(nf, &nfsd_file_hashtbl[hashval].nfb_head,
+				 nf_node) {
+		if (inode == nf->nf_inode) {
+			ret = true;
+			break;
+		}
+	}
+	rcu_read_unlock();
+	trace_nfsd_file_is_cached(inode, hashval, (int)ret);
+	return ret;
+}
+
+
+/**
  * nfsd_file_close_inode - attempt to forcibly close a nfsd_file
  * @inode: inode of the file to attempt to remove
  *

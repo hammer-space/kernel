@@ -182,7 +182,7 @@ TRACE_EVENT(nfsd_file_acquire,
 			be32_to_cpu(__entry->status))
 );
 
-TRACE_EVENT(nfsd_file_close_inode_sync,
+DECLARE_EVENT_CLASS(nfsd_file_search_class,
 	TP_PROTO(struct inode *inode, unsigned int hash, int found),
 	TP_ARGS(inode, hash, found),
 	TP_STRUCT__entry(
@@ -198,6 +198,14 @@ TRACE_EVENT(nfsd_file_close_inode_sync,
 	TP_printk("hash=0x%x inode=0x%p found=%d", __entry->hash,
 			__entry->inode, __entry->found)
 );
+
+#define DEFINE_NFSD_FILE_SEARCH_EVENT(name)				\
+DEFINE_EVENT(nfsd_file_search_class, name,				\
+	TP_PROTO(struct inode *inode, unsigned int hash, int found),	\
+	TP_ARGS(inode, hash, found))
+
+DEFINE_NFSD_FILE_SEARCH_EVENT(nfsd_file_close_inode_sync);
+DEFINE_NFSD_FILE_SEARCH_EVENT(nfsd_file_is_cached);
 
 TRACE_EVENT(nfsd_file_fsnotify_handle_event,
 	TP_PROTO(struct inode *inode, u32 mask),
@@ -217,6 +225,7 @@ TRACE_EVENT(nfsd_file_fsnotify_handle_event,
 	TP_printk("inode=0x%p nlink=%u mode=0%ho mask=0x%x", __entry->inode,
 			__entry->nlink, __entry->mode, __entry->mask)
 );
+
 #endif /* _NFSD_TRACE_H */
 
 #undef TRACE_INCLUDE_PATH
