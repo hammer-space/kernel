@@ -214,24 +214,6 @@ __xfs_set_acl(struct inode *inode, struct posix_acl *acl, int type)
 	return error;
 }
 
-static int
-xfs_set_mode(struct inode *inode, umode_t mode)
-{
-	int error = 0;
-
-	if (mode != inode->i_mode) {
-		struct iattr iattr;
-
-		iattr.ia_valid = ATTR_MODE | ATTR_CTIME;
-		iattr.ia_mode = mode;
-		iattr.ia_ctime = current_time(inode);
-
-		error = xfs_setattr_nonsize(XFS_I(inode), &iattr, XFS_ATTR_NOACL);
-	}
-
-	return error;
-}
-
 int
 xfs_set_acl(struct inode *inode, struct posix_acl *acl, int type)
 {

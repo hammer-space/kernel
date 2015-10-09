@@ -3938,3 +3938,27 @@ xfs_irele(
 	trace_xfs_irele(ip, _RET_IP_);
 	iput(VFS_I(ip));
 }
+
+/*
+ * Set an inode's file mode.
+ *
+ * Called when updating an inode's file mode as part of setting an ACL only.
+ * The VFS goes through the setattr inode operation instead.
+ */
+int
+xfs_set_mode(struct inode *inode, umode_t mode)
+{
+	int error = 0;
+
+	if (mode != inode->i_mode) {
+		struct iattr iattr;
+
+		iattr.ia_valid = ATTR_MODE | ATTR_CTIME;
+		iattr.ia_mode = mode;
+		iattr.ia_ctime = current_time(inode);
+
+		error = xfs_setattr_nonsize(XFS_I(inode), &iattr, XFS_ATTR_NOACL);
+	}
+
+	return error;
+}

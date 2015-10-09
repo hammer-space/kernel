@@ -452,6 +452,8 @@ xfs_itruncate_extents(
 	return xfs_itruncate_extents_flags(tpp, ip, whichfork, new_size, 0);
 }
 
+int		xfs_set_mode(struct inode *, umode_t);
+
 /* from xfs_file.c */
 enum xfs_prealloc_flags {
 	XFS_PREALLOC_SET	= (1 << 1),
