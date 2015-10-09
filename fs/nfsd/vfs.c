@@ -357,6 +357,51 @@ out_nfserrno:
 	return nfserrno(host_err);
 }
 
+static void
+nfsd_close_cached_files(struct dentry *dentry)
+{
+	struct inode *inode = d_inode(dentry);
+
+	if (inode && S_ISREG(inode->i_mode))
+		nfsd_file_close_inode_sync(inode);
+}
+
+static bool
+nfsd_has_cached_files(struct dentry *dentry)
+{
+	bool		ret = false;
+	struct inode *inode = d_inode(dentry);
+
+	if (inode && S_ISREG(inode->i_mode))
+		ret = nfsd_file_is_cached(inode);
+	return ret;
+}
+
+static bool
+nfsd_cached_files_handle_vfs_error(struct dentry *dentry, int err)
+{
+	struct inode *inode = d_inode(dentry);
+
+	switch (err) {
+	case -EBADF:
+	case -ENOENT:
+	case -EOPENSTALE:
+		if (inode && S_ISREG(inode->i_mode))
+			nfsd_file_close_inode_sync(inode);
+		if (dentry->d_flags & DCACHE_OP_WEAK_REVALIDATE &&
+		    dentry->d_op->d_weak_revalidate(dentry, LOOKUP_REVAL) > 0) {
+			printk(KERN_NOTICE
+				"%s: file %s still alive!\n", __func__,
+				dentry->d_name.name);
+			return true;
+		}
+	default:
+	      break;
+	}
+
+	return false;
+}
+
 /*
  * Set various file attributes.  After this call fhp needs an fh_put.
  */
@@ -372,12 +417,14 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap,
 	int		host_err;
 	bool		get_write_count;
 	bool		size_change = (iap->ia_valid & ATTR_SIZE);
+	int		retry = 0;
 
 	if (iap->ia_valid & (ATTR_ATIME | ATTR_MTIME | ATTR_SIZE))
 		accmode |= NFSD_MAY_WRITE|NFSD_MAY_OWNER_OVERRIDE;
 	if (iap->ia_valid & ATTR_SIZE)
 		ftype = S_IFREG;
 
+try_again:
 	/* Callers that do fh_verify should do the fh_want_write: */
 	get_write_count = !fhp->fh_dentry;
 
@@ -452,6 +499,10 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap,
 
 out_unlock:
 	fh_unlock(fhp);
+	if (!retry && nfsd_cached_files_handle_vfs_error(dentry, host_err)) {
+		retry++;
+		goto try_again;
+	}
 	if (size_change)
 		put_write_access(inode);
 out:
@@ -505,6 +556,7 @@ __be32 nfsd4_set_nfs4_label(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	inode_lock(d_inode(dentry));
 	host_error = security_inode_setsecctx(dentry, label->data, label->len);
 	inode_unlock(d_inode(dentry));
+	nfsd_cached_files_handle_vfs_error(dentry, host_error);
 	return nfserrno(host_error);
 }
 #else
@@ -550,6 +602,7 @@ __be32 nfsd4_vfs_fallocate(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (!error)
 		error = commit_metadata(fhp);
 
+	nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, error);
 	return nfserrno(error);
 }
 #endif /* defined(CONFIG_NFSD_V4) */
@@ -720,7 +773,8 @@ retry:
 
 	file = dentry_open(&path, flags, current_cred());
 	if (IS_ERR(file)) {
-		if (file == ERR_PTR(-EOPENSTALE) && !retried) {
+		if (nfsd_cached_files_handle_vfs_error(path.dentry, PTR_ERR(file))
+		    && !retried) {
 			retried = true;
 			fh_put(fhp);
 			err = fh_verify(rqstp, fhp, type, may_flags);
@@ -837,7 +891,7 @@ nfsd_finish_read(struct file *file, unsigned long *count, int host_err)
 		*count = host_err;
 		fsnotify_access(file);
 		return 0;
-	} else 
+	} else
 		return nfserrno(host_err);
 }
 
@@ -980,7 +1034,9 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 {
 	__be32			err;
 	struct nfsd_file	*nf;
+	int			retry = 0;
 
+try_again:
 	trace_read_start(rqstp, fhp, offset, vlen);
 	err = nfsd_file_acquire(rqstp, fhp, NFSD_MAY_READ, &nf);
 	if (err == nfs_ok) {
@@ -989,6 +1045,11 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 					count);
 		trace_read_io_done(rqstp, fhp, offset, vlen);
 		nfsd_file_put(nf);
+		if (!retry &&
+		    nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err)) {
+			retry++;
+			goto try_again;
+		}
 	}
 	trace_read_done(rqstp, fhp, offset, vlen);
 
@@ -1006,7 +1067,9 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 {
 	__be32 err = 0;
 	struct nfsd_file	*nf;
+	int			retry = 0;
 
+try_again:
 	trace_write_start(rqstp, fhp, offset, vlen);
 	err = nfsd_file_acquire(rqstp, fhp, NFSD_MAY_WRITE, &nf);
 	if (err == nfs_ok) {
@@ -1015,6 +1078,10 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 					vlen, cnt, stable);
 		trace_write_io_done(rqstp, fhp, offset, vlen);
 		nfsd_file_put(nf);
+		if (!retry && nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err)) {
+			retry++;
+			goto try_again;
+		}
 	}
 	trace_write_done(rqstp, fhp, offset, vlen);
 	return err;
@@ -1037,6 +1104,7 @@ nfsd_commit(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct nfsd_file	*nf;
 	loff_t			end = LLONG_MAX;
 	__be32			err = nfserr_inval;
+	int			retry = 0;
 
 	if (offset < 0)
 		goto out;
@@ -1046,6 +1114,7 @@ nfsd_commit(struct svc_rqst *rqstp, struct svc_fh *fhp,
 			goto out;
 	}
 
+try_again:
 	err = nfsd_file_acquire(rqstp, fhp,
 			NFSD_MAY_WRITE|NFSD_MAY_NOT_BREAK_LEASE, &nf);
 	if (err)
@@ -1053,6 +1122,11 @@ nfsd_commit(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (EX_ISSYNC(fhp->fh_export)) {
 		int err2 = vfs_fsync_range(nf->nf_file, offset, end, 0);
 
+		if (!retry && nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err)) {
+			nfsd_file_put(nf);
+			retry++;
+			goto try_again;
+		}
 		if (err2 != -EINVAL)
 			err = nfserrno(err2);
 		else
@@ -1498,7 +1572,9 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	struct inode	*dirp;
 	__be32		err;
 	int		host_err;
+	int		retry = 0;
 
+try_again:
 	err = fh_verify(rqstp, ffhp, S_IFDIR, NFSD_MAY_CREATE);
 	if (err)
 		goto out;
@@ -1551,32 +1627,17 @@ out_dput:
 out_unlock:
 	fh_unlock(ffhp);
 	fh_drop_write(tfhp);
+	if (!retry &&
+	    nfsd_cached_files_handle_vfs_error(tfhp->fh_dentry, host_err)) {
+		retry++;
+		goto try_again;
+	}
 out:
 	return err;
 
 out_nfserr:
 	err = nfserrno(host_err);
 	goto out_unlock;
-}
-
-static void
-nfsd_close_cached_files(struct dentry *dentry)
-{
-	struct inode *inode = d_inode(dentry);
-
-	if (inode && S_ISREG(inode->i_mode))
-		nfsd_file_close_inode_sync(inode);
-}
-
-static bool
-nfsd_has_cached_files(struct dentry *dentry)
-{
-	bool		ret = false;
-	struct inode *inode = d_inode(dentry);
-
-	if (inode && S_ISREG(inode->i_mode))
-		ret = nfsd_file_is_cached(inode);
-	return ret;
 }
 
 /*
