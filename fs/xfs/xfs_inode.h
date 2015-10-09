@@ -433,6 +433,8 @@ int		xfs_dir_ialloc(struct xfs_trans **, struct xfs_inode *, umode_t,
 			       xfs_nlink_t, dev_t, prid_t,
 			       struct xfs_inode **, int *);
 
+int		xfs_set_mode(struct inode *, umode_t);
+
 /* from xfs_file.c */
 enum xfs_prealloc_flags {
 	XFS_PREALLOC_SET	= (1 << 1),
