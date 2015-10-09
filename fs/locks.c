@@ -1913,7 +1913,8 @@ setlease_notifier(long arg, struct file_lock *lease)
 int
 vfs_setlease(struct file *filp, long arg, struct file_lock **lease, void **priv)
 {
-	setlease_notifier(arg, *lease);
+	if (lease)
+		setlease_notifier(arg, *lease);
 	if (filp->f_op->setlease && is_remote_lock(filp))
 		return filp->f_op->setlease(filp, arg, lease, priv);
 	else
