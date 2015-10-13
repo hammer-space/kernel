@@ -355,12 +355,12 @@ static ssize_t nfs_idmap_lookup_name(__u32 id, const char *type, char *buf,
 static int nfs_idmap_lookup_id(const char *name, size_t namelen, const char *type,
 			       __u32 *id, struct idmap *idmap)
 {
-	char id_str[NFS_UINT_MAXLEN];
+	char id_str[NFS_UINT_MAXLEN + 1];
 	long id_long;
 	ssize_t data_size;
 	int ret = 0;
 
-	data_size = nfs_idmap_get_key(name, namelen, type, id_str, NFS_UINT_MAXLEN, idmap);
+	data_size = nfs_idmap_get_key(name, namelen, type, id_str, sizeof(id_str), idmap);
 	if (data_size <= 0) {
 		ret = -EINVAL;
 	} else {
@@ -732,8 +732,23 @@ int nfs_map_name_to_uid(const struct nfs_server *server, const char *name, size_
 	__u32 id = -1;
 	int ret = 0;
 
-	if (!nfs_map_string_to_numeric(name, namelen, &id))
-		ret = nfs_idmap_lookup_id(name, namelen, "uid", &id, idmap);
+	if (!nfs_map_string_to_numeric(name, namelen, &id)) {
+		struct nfs_client *client = server->nfs_client;
+		const char *type;
+
+		for(;;) {
+			type = "xuid";
+			if (test_bit(NFS_CS_NOXUID, &client->cl_flags))
+				type = "uid";
+
+			ret = nfs_idmap_lookup_id(name, namelen, type, &id, idmap);
+			if (ret != -EINVAL || test_bit(NFS_CS_NOXUID, &client->cl_flags))
+				break;
+			printk(KERN_NOTICE "NFS: Falling back from nfsidmap "
+			       "xuid/xgid to uid/gid\n");
+			set_bit(NFS_CS_NOXUID, &client->cl_flags);
+		}
+	}
 	if (ret == 0) {
 		*uid = make_kuid(&init_user_ns, id);
 		if (!uid_valid(*uid))
@@ -749,8 +764,23 @@ int nfs_map_group_to_gid(const struct nfs_server *server, const char *name, size
 	__u32 id = -1;
 	int ret = 0;
 
-	if (!nfs_map_string_to_numeric(name, namelen, &id))
-		ret = nfs_idmap_lookup_id(name, namelen, "gid", &id, idmap);
+	if (!nfs_map_string_to_numeric(name, namelen, &id)) {
+		struct nfs_client *client = server->nfs_client;
+		const char *type;
+
+		for(;;) {
+			type = "xgid";
+			if (test_bit(NFS_CS_NOXUID, &client->cl_flags))
+				type = "gid";
+
+			ret = nfs_idmap_lookup_id(name, namelen, type, &id, idmap);
+			if (ret != -EINVAL || test_bit(NFS_CS_NOXUID, &client->cl_flags))
+				break;
+			printk(KERN_NOTICE "NFS: Falling back from nfsidmap "
+			       "xuid/xgid to uid/gid\n");
+			set_bit(NFS_CS_NOXUID, &client->cl_flags);
+		}
+	}
 	if (ret == 0) {
 		*gid = make_kgid(&init_user_ns, id);
 		if (!gid_valid(*gid))
