@@ -245,6 +245,7 @@ void fsnotify_put_mark(struct fsnotify_mark *mark)
 	queue_delayed_work(system_unbound_wq, &reaper_work,
 			   FSNOTIFY_REAPER_DELAY);
 }
+EXPORT_SYMBOL_GPL(fsnotify_put_mark);
 
 /*
  * Get mark reference when we found the mark via lockless traversal of object
@@ -647,6 +648,7 @@ struct fsnotify_mark *fsnotify_find_mark(
 	spin_unlock(&conn->lock);
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(fsnotify_find_mark);
 
 /* Clear any marks in a group with given type */
 void fsnotify_clear_marks_by_group(struct fsnotify_group *group,
