@@ -887,17 +887,22 @@ __be32 nfsd4_decode_ace_who(struct richace *ace, struct svc_rqst *rqstp,
 }
 
 __be32 nfsd4_encode_ace_who(struct xdr_stream *xdr, struct svc_rqst *rqstp,
-			    struct richace *ace)
+			    struct richace *ace, struct richacl *acl)
 {
-	if (ace->e_flags & RICHACE_SPECIAL_WHO) {
-		unsigned int special_id = ace->e_id.special;
+	if (ace->e_flags & (RICHACE_SPECIAL_WHO | RICHACE_UNMAPPED_WHO)) {
 		const char *who;
 		unsigned int len;
 		__be32 *p;
 
-		if (!nfs4acl_special_id_to_who(special_id, &who, &len)) {
-			WARN_ON_ONCE(1);
-			return nfserr_serverfault;
+		if (ace->e_flags & RICHACE_SPECIAL_WHO) {
+			if (!nfs4acl_special_id_to_who(ace->e_id.special,
+						       &who, &len)) {
+				WARN_ON_ONCE(1);
+				return nfserr_serverfault;
+			}
+		} else {
+			who = richace_unmapped_identifier(ace, acl);
+			len = strlen(who);
 		}
 		p = xdr_reserve_space(xdr, len + 4);
 		if (!p)

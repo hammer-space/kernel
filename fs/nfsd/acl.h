@@ -51,7 +51,7 @@ struct svc_rqst;
 __be32 nfsd4_decode_ace_who(struct richace *ace, struct svc_rqst *rqstp,
 			    char *who, u32 len);
 __be32 nfsd4_encode_ace_who(struct xdr_stream *xdr, struct svc_rqst *rqstp,
-			    struct richace *ace);
+			    struct richace *ace, struct richacl *acl);
 
 struct richacl *nfsd4_get_acl(struct svc_rqst *rqstp, struct dentry *dentry);
 __be32 nfsd4_set_acl(struct svc_rqst *rqstp, struct svc_fh *fhp,

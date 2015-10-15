@@ -2459,7 +2459,7 @@ static __be32 nfsd4_encode_acl_entries(struct xdr_stream *xdr,
 {
 	__be32 *p;
 
-	flags_mask &= ~RICHACE_SPECIAL_WHO;
+	flags_mask &= ~(RICHACE_SPECIAL_WHO | RICHACE_UNMAPPED_WHO);
 
 	p = xdr_reserve_space(xdr, 4);
 	if (!p)
@@ -2481,7 +2481,7 @@ static __be32 nfsd4_encode_acl_entries(struct xdr_stream *xdr,
 			*p++ = cpu_to_be32(ace->e_type);
 			*p++ = cpu_to_be32(ace->e_flags & flags_mask);
 			*p++ = cpu_to_be32(ace->e_mask & ace_mask);
-			status = nfsd4_encode_ace_who(xdr, rqstp, ace);
+			status = nfsd4_encode_ace_who(xdr, rqstp, ace, acl);
 			if (status)
 				return status;
 		}
