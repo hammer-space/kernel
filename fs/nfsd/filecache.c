@@ -36,19 +36,10 @@ struct nfsd_fcache_bucket {
 };
 
 static struct kmem_cache		*nfsd_file_slab;
+static struct kmem_cache		*nfsd_file_mark_slab;
 static struct nfsd_fcache_bucket	*nfsd_file_hashtbl;
 static struct list_lru			nfsd_file_lru;
 static struct fsnotify_group		*nfsd_file_fsnotify_group;
-
-/*
- * The fsnotify_mark is embedded inside the nfsd_file and we don't want to
- * explicitly free it. It'll be freed when the nfsd_file is and we always
- * remove the mark from the inode before freeing it. So, this is a no-op.
- */
-static void
-nfsd_file_free_mark(struct fsnotify_mark *mark)
-{
-}
 
 static void
 nfsd_file_slab_free(struct rcu_head *rcu)
@@ -56,6 +47,71 @@ nfsd_file_slab_free(struct rcu_head *rcu)
 	struct nfsd_file *nf = container_of(rcu, struct nfsd_file, nf_rcu);
 
 	kmem_cache_free(nfsd_file_slab, nf);
+}
+
+static void
+nfsd_file_mark_free(struct fsnotify_mark *mark)
+{
+	struct nfsd_file_mark *nfm = container_of(mark, struct nfsd_file_mark,
+						  nfm_mark);
+
+	kmem_cache_free(nfsd_file_mark_slab, nfm);
+}
+
+static struct nfsd_file_mark *
+nfsd_file_mark_get(struct nfsd_file_mark *nfm)
+{
+	if (!atomic_inc_not_zero(&nfm->nfm_ref))
+		return NULL;
+	return nfm;
+}
+
+static void
+nfsd_file_mark_put(struct nfsd_file_mark *nfm)
+{
+	if (atomic_dec_and_test(&nfm->nfm_ref))
+		fsnotify_destroy_mark(&nfm->nfm_mark, nfsd_file_fsnotify_group);
+}
+
+static struct nfsd_file_mark *
+nfsd_file_mark_find_or_create(struct nfsd_file *nf)
+{
+	int			err;
+	struct fsnotify_mark	*mark;
+	struct nfsd_file_mark	*nfm = NULL, *new = NULL;
+
+	do {
+		mark = fsnotify_find_mark(&nf->nf_inode->i_fsnotify_marks,
+					  nfsd_file_fsnotify_group);
+		if (mark) {
+			nfm = nfsd_file_mark_get(container_of(mark,
+						 struct nfsd_file_mark,
+						 nfm_mark));
+			fsnotify_put_mark(mark);
+			if (likely(nfm))
+				break;
+		}
+
+		/* allocate a new nfm */
+		if (!new) {
+			new = kmem_cache_alloc(nfsd_file_mark_slab, GFP_KERNEL);
+			if (!new)
+				return NULL;
+			fsnotify_init_mark(&new->nfm_mark, nfsd_file_fsnotify_group);
+			atomic_set(&new->nfm_ref, 1);
+		}
+
+		err = fsnotify_add_mark(&new->nfm_mark, nf->nf_inode,
+				NULL, false);
+		if (likely(!err)) {
+			nfm = new;
+			new = NULL;
+		}
+	} while (unlikely(err == EEXIST));
+
+	if (new)
+		kmem_cache_free(nfsd_file_mark_slab, new);
+	return nfm;
 }
 
 static struct nfsd_file *
@@ -77,8 +133,7 @@ nfsd_file_alloc(struct inode *inode, unsigned int may, unsigned int hashval)
 			if (may & NFSD_MAY_READ)
 				__set_bit(NFSD_FILE_BREAK_READ, &nf->nf_flags);
 		}
-		fsnotify_init_mark(&nf->nf_mark, nfsd_file_fsnotify_group);
-		nf->nf_mark.mask = FS_ATTRIB|FS_DELETE_SELF;
+		nf->nf_mark = NULL;
 		trace_nfsd_file_alloc(nf);
 	}
 	return nf;
@@ -88,7 +143,8 @@ static void
 nfsd_file_put_final(struct nfsd_file *nf)
 {
 	trace_nfsd_file_put_final(nf);
-	fsnotify_destroy_mark(&nf->nf_mark, nfsd_file_fsnotify_group);
+	if (nf->nf_mark)
+		nfsd_file_mark_put(nf->nf_mark);
 	if (nf->nf_file)
 		fput(nf->nf_file);
 	call_rcu(&nf->nf_rcu, nfsd_file_slab_free);
@@ -100,7 +156,8 @@ nfsd_file_put_final_delayed(struct nfsd_file *nf)
 	bool flush = false;
 
 	trace_nfsd_file_put_final(nf);
-	fsnotify_destroy_mark(&nf->nf_mark, nfsd_file_fsnotify_group);
+	if (nf->nf_mark)
+		nfsd_file_mark_put(nf->nf_mark);
 	if (nf->nf_file)
 		flush = fput_global(nf->nf_file);
 	call_rcu(&nf->nf_rcu, nfsd_file_slab_free);
@@ -135,19 +192,6 @@ nfsd_file_unhash_and_release_locked(struct nfsd_file *nf, struct list_head *disp
 		return;
 
 	list_add(&nf->nf_lru, dispose);
-}
-
-static void
-nfsd_file_unhash_and_release(struct nfsd_file *nf)
-{
-	bool destroy = false;
-
-	spin_lock(&nfsd_file_hashtbl[nf->nf_hashval].nfb_lock);
-	if (nfsd_file_unhash(nf))
-		destroy = atomic_dec_and_test(&nf->nf_ref);
-	spin_unlock(&nfsd_file_hashtbl[nf->nf_hashval].nfb_lock);
-	if (destroy)
-		nfsd_file_put_final(nf);
 }
 
 void
@@ -274,8 +318,6 @@ nfsd_file_fsnotify_handle_event(struct fsnotify_group *group,
 				const unsigned char *file_name, u32 cookie,
 				struct fsnotify_iter_info *iter_info)
 {
-	struct nfsd_file	*nf;
-
 	trace_nfsd_file_fsnotify_handle_event(inode, mask);
 
 	/* Should be no marks on non-regular files */
@@ -293,16 +335,15 @@ nfsd_file_fsnotify_handle_event(struct fsnotify_group *group,
 			return 0;
 	}
 
-	/* FIXME: get container of mark, unhash and release it */
-	nf = container_of(inode_mark, struct nfsd_file, nf_mark);
-	nfsd_file_unhash_and_release(nf);
+	/* FIXME: no need for _sync variant here */
+	nfsd_file_close_inode_sync(inode);
 	return 0;
 }
 
 
 const static struct fsnotify_ops nfsd_file_fsnotify_ops = {
 	.handle_event = nfsd_file_fsnotify_handle_event,
-	.free_mark = nfsd_file_free_mark,
+	.free_mark = nfsd_file_mark_free,
 };
 
 int
@@ -327,6 +368,14 @@ nfsd_file_cache_init(void)
 		pr_err("nfsd: unable to create nfsd_file_slab\n");
 		goto out_err;
 	}
+
+	nfsd_file_mark_slab = kmem_cache_create("nfsd_file_mark",
+					sizeof(struct nfsd_file_mark), 0, 0, NULL);
+	if (!nfsd_file_mark_slab) {
+		pr_err("nfsd: unable to create nfsd_file_mark_slab\n");
+		goto out_err;
+	}
+
 
 	ret = list_lru_init(&nfsd_file_lru);
 	if (ret) {
@@ -371,6 +420,8 @@ out_lru:
 out_err:
 	kmem_cache_destroy(nfsd_file_slab);
 	nfsd_file_slab = NULL;
+	kmem_cache_destroy(nfsd_file_mark_slab);
+	nfsd_file_mark_slab = NULL;
 	kfree(nfsd_file_hashtbl);
 	nfsd_file_hashtbl = NULL;
 	goto out;
@@ -407,12 +458,14 @@ nfsd_file_cache_shutdown(void)
 				&nfsd_file_lease_notifier);
 	unregister_shrinker(&nfsd_file_shrinker);
 	nfsd_file_cache_purge();
-	fsnotify_put_group(nfsd_file_fsnotify_group);
-	nfsd_file_fsnotify_group = NULL;
 	list_lru_destroy(&nfsd_file_lru);
 	rcu_barrier();
+	fsnotify_put_group(nfsd_file_fsnotify_group);
+	nfsd_file_fsnotify_group = NULL;
 	kmem_cache_destroy(nfsd_file_slab);
 	nfsd_file_slab = NULL;
+	kmem_cache_destroy(nfsd_file_mark_slab);
+	nfsd_file_mark_slab = NULL;
 	kfree(nfsd_file_hashtbl);
 	nfsd_file_hashtbl = NULL;
 }
@@ -539,14 +592,19 @@ retry:
 		hlist_add_head_rcu(&new->nf_node,
 				&nfsd_file_hashtbl[hashval].nfb_head);
 		++nfsd_file_hashtbl[hashval].nfb_count;
-		nfsd_file_hashtbl[hashval].nfb_maxcount = max(nfsd_file_hashtbl[hashval].nfb_maxcount,
-				nfsd_file_hashtbl[hashval].nfb_count);
+		nfsd_file_hashtbl[hashval].nfb_maxcount =
+			max(nfsd_file_hashtbl[hashval].nfb_maxcount,
+			    nfsd_file_hashtbl[hashval].nfb_count);
 		spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
 
-		/* This should never fail since we set allow_dups to true */
-		WARN_ON_ONCE(fsnotify_add_mark(&new->nf_mark, inode, NULL, true));
 		nf = new;
 		new = NULL;
+
+		nf->nf_mark = nfsd_file_mark_find_or_create(nf);
+		if (!nf->nf_mark) {
+			status = nfserr_jukebox;
+			goto out;
+		}
 		goto open_file;
 	}
 	spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);

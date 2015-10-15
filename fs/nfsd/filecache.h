@@ -3,6 +3,11 @@
 
 #include <linux/fsnotify_backend.h>
 
+struct nfsd_file_mark {
+	struct fsnotify_mark	nfm_mark;
+	atomic_t		nfm_ref;
+};
+
 /*
  * A representation of a file that has been opened by knfsd. These are hashed
  * in the hashtable by inode pointer value. Note that this object doesn't
@@ -24,7 +29,7 @@ struct nfsd_file {
 	unsigned int		nf_hashval;
 	atomic_t		nf_ref;
 	unsigned char		nf_may;
-	struct fsnotify_mark	nf_mark;
+	struct nfsd_file_mark	*nf_mark;
 };
 
 int nfsd_file_cache_init(void);
