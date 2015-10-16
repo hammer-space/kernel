@@ -554,7 +554,7 @@ __be32
 nfsd_file_acquire(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		  unsigned int may_flags, struct nfsd_file **pnf)
 {
-	__be32	status = nfs_ok;
+	__be32	status;
 	struct nfsd_file *nf, *new = NULL;
 	struct inode *inode;
 	unsigned int hashval;
@@ -598,15 +598,8 @@ retry:
 			max(nfsd_file_hashtbl[hashval].nfb_maxcount,
 			    nfsd_file_hashtbl[hashval].nfb_count);
 		spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
-
 		nf = new;
 		new = NULL;
-
-		nf->nf_mark = nfsd_file_mark_find_or_create(nf);
-		if (!nf->nf_mark) {
-			status = nfserr_jukebox;
-			goto out;
-		}
 		goto open_file;
 	}
 	spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
@@ -673,8 +666,15 @@ out:
 	trace_nfsd_file_acquire(hashval, inode, may_flags, nf, status);
 	return status;
 open_file:
+	if (!nf->nf_mark) {
+		nf->nf_mark = nfsd_file_mark_find_or_create(nf);
+		if (!nf->nf_mark)
+			status = nfserr_jukebox;
+	}
 	/* FIXME: should we abort opening if the link count goes to 0? */
-	status = nfsd_open_verified(rqstp, fhp, S_IFREG, may_flags, &nf->nf_file);
+	if (status == nfs_ok)
+		status = nfsd_open_verified(rqstp, fhp, S_IFREG,
+						may_flags, &nf->nf_file);
 	clear_bit_unlock(NFSD_FILE_PENDING, &nf->nf_flags);
 	smp_mb__after_atomic();
 	wake_up_bit(&nf->nf_flags, NFSD_FILE_PENDING);
