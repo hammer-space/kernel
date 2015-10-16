@@ -123,6 +123,8 @@ nfsd_file_alloc(struct inode *inode, unsigned int may, unsigned int hashval)
 	if (nf) {
 		INIT_HLIST_NODE(&nf->nf_node);
 		INIT_LIST_HEAD(&nf->nf_lru);
+		nf->nf_file = NULL;
+		nf->nf_flags = 0;
 		nf->nf_inode = inode;
 		nf->nf_hashval = hashval;
 		atomic_set(&nf->nf_ref, 1);
