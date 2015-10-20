@@ -295,6 +295,62 @@ static struct shrinker	nfsd_file_shrinker = {
 	.seeks = 1,
 };
 
+static void
+__nfsd_file_close_inode(struct inode *inode, unsigned int hashval,
+			struct list_head *dispose)
+{
+	struct nfsd_file	*nf;
+	struct hlist_node	*tmp;
+
+	spin_lock(&nfsd_file_hashtbl[hashval].nfb_lock);
+	hlist_for_each_entry_safe(nf, tmp, &nfsd_file_hashtbl[hashval].nfb_head, nf_node) {
+		if (inode == nf->nf_inode)
+			nfsd_file_unhash_and_release_locked(nf, dispose);
+	}
+	spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
+}
+
+/**
+ * nfsd_file_close_inode_sync - attempt to forcibly close a nfsd_file
+ * @inode: inode of the file to attempt to remove
+ *
+ * Walk the whole hash bucket, looking for any files that correspond to "inode".
+ * If any do, then unhash them and put the hashtable reference to them and
+ * destroy any that had their last reference put. Also ensure that any of the
+ * fputs also have their final __fput done as well.
+ */
+void
+nfsd_file_close_inode_sync(struct inode *inode)
+{
+	unsigned int		hashval = (unsigned int)hash_long(inode->i_ino,
+						NFSD_FILE_HASH_BITS);
+	LIST_HEAD(dispose);
+
+	__nfsd_file_close_inode(inode, hashval, &dispose);
+	trace_nfsd_file_close_inode_sync(inode, hashval, !list_empty(&dispose));
+	nfsd_file_dispose_list_sync(&dispose);
+}
+
+/**
+ * nfsd_file_close_inode_sync - attempt to forcibly close a nfsd_file
+ * @inode: inode of the file to attempt to remove
+ *
+ * Walk the whole hash bucket, looking for any files that correspond to "inode".
+ * If any do, then unhash them and put the hashtable reference to them and
+ * destroy any that had their last reference put.
+ */
+static void
+nfsd_file_close_inode(struct inode *inode)
+{
+	unsigned int		hashval = (unsigned int)hash_long(inode->i_ino,
+						NFSD_FILE_HASH_BITS);
+	LIST_HEAD(dispose);
+
+	__nfsd_file_close_inode(inode, hashval, &dispose);
+	trace_nfsd_file_close_inode(inode, hashval, !list_empty(&dispose));
+	nfsd_file_dispose_list(&dispose);
+}
+
 static int
 nfsd_file_lease_notifier_call(struct notifier_block *nb, unsigned long arg,
 			    void *data)
@@ -337,8 +393,7 @@ nfsd_file_fsnotify_handle_event(struct fsnotify_group *group,
 			return 0;
 	}
 
-	/* FIXME: no need for _sync variant here */
-	nfsd_file_close_inode_sync(inode);
+	nfsd_file_close_inode(inode);
 	return 0;
 }
 
@@ -521,33 +576,6 @@ nfsd_file_is_cached(struct inode *inode)
 	rcu_read_unlock();
 	trace_nfsd_file_is_cached(inode, hashval, (int)ret);
 	return ret;
-}
-
-
-/**
- * nfsd_file_close_inode - attempt to forcibly close a nfsd_file
- * @inode: inode of the file to attempt to remove
- *
- * Walk the whole hash bucket, looking for any files that correspond to "inode".
- * If any do, then unhash them and put the hashtable reference to them.
- */
-void
-nfsd_file_close_inode_sync(struct inode *inode)
-{
-	struct nfsd_file	*nf;
-	struct hlist_node	*tmp;
-	unsigned int		hashval = (unsigned int)hash_long(inode->i_ino,
-						NFSD_FILE_HASH_BITS);
-	LIST_HEAD(dispose);
-
-	spin_lock(&nfsd_file_hashtbl[hashval].nfb_lock);
-	hlist_for_each_entry_safe(nf, tmp, &nfsd_file_hashtbl[hashval].nfb_head, nf_node) {
-		if (inode == nf->nf_inode)
-			nfsd_file_unhash_and_release_locked(nf, &dispose);
-	}
-	spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
-	trace_nfsd_file_close_inode_sync(inode, hashval, !list_empty(&dispose));
-	nfsd_file_dispose_list_sync(&dispose);
 }
 
 __be32
