@@ -154,12 +154,12 @@ void
 nfsd_file_put(struct nfsd_file *nf)
 {
 	trace_nfsd_file_put(nf);
-	list_lru_rotate(&nfsd_file_lru, &nf->nf_lru);
-	if (!atomic_dec_and_test(&nf->nf_ref))
-		return;
-
-	WARN_ON(test_bit(NFSD_FILE_HASHED, &nf->nf_flags));
-	nfsd_file_put_final(nf);
+	set_bit(NFSD_FILE_REFERENCED, &nf->nf_flags);
+	smp_mb__after_atomic();
+	if (atomic_dec_and_test(&nf->nf_ref)) {
+		WARN_ON(test_bit(NFSD_FILE_HASHED, &nf->nf_flags));
+		nfsd_file_put_final(nf);
+	}
 }
 
 struct nfsd_file *
@@ -207,8 +207,19 @@ nfsd_file_lru_cb(struct list_head *item, struct list_lru_one *lru,
 	struct nfsd_file *nf = list_entry(item, struct nfsd_file, nf_lru);
 	bool unhashed;
 
-	if (atomic_read(&nf->nf_ref) > 1)
-		return LRU_SKIP;
+	/*
+	 * Do a lockless refcount check. The hashtable holds one reference, so
+	 * we look to see if anything else has a reference, or if any have
+	 * been put since the shrinker last ran. Those don't get unhashed and
+	 * released.
+	 *
+	 * Note that in the put path, we set the flag and then decrement the
+	 * counter. Here we check the counter and then test and clear the flag.
+	 * That order is deliberate to ensure that we can do this locklessly.
+	 */
+	if (atomic_read(&nf->nf_ref) > 1 ||
+	    test_and_clear_bit(NFSD_FILE_REFERENCED, &nf->nf_flags))
+		return LRU_ROTATE;
 
 	spin_unlock(lock);
 	spin_lock(&nfsd_file_hashtbl[nf->nf_hashval].nfb_lock);

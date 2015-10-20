@@ -18,6 +18,7 @@ struct nfsd_file {
 #define NFSD_FILE_PENDING	(1)
 #define NFSD_FILE_BREAK_READ	(2)
 #define NFSD_FILE_BREAK_WRITE	(3)
+#define NFSD_FILE_REFERENCED	(4)
 	unsigned long		nf_flags;
 	struct inode		*nf_inode;
 	unsigned int		nf_hashval;
