@@ -12,7 +12,7 @@ struct nfsd_file_mark {
  * A representation of a file that has been opened by knfsd. These are hashed
  * in the hashtable by inode pointer value. Note that this object doesn't
  * hold a reference to the inode by itself, so the nf_inode pointer should
- * never be dereferenced, only be used for comparison.
+ * never be dereferenced, only used for comparison.
  */
 struct nfsd_file {
 	struct hlist_node	nf_node;

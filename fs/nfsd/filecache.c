@@ -74,14 +74,14 @@ nfsd_file_mark_put(struct nfsd_file_mark *nfm)
 }
 
 static struct nfsd_file_mark *
-nfsd_file_mark_find_or_create(struct nfsd_file *nf)
+nfsd_file_mark_find_or_create(struct nfsd_file *nf, struct inode *inode)
 {
 	int			err;
 	struct fsnotify_mark	*mark;
 	struct nfsd_file_mark	*nfm = NULL, *new = NULL;
 
 	do {
-		mark = fsnotify_find_mark(&nf->nf_inode->i_fsnotify_marks,
+		mark = fsnotify_find_mark(&inode->i_fsnotify_marks,
 					  nfsd_file_fsnotify_group);
 		if (mark) {
 			nfm = nfsd_file_mark_get(container_of(mark,
@@ -695,7 +695,7 @@ out:
 	return status;
 open_file:
 	if (!nf->nf_mark) {
-		nf->nf_mark = nfsd_file_mark_find_or_create(nf);
+		nf->nf_mark = nfsd_file_mark_find_or_create(nf, inode);
 		if (!nf->nf_mark)
 			status = nfserr_jukebox;
 	}
