@@ -98,6 +98,7 @@ nfsd_file_mark_find_or_create(struct nfsd_file *nf, struct inode *inode)
 			if (!new)
 				return NULL;
 			fsnotify_init_mark(&new->nfm_mark, nfsd_file_fsnotify_group);
+			new->nfm_mark.mask = FS_ATTRIB|FS_DELETE_SELF;
 			atomic_set(&new->nfm_ref, 1);
 		}
 
