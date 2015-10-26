@@ -391,6 +391,18 @@ extern bool nfs_check_cache_invalid(struct inode *, unsigned long);
 extern int nfs_wait_bit_killable(struct wait_bit_key *key, int mode);
 extern int nfs_wait_atomic_killable(atomic_t *p, unsigned int mode);
 
+/* localio.c */
+extern void nfs_local_init(void);
+extern void nfs_local_enable(struct nfs_client *);
+extern void nfs_local_disable(struct nfs_client *);
+extern void nfs_local_probe(struct nfs_client *);
+extern struct file *nfs_local_open_fh(struct nfs_client *, const struct cred *,
+				      struct nfs_fh *, const fmode_t);
+extern int nfs_local_doio(struct nfs_client *, const struct cred *,
+			  struct nfs_pgio_header *);
+extern int nfs_local_commit(struct nfs_client *, const struct cred *,
+			    struct nfs_commit_data *);
+
 /* super.c */
 extern const struct super_operations nfs_sops;
 extern struct file_system_type nfs_fs_type;

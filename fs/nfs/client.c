@@ -237,6 +237,8 @@ static void pnfs_init_server(struct nfs_server *server)
  */
 void nfs_free_client(struct nfs_client *clp)
 {
+	nfs_local_disable(clp);
+
 	nfs_fscache_release_client_cookie(clp);
 
 	/* -EIO all pending I/O */
@@ -421,6 +423,7 @@ struct nfs_client *nfs_get_client(const struct nfs_client_initdata *cl_init)
 					&nn->nfs_client_list);
 			spin_unlock(&nn->nfs_client_lock);
 			new->cl_flags = cl_init->init_flags;
+			nfs_local_probe(new);
 			return rpc_ops->init_client(new, cl_init);
 		}
 

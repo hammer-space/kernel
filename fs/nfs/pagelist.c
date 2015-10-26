@@ -29,6 +29,9 @@
 static struct kmem_cache *nfs_page_cachep;
 static const struct rpc_call_ops nfs_pgio_common_ops;
 
+static void nfs_pgio_release(void *);
+static void nfs_pgio_result(struct rpc_task *, void *);
+
 struct nfs_pgio_mirror *
 nfs_pgio_current_mirror(struct nfs_pageio_descriptor *desc)
 {
@@ -591,6 +594,7 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 		      const struct nfs_rpc_ops *rpc_ops,
 		      const struct rpc_call_ops *call_ops, int how, int flags)
 {
+	struct nfs_pgio_mirror *mirror = nfs_pgio_current_mirror(desc);
 	struct rpc_task *task;
 	struct rpc_message msg = {
 		.rpc_argp = &hdr->args,
@@ -617,17 +621,29 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 		hdr->args.count,
 		(unsigned long long)hdr->args.offset);
 
-	task = rpc_run_task(&task_setup_data);
-	if (IS_ERR(task)) {
-		ret = PTR_ERR(task);
-		goto out;
+	if (test_bit(NFS_CS_LOCAL_IO, &clp->cl_flags)) {
+		ret = nfs_local_doio(clp, cred, hdr);
+
+		if (ret >= 0) {
+			ret = 0;
+			call_ops->rpc_call_done(&hdr->task, hdr);
+			call_ops->rpc_release(hdr);
+		} else
+			/* XXX set nfs_pgio_error? */
+			mirror->pg_recoalesce = 1;
+	} else {
+		task = rpc_run_task(&task_setup_data);
+		if (IS_ERR(task)) {
+			ret = PTR_ERR(task);
+			goto out;
+		}
+		if (how & FLUSH_SYNC) {
+			ret = rpc_wait_for_completion_task(task);
+			if (ret == 0)
+				ret = task->tk_status;
+		}
+		rpc_put_task(task);
 	}
-	if (how & FLUSH_SYNC) {
-		ret = rpc_wait_for_completion_task(task);
-		if (ret == 0)
-			ret = task->tk_status;
-	}
-	rpc_put_task(task);
 out:
 	return ret;
 }

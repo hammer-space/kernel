@@ -529,7 +529,7 @@ static bool check_exported_symbol(const struct symsearch *syms,
 	return true;
 }
 
-static unsigned long kernel_symbol_value(const struct kernel_symbol *sym)
+unsigned long kernel_symbol_value(const struct kernel_symbol *sym)
 {
 #ifdef CONFIG_HAVE_ARCH_PREL32_RELOCATIONS
 	return (unsigned long)offset_to_ptr(&sym->value_offset);
@@ -537,6 +537,7 @@ static unsigned long kernel_symbol_value(const struct kernel_symbol *sym)
 	return sym->value;
 #endif
 }
+EXPORT_SYMBOL_GPL(kernel_symbol_value);
 
 static const char *kernel_symbol_name(const struct kernel_symbol *sym)
 {

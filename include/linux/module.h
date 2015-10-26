@@ -564,6 +564,12 @@ struct symsearch {
 };
 
 /*
+ * Get the value of a kernel symbol.
+ */
+unsigned long kernel_symbol_value(const struct kernel_symbol *sym);
+
+/*
+ *
  * Search for an exported symbol by name.
  *
  * Must be called with module_mutex held or preemption disabled.
