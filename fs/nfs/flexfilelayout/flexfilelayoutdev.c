@@ -301,6 +301,36 @@ ff_layout_get_mirror_cred(struct nfs4_ff_layout_mirror *mirror, u32 iomode)
 	return cred;
 }
 
+/* cache local file ds is in local io mode */
+static void ff_layout_update_mirror_filp(struct nfs4_ff_layout_mirror *mirror,
+					 struct nfs4_pnfs_ds *ds)
+{
+	struct nfs_fh *fh = &mirror->fh_versions[0];	/* XXX */
+	fmode_t mode = O_RDWR;	/* XXX: check layout type? */
+	struct file *filp;
+	struct cred *cred;
+
+	if (ds && ds->ds_clp &&
+	    test_bit(NFS_CS_LOCAL_IO, &ds->ds_clp->cl_flags)) {
+		/* FIXME: respect credential changes */
+		if (!mirror->local_file) {
+			cred = ff_layout_get_mirror_cred(mirror, IOMODE_RW);
+			if (!cred) {
+				nfs_local_disable(ds->ds_clp);
+				return;
+			}
+			filp = nfs_local_open_fh(ds->ds_clp, cred, fh, mode);
+			put_cred(cred);
+
+			if (IS_ERR_OR_NULL(filp))
+				nfs_local_disable(ds->ds_clp);
+			else
+				mirror->local_file = filp;
+		}
+	} else
+		mirror->local_file = NULL;
+}
+
 struct nfs_fh *
 nfs4_ff_layout_select_ds_fh(struct nfs4_ff_layout_mirror *mirror)
 {
@@ -397,8 +427,10 @@ nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg,
 	ds = mirror->mirror_ds->ds;
 	/* matching smp_wmb() in _nfs4_pnfs_v3/4_ds_connect */
 	smp_rmb();
-	if (ds->ds_clp)
+	if (ds->ds_clp) {
+		ff_layout_update_mirror_filp(mirror, ds);
 		goto out;
+	}
 
 	/* FIXME: For now we assume the server sent only one version of NFS
 	 * to use for the DS.
@@ -418,6 +450,7 @@ nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg,
 		if (ff_layout_ds_is_local(ds)) {
 			dprintk("%s: found local DS\n", __func__);
 			mirror->mirror_ds->local_ds = true;
+			nfs_local_enable(ds->ds_clp);
 		}
 		max_payload =
 			nfs_block_size(rpc_max_payload(ds->ds_clp->cl_rpcclient),
