@@ -38,6 +38,7 @@
 #include <linux/slab.h>
 #include <linux/compat.h>
 #include <linux/freezer.h>
+#include <linux/file.h>
 #include <linux/uaccess.h>
 #include <linux/iversion.h>
 
@@ -932,6 +933,7 @@ struct nfs_open_context *alloc_nfs_open_context(struct dentry *dentry,
 	ctx->lock_context.open_context = ctx;
 	INIT_LIST_HEAD(&ctx->list);
 	ctx->mdsthreshold = NULL;
+	ctx->local_filp = NULL;
 	return ctx;
 }
 EXPORT_SYMBOL_GPL(alloc_nfs_open_context);
@@ -963,6 +965,8 @@ static void __put_nfs_open_context(struct nfs_open_context *ctx, int is_sync)
 	dput(ctx->dentry);
 	nfs_sb_deactive(sb);
 	kfree(ctx->mdsthreshold);
+	if (!IS_ERR_OR_NULL(ctx->local_filp))
+		fput(ctx->local_filp);
 	kfree(ctx);
 }
 
@@ -2167,6 +2171,7 @@ static int __init init_nfs_fs(void)
 	if (err)
 		goto out1;
 
+	nfs_local_init();
 	rpc_proc_register(&init_net, &nfs_rpcstat);
 
 	err = register_nfs_fs();

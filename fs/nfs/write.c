@@ -62,6 +62,9 @@ static struct nfs_page *
 nfs_page_search_commits_for_head_request_locked(struct nfs_inode *nfsi,
 						struct page *page);
 
+static void nfs_commit_done(struct rpc_task *task, void *calldata);
+static void nfs_commit_release(void *calldata);
+
 static struct kmem_cache *nfs_wdata_cachep;
 static mempool_t *nfs_wdata_mempool;
 static struct kmem_cache *nfs_cdata_cachep;
@@ -1666,6 +1669,8 @@ int nfs_initiate_commit(struct nfs_client *clp,
 		.flags = RPC_TASK_ASYNC | flags,
 		.priority = priority,
 	};
+	int status = 0;
+
 	/* Set up the initial task struct.  */
 	nfs_ops->commit_setup(data, &msg);
 	trace_nfs_initiate_commit(data);
@@ -1675,13 +1680,23 @@ int nfs_initiate_commit(struct nfs_client *clp,
 	nfs4_state_protect(NFS_SERVER(data->inode)->nfs_client,
 		NFS_SP4_MACH_CRED_COMMIT, &task_setup_data.rpc_client, &msg);
 
-	task = rpc_run_task(&task_setup_data);
-	if (IS_ERR(task))
-		return PTR_ERR(task);
-	if (how & FLUSH_SYNC)
-		rpc_wait_for_completion_task(task);
-	rpc_put_task(task);
-	return 0;
+	if (test_bit(NFS_CS_LOCAL_IO, &clp->cl_flags)) {
+		status = nfs_local_commit(clp, data->cred, data);
+
+		if (status >= 0) {
+			status = 0;
+			call_ops->rpc_call_done(&data->task, data);
+			call_ops->rpc_release(data);
+		}
+	} else {
+		task = rpc_run_task(&task_setup_data);
+		if (IS_ERR(task))
+			return PTR_ERR(task);
+		if (how & FLUSH_SYNC)
+			rpc_wait_for_completion_task(task);
+		rpc_put_task(task);
+	}
+	return status;
 }
 EXPORT_SYMBOL_GPL(nfs_initiate_commit);
 
