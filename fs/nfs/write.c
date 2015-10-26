@@ -1683,7 +1683,9 @@ void nfs_commitdata_release(struct nfs_commit_data *data)
 }
 EXPORT_SYMBOL_GPL(nfs_commitdata_release);
 
-int nfs_initiate_commit(struct rpc_clnt *clnt, struct nfs_commit_data *data,
+int nfs_initiate_commit(struct nfs_client *clp,
+			struct rpc_clnt *rpc_clnt,
+			struct nfs_commit_data *data,
 			const struct nfs_rpc_ops *nfs_ops,
 			const struct rpc_call_ops *call_ops,
 			int how, int flags)
@@ -1697,7 +1699,7 @@ int nfs_initiate_commit(struct rpc_clnt *clnt, struct nfs_commit_data *data,
 	};
 	struct rpc_task_setup task_setup_data = {
 		.task = &data->task,
-		.rpc_client = clnt,
+		.rpc_client = rpc_clnt,
 		.rpc_message = &msg,
 		.callback_ops = call_ops,
 		.callback_data = data,
@@ -1830,7 +1832,8 @@ nfs_commit_list(struct inode *inode, struct list_head *head, int how,
 	nfs_init_commit(data, head, NULL, cinfo);
 	if (NFS_SERVER(inode)->nfs_client->cl_minorversion)
 		task_flags = RPC_TASK_MOVEABLE;
-	return nfs_initiate_commit(NFS_CLIENT(inode), data, NFS_PROTO(inode),
+	return nfs_initiate_commit(NFS_SERVER(inode)->nfs_client,
+				   NFS_CLIENT(inode), data, NFS_PROTO(inode),
 				   data->mds_ops, how,
 				   RPC_TASK_CRED_NOREF | task_flags);
 }
