@@ -289,7 +289,8 @@ pnfs_generic_commit_pagelist(struct inode *inode, struct list_head *mds_pages,
 				continue;
 
 			nfs_init_commit(data, mds_pages, NULL, cinfo);
-			nfs_initiate_commit(NFS_CLIENT(inode), data,
+			nfs_initiate_commit(NFS_SERVER(inode)->nfs_client,
+					    NFS_CLIENT(inode), data,
 					    NFS_PROTO(data->inode),
 					    data->mds_ops, how, 0);
 		} else {
