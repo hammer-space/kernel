@@ -378,18 +378,18 @@ outerr:
 
 static bool ff_layout_ds_is_local(struct nfs4_pnfs_ds *ds)
 {
-	struct sockaddr_storage addr;
-	struct sockaddr *sap = (struct sockaddr *)&addr;
+	struct nfs_local_addr *addr;
+	struct sockaddr *sap;
 	struct nfs4_pnfs_ds_addr *da;
 
-	if (rpc_localaddr(ds->ds_clp->cl_rpcclient, sap, sizeof(addr)) < 0)
-		goto out;
-
-	list_for_each_entry(da, &ds->ds_addrs, da_node) {
-		if (rpc_cmp_addr((struct sockaddr *)&da->da_addr, sap))
-			return true;
+	list_for_each_entry(addr, &ds->ds_clp->cl_local_addrs, cl_addrs) {
+		sap = (struct sockaddr *)&addr->address;
+		list_for_each_entry(da, &ds->ds_addrs, da_node) {
+			if (rpc_cmp_addr((struct sockaddr *)&da->da_addr, sap))
+				return true;
+		}
 	}
-out:
+
 	return false;
 }
 
