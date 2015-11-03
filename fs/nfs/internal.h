@@ -150,6 +150,12 @@ struct nfs_mount_info {
 	struct nfs_fh *mntfh;
 };
 
+struct nfs_local_addr {
+	struct list_head	cl_addrs;
+	struct sockaddr_storage	address;
+	size_t			addrlen;
+};
+
 extern int nfs_mount(struct nfs_mount_request *info);
 extern void nfs_umount(const struct nfs_mount_request *info);
 
@@ -402,6 +408,7 @@ extern int nfs_local_doio(struct nfs_client *, const struct cred *,
 			  struct nfs_pgio_header *);
 extern int nfs_local_commit(struct nfs_client *, const struct cred *,
 			    struct nfs_commit_data *);
+extern void nfs_probe_local_addr(struct nfs_client *clnt);
 
 /* super.c */
 extern const struct super_operations nfs_sops;
