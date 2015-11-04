@@ -257,6 +257,11 @@ static void nfs_readpage_retry(struct rpc_task *task,
 		nfs_set_pgio_error(hdr, -EIO, argp->offset);
 		return;
 	}
+	/* tk_ops == NULL means local IO, and we've made some
+	 * progress. Just return short read for local IO.
+	 */
+	if (task->tk_ops == NULL)
+		return;
 	/* Yes, so retry the read at the end of the hdr */
 	hdr->mds_offset += resp->count;
 	argp->offset += resp->count;
