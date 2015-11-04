@@ -1631,6 +1631,12 @@ static void nfs_writeback_result(struct rpc_task *task,
 			task->tk_status = -EIO;
 			return;
 		}
+		/* task->tk_ops == NULL means local IO, and we've made some
+		 * progress. Just return short writes for local IO
+		 */
+		if (task->tk_ops == NULL)
+			return;
+
 		/* Was this an NFSv2 write or an NFSv3 stable write? */
 		if (resp->verf->committed != NFS_UNSTABLE) {
 			/* Resend from where the server left off */
