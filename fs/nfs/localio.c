@@ -237,6 +237,7 @@ EXPORT_SYMBOL_GPL(nfs_local_open_fh);
 static int
 nfs_do_local_read(struct nfs_pgio_header *hdr, struct file *filp)
 {
+	struct inode *ino = file_inode(filp);
 	size_t bytes = 0;
 	struct page *page;
 	ssize_t status = 0;
@@ -267,7 +268,10 @@ nfs_do_local_read(struct nfs_pgio_header *hdr, struct file *filp)
 	}
 	set_fs(oldfs);
 
-	dprintk("%s: read %lu bytes.\n", __func__, bytes);
+	if (hdr->args.offset + bytes >= i_size_read(ino))
+		hdr->res.eof = true;
+
+	dprintk("%s: read %lu bytes eof %d.\n", __func__, bytes, hdr->res.eof);
 
 	/* return bytes read on partial reads */
 	if (!bytes)
