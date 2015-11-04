@@ -12,6 +12,7 @@
 #include <linux/inet.h>
 #include <linux/sunrpc/addr.h>
 #include <linux/inetdevice.h>
+#include <net/addrconf.h>
 
 #include <linux/nfs.h>
 #include <linux/nfs_fs.h>
@@ -426,6 +427,76 @@ nfs_local_commit(struct nfs_client *clp, const struct cred *cred,
 }
 EXPORT_SYMBOL_GPL(nfs_local_commit);
 
+static int
+nfs_client_add_addr(struct nfs_client *clnt, char *buf, gfp_t flags)
+{
+	struct nfs_local_addr *addr;
+	struct sockaddr *sap;
+
+	dprintk("%s: adding new local IP %s\n", __func__, buf);
+	addr = kmalloc(sizeof(*addr), flags);
+	if (!addr) {
+		printk(KERN_WARNING "NFS: cannot alloc new addr\n");
+		return -ENOMEM;
+	}
+	sap = (struct sockaddr *)&addr->address;
+	addr->addrlen = rpc_pton(clnt->cl_net, buf, strlen(buf),
+				sap, sizeof(addr->address));
+	if (!addr->addrlen) {
+		printk(KERN_WARNING "NFS: cannot parse new addr %s\n",
+				buf);
+		kfree(addr);
+		return -EINVAL;
+	}
+	list_add(&addr->cl_addrs, &clnt->cl_local_addrs);
+
+	return 0;
+}
+
+static int
+nfs_client_add_v4_addr(struct nfs_client *clnt, struct in_device *indev,
+		       char *buf, size_t buflen)
+{
+	int ret;
+
+	for_ifa(indev) {
+		snprintf(buf, buflen, "%pI4", &ifa->ifa_local);
+		ret = nfs_client_add_addr(clnt, buf, GFP_KERNEL);
+		if (ret < 0)
+			return ret;
+	} endfor_ifa(indev);
+
+	return 0;
+}
+
+#if IS_ENABLED(CONFIG_IPV6)
+static int
+nfs_client_add_v6_addr(struct nfs_client *clnt, struct inet6_dev *in6dev,
+		       char *buf, size_t buflen)
+{
+	struct inet6_ifaddr *ifp;
+	int ret = 0;
+
+	read_lock_bh(&in6dev->lock);
+	list_for_each_entry(ifp, &in6dev->addr_list, if_list) {
+		rpc_ntop6_addr_noscopeid(&ifp->addr, buf, buflen);
+		ret = nfs_client_add_addr(clnt, buf, GFP_ATOMIC);
+		if (ret < 0)
+			goto out;
+	}
+out:
+	read_unlock_bh(&in6dev->lock);
+	return ret;
+}
+#else /* CONFIG_IPV6 */
+static int
+nfs_client_add_v6_addr(struct nfs_client *clnt, struct inet6_dev *in6dev,
+		       char *buf, size_t buflen)
+{
+	return 0;
+}
+#endif
+
 /* Find out all local IP addresses. Ignore errors
  * because local IO can be optional.
  */
@@ -433,42 +504,26 @@ void
 nfs_probe_local_addr(struct nfs_client *clnt)
 {
 	struct net_device *dev;
-	struct in_device *idev;
-	struct nfs_local_addr *addr;
-	struct sockaddr *sap;
+	struct in_device *indev;
+	struct inet6_dev *in6dev;
 	char buf[INET6_ADDRSTRLEN + IPV6_SCOPE_ID_LEN];
-	int buflen = sizeof(buf);
+	size_t buflen = sizeof(buf);
 
 	rtnl_lock();
 
 	for_each_netdev(clnt->cl_net, dev) {
-		if (dev->type == ARPHRD_LOOPBACK)
+		if (dev->type == ARPHRD_LOOPBACK ||
+		    !(dev->flags & IFF_UP))
 			continue;
-		idev = __in_dev_get_rtnl(dev);
-		if (!idev || !(dev->flags & IFF_UP))
-			continue;
-		for_ifa(idev) {
-			addr = kmalloc(sizeof(*addr), GFP_KERNEL);
-			if (!addr) {
-				printk(KERN_WARNING "NFS: cannot alloc new addr\n");
-				goto out;
-			}
-			sap = (struct sockaddr *)&addr->address;
-			memset(buf, 0, buflen);
-			snprintf(buf, buflen, "%pI4", &ifa->ifa_local);
-			dprintk("%s: adding new local IP %s\n", __func__, buf);
-			addr->addrlen = rpc_pton(clnt->cl_net, buf, strlen(buf),
-						sap, sizeof(addr->address));
-			if (!addr->addrlen) {
-				printk(KERN_WARNING "NFS: cannot parse new addr %s\n",
-						buf);
-				kfree(addr);
-				goto out;
-			}
-			INIT_LIST_HEAD(&addr->cl_addrs);
-			list_add(&clnt->cl_local_addrs, &addr->cl_addrs);
-		} endfor_ifa(idev);
+		indev = __in_dev_get_rtnl(dev);
+		if (indev &&
+		    nfs_client_add_v4_addr(clnt, indev, buf, buflen) < 0)
+			break;
+		in6dev = __in6_dev_get(dev);
+		if (in6dev &&
+		    nfs_client_add_v6_addr(clnt, in6dev, buf, buflen) < 0)
+			break;
 	}
-out:
+
 	rtnl_unlock();
 }
