@@ -153,6 +153,9 @@ nfs_local_probe(struct nfs_client *clp)
 {
 	struct sockaddr_in *sin;
 	struct sockaddr_in6 *sin6;
+	struct nfs_local_addr *addr;
+	struct sockaddr *sap;
+	bool enable = false;
 
 	switch (clp->cl_addr.ss_family) {
 	case AF_INET:
@@ -160,7 +163,7 @@ nfs_local_probe(struct nfs_client *clp)
 		if (ipv4_is_loopback(sin->sin_addr.s_addr)) {
 			dprintk("%s: detected IPv4 loopback address\n",
 				__func__);
-			nfs_local_enable(clp);
+			enable = true;
 		}
 		break;
 	case AF_INET6:
@@ -169,12 +172,28 @@ nfs_local_probe(struct nfs_client *clp)
 		    sizeof(struct in6_addr)) == 0) {
 			dprintk("%s: detected IPv6 loopback address\n",
 				__func__);
-			nfs_local_enable(clp);
+			enable = true;
 		}
 		break;
 	default:
 		break;
 	}
+
+	if (enable)
+		goto out;
+
+	list_for_each_entry(addr, &clp->cl_local_addrs, cl_addrs) {
+		sap = (struct sockaddr *)&addr->address;
+		if (rpc_cmp_addr((struct sockaddr *)&clp->cl_addr, sap)) {
+			dprintk("%s: detected local server.\n", __func__);
+			enable = true;
+			break;
+		}
+	}
+
+out:
+	if (enable)
+		nfs_local_enable(clp);
 }
 EXPORT_SYMBOL_GPL(nfs_local_probe);
 
