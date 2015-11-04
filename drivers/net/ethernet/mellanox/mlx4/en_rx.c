@@ -555,7 +555,8 @@ static void mlx4_en_refill_rx_buffers(struct mlx4_en_priv *priv,
 	do {
 		if (mlx4_en_prepare_rx_desc(priv, ring,
 					    ring->prod & ring->size_mask,
-					    GFP_ATOMIC | __GFP_MEMALLOC))
+					    GFP_ATOMIC | __GFP_MEMALLOC
+					    | __GFP_NOWARN))
 			break;
 		ring->prod++;
 	} while (likely(--missing));
