@@ -529,7 +529,7 @@ pnfs_get_nfs_client(struct nfs_pageio_descriptor *desc, struct nfs_page *req)
 {
 	struct pnfs_layoutdriver_type *ld;
 
-	ld = NFS_SERVER(page_file_mapping(req->wb_page)->host)->pnfs_curr_ld;
+	ld = NFS_SERVER(desc->pg_inode)->pnfs_curr_ld;
 
 	if (ld == NULL || ld->get_nfs_client == NULL)
 		return NULL;
