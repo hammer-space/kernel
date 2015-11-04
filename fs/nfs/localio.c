@@ -321,7 +321,7 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp)
 		dprintk("stable write calling commit %llu - %u\n",
 			hdr->args.offset, hdr->args.count);
 		status = vfs_fsync_range(filp, hdr->args.offset,
-					 hdr->args.count, 0);
+					 hdr->args.offset + bytes, 0);
 	}
 
 	hdr->res.verf = &hdr->verf;
@@ -423,6 +423,7 @@ nfs_local_commit(struct nfs_client *clp, const struct cred *cred,
 		 struct nfs_commit_data *data)
 {
 	struct file *filp;
+	loff_t end;
 	int status = 0;
 	fmode_t mode;
 
@@ -438,7 +439,8 @@ nfs_local_commit(struct nfs_client *clp, const struct cred *cred,
 	dprintk("%s: commit %llu - %u\n", __func__,
 		data->args.offset, data->args.count);
 
-	status = vfs_fsync_range(filp, data->args.offset, data->args.count, 0);
+	end = data->args.count ? data->args.offset + data->args.count : -1;
+	status = vfs_fsync_range(filp, data->args.offset, end, 0);
 	if (status >= 0)
 		data->task.tk_status = 0;
 	else {
