@@ -35,6 +35,8 @@ struct nfsd_fcache_bucket {
 	unsigned int		nfb_maxcount;
 };
 
+static DEFINE_PER_CPU(unsigned long, nfsd_file_cache_hits);
+
 static struct kmem_cache		*nfsd_file_slab;
 static struct kmem_cache		*nfsd_file_mark_slab;
 static struct nfsd_fcache_bucket	*nfsd_file_hashtbl;
@@ -600,8 +602,10 @@ retry:
 	rcu_read_lock();
 	nf = nfsd_file_find_locked(inode, may_flags, hashval);
 	rcu_read_unlock();
-	if (nf)
+	if (nf) {
+		this_cpu_inc(nfsd_file_cache_hits);
 		goto wait_for_construction;
+	}
 
 	if (!new) {
 		new = nfsd_file_alloc(inode, may_flags, hashval);
@@ -631,6 +635,7 @@ retry:
 		new = NULL;
 		goto open_file;
 	}
+	this_cpu_inc(nfsd_file_cache_hits);
 	spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
 
 wait_for_construction:
@@ -718,6 +723,7 @@ open_file:
 static int nfsd_file_cache_stats_show(struct seq_file *m, void *v)
 {
 	unsigned int i, count = 0, longest = 0;
+	unsigned long hits = 0;
 
 	/*
 	 * No need for spinlocks here since we're not terribly interested in
@@ -733,8 +739,12 @@ static int nfsd_file_cache_stats_show(struct seq_file *m, void *v)
 	}
 	mutex_unlock(&nfsd_mutex);
 
+	for_each_possible_cpu(i)
+		hits += per_cpu(nfsd_file_cache_hits, i);
+
 	seq_printf(m, "total entries: %u\n", count);
 	seq_printf(m, "longest chain: %u\n", longest);
+	seq_printf(m, "cache hits:    %lu\n", hits);
 	return 0;
 }
 
