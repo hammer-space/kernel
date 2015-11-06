@@ -646,9 +646,13 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 			ret = 0;
 			call_ops->rpc_call_done(&hdr->task, hdr);
 			call_ops->rpc_release(hdr);
-		} else
-			/* XXX set nfs_pgio_error? */
+		} else {
+			/* local IO fails, resend all pages */
+			list_splice_init(&hdr->pages, &mirror->pg_list);
 			mirror->pg_recoalesce = 1;
+			call_ops->rpc_call_done(&hdr->task, hdr);
+			call_ops->rpc_release(hdr);
+		}
 	} else {
 		task = rpc_run_task(&task_setup_data);
 		if (IS_ERR(task)) {
@@ -1114,6 +1118,10 @@ static int nfs_do_recoalesce(struct nfs_pageio_descriptor *desc)
 {
 	struct nfs_pgio_mirror *mirror = nfs_pgio_current_mirror(desc);
 	LIST_HEAD(head);
+
+	desc->pg_error = 0;
+	if (desc->pg_dreq)
+		nfs_direct_reset_error(desc->pg_dreq);
 
 	do {
 		list_splice_init(&mirror->pg_list, &head);
