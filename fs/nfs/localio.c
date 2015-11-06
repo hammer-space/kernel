@@ -350,13 +350,11 @@ nfs_local_file_open(struct nfs_client *clp, const struct cred *cred,
 		    struct pnfs_layout_segment *lseg, u32 ds_idx)
 {
 	struct nfs_server *s = NFS_SERVER(ctx->dentry->d_inode);
-	struct file *filp;
 
-	filp = pnfs_local_open_fh(s, lseg, ds_idx, clp, cred, fh, mode);
-	/* check bit again because pnfs call might have disabled local io */
-	if (!filp && test_bit(NFS_CS_LOCAL_IO, &clp->cl_flags))
-		filp = nfs_local_file_open_cached(clp, cred, fh, mode, ctx);
-	return filp;
+	if (lseg)
+		return pnfs_local_open_fh(s, lseg, ds_idx, clp, cred, fh, mode);
+	else
+		return nfs_local_file_open_cached(clp, cred, fh, mode, ctx);
 }
 
 static struct file *
