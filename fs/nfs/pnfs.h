@@ -531,7 +531,7 @@ pnfs_get_nfs_client(struct nfs_pageio_descriptor *desc, struct nfs_page *req)
 
 	ld = NFS_SERVER(desc->pg_inode)->pnfs_curr_ld;
 
-	if (ld == NULL || ld->get_nfs_client == NULL)
+	if (ld == NULL || ld->get_nfs_client == NULL || desc->pg_lseg == NULL)
 		return NULL;
 	return ld->get_nfs_client(desc, req);
 }
