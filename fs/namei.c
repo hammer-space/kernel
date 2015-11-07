@@ -494,9 +494,9 @@ static int sb_permission(struct super_block *sb, struct inode *inode, int mask)
  * this, letting us set arbitrary permissions for filesystem access without
  * changing the "normal" UIDs which are used for other things.
  *
- * MAY_WRITE must be set in @mask whenever MAY_APPEND, MAY_CREATE_FILE, or
- * MAY_CREATE_DIR are set.  That way, file systems that don't support these
- * permissions will check for MAY_WRITE instead.
+ * MAY_WRITE must be set in @mask whenever MAY_APPEND, MAY_CREATE_FILE,
+ * MAY_CREATE_DIR, or MAY_DELETE_CHILD are set.  That way, file systems that
+ * don't support these permissions will check for MAY_WRITE instead.
  */
 int inode_permission(struct user_namespace *mnt_userns,
 		     struct inode *inode, int mask)
@@ -2860,14 +2860,20 @@ static int may_delete_or_replace(struct user_namespace *mnt_userns,
 
 	audit_inode_child(dir, victim, AUDIT_TYPE_CHILD_DELETE);
 
-	error = inode_permission(mnt_userns, dir, mask);
+	error = inode_permission(mnt_userns, dir, mask | MAY_WRITE |
+						  MAY_DELETE_CHILD);
+	if (!error && check_sticky(mnt_userns, dir, inode))
+		error = -EPERM;
+	if (error && IS_RICHACL(inode) &&
+	    inode_permission(mnt_userns, inode, MAY_DELETE_SELF) == 0 &&
+	    inode_permission(mnt_userns, dir, mask) == 0)
+		error = 0;
 	if (error)
 		return error;
 	if (IS_APPEND(dir))
 		return -EPERM;
 
-	if (check_sticky(mnt_userns, dir, inode) || IS_APPEND(inode) ||
-	    IS_IMMUTABLE(inode) || IS_SWAPFILE(inode) ||
+	if (IS_APPEND(inode) || IS_IMMUTABLE(inode) || IS_SWAPFILE(inode) ||
 	    HAS_UNMAPPED_ID(mnt_userns, inode))
 		return -EPERM;
 	if (isdir) {
@@ -2887,8 +2893,7 @@ static int may_delete_or_replace(struct user_namespace *mnt_userns,
 static int may_delete(struct user_namespace *mnt_userns, struct inode *dir,
 		      struct dentry *victim, bool isdir)
 {
-	return may_delete_or_replace(mnt_userns, dir, victim, isdir,
-				     MAY_WRITE | MAY_EXEC);
+	return may_delete_or_replace(mnt_userns, dir, victim, isdir, MAY_EXEC);
 }
 
 static int may_replace(struct user_namespace *mnt_userns, struct inode *dir,
