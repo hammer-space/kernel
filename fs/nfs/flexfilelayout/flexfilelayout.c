@@ -228,6 +228,8 @@ static void ff_layout_free_mirror(struct nfs4_ff_layout_mirror *mirror)
 {
 	const struct cred	*cred;
 
+	if (!IS_ERR_OR_NULL(mirror->local_file))
+		fput(mirror->local_file);
 	ff_layout_remove_mirror(mirror);
 	kfree(mirror->fh_versions);
 	cred = rcu_access_pointer(mirror->ro_cred);
