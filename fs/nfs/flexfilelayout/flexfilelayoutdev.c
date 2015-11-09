@@ -307,7 +307,6 @@ static void ff_layout_update_mirror_filp(struct nfs4_ff_layout_mirror *mirror,
 					 struct nfs4_pnfs_ds *ds)
 {
 	struct nfs_fh *fh = &mirror->fh_versions[0];	/* XXX */
-	fmode_t mode = O_RDWR;	/* XXX: check layout type? */
 	struct file *filp;
 	struct cred *cred;
 
@@ -320,7 +319,7 @@ static void ff_layout_update_mirror_filp(struct nfs4_ff_layout_mirror *mirror,
 				nfs_local_disable(ds->ds_clp);
 				return;
 			}
-			filp = nfs_local_open_fh(ds->ds_clp, cred, fh, mode);
+			filp = nfs_local_open_fh(ds->ds_clp, cred, fh, FMODE_READ | FMODE_WRITE);
 			put_cred(cred);
 
 			if (IS_ERR_OR_NULL(filp))
