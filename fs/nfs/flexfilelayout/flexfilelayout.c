@@ -1814,6 +1814,12 @@ ff_layout_read_pagelist(struct nfs_pageio_descriptor *desc,
 	hdr->args.offset = offset;
 	hdr->mds_offset = offset;
 
+	/* Start IO accounting for local read */
+	if (test_bit(NFS_CS_LOCAL_IO, &ds->ds_clp->cl_flags)) {
+		hdr->task.tk_start = ktime_get();
+		ff_layout_read_record_layoutstats_start(&hdr->task, hdr);
+	}
+
 	/* Perform an asynchronous read to ds */
 	nfs_initiate_pgio(desc, ds->ds_clp, ds_clnt, hdr, ds_cred,
 			  ds->ds_clp->rpc_ops,
@@ -1880,6 +1886,12 @@ ff_layout_write_pagelist(struct nfs_pageio_descriptor *desc,
 	 * then we may need to handle dense-like offsets.
 	 */
 	hdr->args.offset = offset;
+
+	/* Start IO accounting for local write */
+	if (test_bit(NFS_CS_LOCAL_IO, &ds->ds_clp->cl_flags)) {
+		hdr->task.tk_start = ktime_get();
+		ff_layout_write_record_layoutstats_start(&hdr->task, hdr);
+	}
 
 	/* Perform an asynchronous write */
 	nfs_initiate_pgio(desc, ds->ds_clp, ds_clnt, hdr, ds_cred,
