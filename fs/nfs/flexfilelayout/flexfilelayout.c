@@ -1243,6 +1243,11 @@ static int ff_layout_read_done_cb(struct rpc_task *task,
 					    hdr->args.offset, hdr->args.count,
 					    hdr->res.op_status, OP_READ,
 					    task->tk_status);
+	if (test_bit(NFS_IOHDR_LOCALIO, &hdr->flags)) {
+		dprintk("%s: local read status %d\n", __func__, task->tk_status);
+		return task->tk_status;
+	}
+
 	err = ff_layout_async_handle_error(task, hdr->args.context->state,
 					   hdr->ds_clp, hdr->lseg,
 					   hdr->pgio_mirror_idx);
@@ -1423,6 +1428,14 @@ static int ff_layout_write_done_cb(struct rpc_task *task,
 					    hdr->args.offset, hdr->args.count,
 					    hdr->res.op_status, OP_WRITE,
 					    task->tk_status);
+	if (test_bit(NFS_IOHDR_LOCALIO, &hdr->flags)) {
+		dprintk("%s: local read status %d\n", __func__, task->tk_status);
+		if (task->tk_status < 0)
+			return task->tk_status;
+		else
+			goto out;
+	}
+
 	err = ff_layout_async_handle_error(task, hdr->args.context->state,
 					   hdr->ds_clp, hdr->lseg,
 					   hdr->pgio_mirror_idx);
@@ -1438,6 +1451,7 @@ static int ff_layout_write_done_cb(struct rpc_task *task,
 		return -EAGAIN;
 	}
 
+out:
 	if (hdr->res.verf->committed == NFS_FILE_SYNC ||
 	    hdr->res.verf->committed == NFS_DATA_SYNC)
 		end_offs = hdr->mds_offset + (loff_t)hdr->res.count;
@@ -1710,6 +1724,7 @@ ff_layout_read_pagelist(struct nfs_pageio_descriptor *desc,
 	u32 idx = hdr->pgio_mirror_idx;
 	int vers;
 	struct nfs_fh *fh;
+	bool localread = false;
 
 	dprintk("--> %s ino %lu pgbase %u req %zu@%llu\n",
 		__func__, hdr->inode->i_ino,
@@ -1748,6 +1763,7 @@ ff_layout_read_pagelist(struct nfs_pageio_descriptor *desc,
 
 	/* Start IO accounting for local read */
 	if (test_bit(NFS_CS_LOCAL_IO, &ds->ds_clp->cl_flags)) {
+		localread = true;
 		hdr->task.tk_start = ktime_get();
 		ff_layout_read_record_layoutstats_start(&hdr->task, hdr);
 	}
@@ -1757,7 +1773,7 @@ ff_layout_read_pagelist(struct nfs_pageio_descriptor *desc,
 			  ds->ds_clp->rpc_ops,
 			  vers == 3 ? &ff_layout_read_call_ops_v3 :
 				      &ff_layout_read_call_ops_v4,
-			  0, RPC_TASK_SOFTCONN);
+			  0, RPC_TASK_SOFTCONN, localread);
 	put_rpccred(ds_cred);
 	return PNFS_ATTEMPTED;
 
@@ -1780,6 +1796,7 @@ ff_layout_write_pagelist(struct nfs_pageio_descriptor *desc,
 	int vers;
 	struct nfs_fh *fh;
 	int idx = hdr->pgio_mirror_idx;
+	bool localwrite = false;
 
 	ds = nfs4_ff_layout_prepare_ds(lseg, idx, true);
 	if (!ds)
@@ -1817,6 +1834,7 @@ ff_layout_write_pagelist(struct nfs_pageio_descriptor *desc,
 
 	/* Start IO accounting for local write */
 	if (test_bit(NFS_CS_LOCAL_IO, &ds->ds_clp->cl_flags)) {
+		localwrite = true;
 		hdr->task.tk_start = ktime_get();
 		ff_layout_write_record_layoutstats_start(&hdr->task, hdr);
 	}
@@ -1826,7 +1844,7 @@ ff_layout_write_pagelist(struct nfs_pageio_descriptor *desc,
 			  ds->ds_clp->rpc_ops,
 			  vers == 3 ? &ff_layout_write_call_ops_v3 :
 				      &ff_layout_write_call_ops_v4,
-			  sync, RPC_TASK_SOFTCONN);
+			  sync, RPC_TASK_SOFTCONN, localwrite);
 	put_rpccred(ds_cred);
 	return PNFS_ATTEMPTED;
 

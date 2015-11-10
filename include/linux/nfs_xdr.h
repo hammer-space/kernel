@@ -1434,6 +1434,7 @@ enum {
 	NFS_IOHDR_EOF,
 	NFS_IOHDR_REDO,
 	NFS_IOHDR_STAT,
+	NFS_IOHDR_LOCALIO,
 };
 
 struct nfs_io_completion;
