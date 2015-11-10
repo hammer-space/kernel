@@ -610,7 +610,8 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 		      struct nfs_client *clp, struct rpc_clnt *rpc_clnt,
 		      struct nfs_pgio_header *hdr, const struct cred *cred,
 		      const struct nfs_rpc_ops *rpc_ops,
-		      const struct rpc_call_ops *call_ops, int how, int flags)
+		      const struct rpc_call_ops *call_ops, int how, int flags,
+		      bool localio)
 {
 	struct nfs_pgio_mirror *mirror = nfs_pgio_current_mirror(desc);
 	struct rpc_task *task;
@@ -639,20 +640,18 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 		hdr->args.count,
 		(unsigned long long)hdr->args.offset);
 
-	if (test_bit(NFS_CS_LOCAL_IO, &clp->cl_flags)) {
+	if (localio) {
+		/* mark hdr */
+		set_bit(NFS_IOHDR_LOCALIO, &hdr->flags);
 		ret = nfs_local_doio(clp, cred, hdr);
 
-		if (ret >= 0) {
-			ret = 0;
-			call_ops->rpc_call_done(&hdr->task, hdr);
-			call_ops->rpc_release(hdr);
-		} else {
+		if (ret < 0 && !test_and_set_bit(NFS_IOHDR_REDO, &hdr->flags)) {
 			/* local IO fails, resend all pages */
 			list_splice_init(&hdr->pages, &mirror->pg_list);
 			mirror->pg_recoalesce = 1;
-			call_ops->rpc_call_done(&hdr->task, hdr);
-			call_ops->rpc_release(hdr);
 		}
+		call_ops->rpc_call_done(&hdr->task, hdr);
+		call_ops->rpc_release(hdr);
 	} else {
 		task = rpc_run_task(&task_setup_data);
 		if (IS_ERR(task)) {
@@ -667,7 +666,7 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 		rpc_put_task(task);
 	}
 out:
-	return ret;
+	return ret < 0 ? ret : 0;
 }
 EXPORT_SYMBOL_GPL(nfs_initiate_pgio);
 
@@ -835,6 +834,7 @@ EXPORT_SYMBOL_GPL(nfs_generic_pgio);
 static int nfs_generic_pg_pgios(struct nfs_pageio_descriptor *desc)
 {
 	struct nfs_pgio_header *hdr;
+	bool localio;
 	int ret;
 
 	hdr = nfs_pgio_header_alloc(desc->pg_rw_ops);
@@ -844,7 +844,9 @@ static int nfs_generic_pg_pgios(struct nfs_pageio_descriptor *desc)
 	}
 	nfs_pgheader_init(desc, hdr, nfs_pgio_header_free);
 	ret = nfs_generic_pgio(desc, hdr);
-	if (ret == 0)
+	if (ret == 0) {
+		localio = test_bit(NFS_CS_LOCAL_IO,
+				&NFS_SERVER(hdr->inode)->nfs_client->cl_flags);
 		ret = nfs_initiate_pgio(desc,
 					NFS_SERVER(hdr->inode)->nfs_client,
 					NFS_CLIENT(hdr->inode),
@@ -852,7 +854,8 @@ static int nfs_generic_pg_pgios(struct nfs_pageio_descriptor *desc)
 					hdr->cred,
 					NFS_PROTO(hdr->inode),
 					desc->pg_rpc_callops,
-					desc->pg_ioflags, 0);
+					desc->pg_ioflags, 0, localio);
+	}
 	return ret;
 }
 

@@ -1499,6 +1499,7 @@ enum {
 	NFS_IOHDR_STAT,
 	NFS_IOHDR_RESEND_PNFS,
 	NFS_IOHDR_RESEND_MDS,
+	NFS_IOHDR_LOCALIO,
 };
 
 struct nfs_io_completion;
