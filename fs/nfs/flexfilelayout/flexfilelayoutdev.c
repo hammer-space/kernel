@@ -11,6 +11,7 @@
 #include <linux/vmalloc.h>
 #include <linux/module.h>
 #include <linux/sunrpc/addr.h>
+#include <linux/file.h>
 
 #include "../internal.h"
 #include "../nfs4session.h"
@@ -324,11 +325,10 @@ static void ff_layout_update_mirror_filp(struct nfs4_ff_layout_mirror *mirror,
 
 			if (IS_ERR_OR_NULL(filp))
 				nfs_local_disable(ds->ds_clp);
-			else
-				mirror->local_file = filp;
+			else if (cmpxchg(&mirror->local_file, NULL, filp))
+				fput(filp);
 		}
-	} else
-		mirror->local_file = NULL;
+	}
 }
 
 struct nfs_fh *
