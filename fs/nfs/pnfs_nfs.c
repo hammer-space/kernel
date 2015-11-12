@@ -340,49 +340,6 @@ print_ds(struct nfs4_pnfs_ds *ds)
 		ds->ds_clp ? ds->ds_clp->cl_exchange_flags : 0);
 }
 
-static bool
-same_sockaddr(struct sockaddr *addr1, struct sockaddr *addr2)
-{
-	struct sockaddr_in *a, *b;
-	struct sockaddr_in6 *a6, *b6;
-
-	if (addr1->sa_family != addr2->sa_family)
-		return false;
-
-	switch (addr1->sa_family) {
-	case AF_INET:
-		a = (struct sockaddr_in *)addr1;
-		b = (struct sockaddr_in *)addr2;
-
-		if (a->sin_addr.s_addr == b->sin_addr.s_addr &&
-		    a->sin_port == b->sin_port)
-			return true;
-		break;
-
-	case AF_INET6:
-		a6 = (struct sockaddr_in6 *)addr1;
-		b6 = (struct sockaddr_in6 *)addr2;
-
-		/* LINKLOCAL addresses must have matching scope_id */
-		if (ipv6_addr_src_scope(&a6->sin6_addr) ==
-		    IPV6_ADDR_SCOPE_LINKLOCAL &&
-		    a6->sin6_scope_id != b6->sin6_scope_id)
-			return false;
-
-		if (ipv6_addr_equal(&a6->sin6_addr, &b6->sin6_addr) &&
-		    a6->sin6_port == b6->sin6_port)
-			return true;
-		break;
-
-	default:
-		dprintk("%s: unhandled address family: %u\n",
-			__func__, addr1->sa_family);
-		return false;
-	}
-
-	return false;
-}
-
 /*
  * Checks if 'dsaddrs1' contains a subset of 'dsaddrs2'. If it does,
  * declare a match.
@@ -400,7 +357,7 @@ _same_data_server_addrs_locked(const struct list_head *dsaddrs1,
 		match = false;
 		list_for_each_entry(da2, dsaddrs2, da_node) {
 			sa2 = (struct sockaddr *)&da2->da_addr;
-			match = same_sockaddr(sa1, sa2);
+			match = rpc_cmp_addr_port(sa1, sa2);
 			if (match)
 				break;
 		}
