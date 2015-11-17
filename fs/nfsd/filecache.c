@@ -530,11 +530,6 @@ nfsd_file_cache_shutdown(void)
 	nfsd_file_hashtbl = NULL;
 }
 
-/*
- * Search nfsd_file_hashtbl[] for file. We hash on the filehandle and also on
- * the NFSD_MAY_READ/WRITE flags. If the file is open for r/w, then it's usable
- * for either.
- */
 static struct nfsd_file *
 nfsd_file_find_locked(struct inode *inode, unsigned int may_flags,
 			unsigned int hashval)
