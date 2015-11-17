@@ -97,7 +97,8 @@ DEFINE_STATEID_EVENT(layout_recall_release);
 		{ 1 << NFSD_FILE_HASHED,	"HASHED" },		\
 		{ 1 << NFSD_FILE_PENDING,	"PENDING" },		\
 		{ 1 << NFSD_FILE_BREAK_READ,	"BREAK_READ" },		\
-		{ 1 << NFSD_FILE_BREAK_WRITE,	"BREAK_WRITE" })
+		{ 1 << NFSD_FILE_BREAK_WRITE,	"BREAK_WRITE" },	\
+		{ 1 << NFSD_FILE_REFERENCED,	"REFERENCED"})
 
 /* FIXME: This should probably be fleshed out in the future. */
 #define show_nf_may(val)						\
