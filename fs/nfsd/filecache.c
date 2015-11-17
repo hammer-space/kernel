@@ -605,8 +605,8 @@ retry:
 	if (!new) {
 		new = nfsd_file_alloc(inode, may_flags, hashval);
 		if (!new) {
-			trace_nfsd_file_acquire(hashval, inode, may_flags, NULL,
-						nfserr_jukebox);
+			trace_nfsd_file_acquire(rqstp, hashval, inode, may_flags,
+						NULL, nfserr_jukebox);
 			return nfserr_jukebox;
 		}
 	}
@@ -622,9 +622,8 @@ retry:
 		hlist_add_head_rcu(&new->nf_node,
 				&nfsd_file_hashtbl[hashval].nfb_head);
 		++nfsd_file_hashtbl[hashval].nfb_count;
-		nfsd_file_hashtbl[hashval].nfb_maxcount =
-			max(nfsd_file_hashtbl[hashval].nfb_maxcount,
-			    nfsd_file_hashtbl[hashval].nfb_count);
+		nfsd_file_hashtbl[hashval].nfb_maxcount = max(nfsd_file_hashtbl[hashval].nfb_maxcount,
+				nfsd_file_hashtbl[hashval].nfb_count);
 		spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
 		nf = new;
 		new = NULL;
@@ -692,7 +691,7 @@ out:
 	if (new)
 		nfsd_file_put(new);
 
-	trace_nfsd_file_acquire(hashval, inode, may_flags, nf, status);
+	trace_nfsd_file_acquire(rqstp, hashval, inode, may_flags, nf, status);
 	return status;
 open_file:
 	if (!nf->nf_mark) {
@@ -702,8 +701,8 @@ open_file:
 	}
 	/* FIXME: should we abort opening if the link count goes to 0? */
 	if (status == nfs_ok)
-		status = nfsd_open_verified(rqstp, fhp, S_IFREG,
-						may_flags, &nf->nf_file);
+		status = nfsd_open_verified(rqstp, fhp, S_IFREG, may_flags,
+						&nf->nf_file);
 	clear_bit_unlock(NFSD_FILE_PENDING, &nf->nf_flags);
 	smp_mb__after_atomic();
 	wake_up_bit(&nf->nf_flags, NFSD_FILE_PENDING);

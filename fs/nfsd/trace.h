@@ -147,13 +147,14 @@ DEFINE_NFSD_FILE_EVENT(nfsd_file_put);
 DEFINE_NFSD_FILE_EVENT(nfsd_file_unhash_and_release_locked);
 
 TRACE_EVENT(nfsd_file_acquire,
-	TP_PROTO(unsigned int hash, struct inode *inode,
-		 unsigned int may_flags, struct nfsd_file *nf,
-		 __be32 status),
+	TP_PROTO(struct svc_rqst *rqstp, unsigned int hash,
+		 struct inode *inode, unsigned int may_flags,
+		 struct nfsd_file *nf, __be32 status),
 
-	TP_ARGS(hash, inode, may_flags, nf, status),
+	TP_ARGS(rqstp, hash, inode, may_flags, nf, status),
 
 	TP_STRUCT__entry(
+		__field(__be32, xid)
 		__field(unsigned int, hash)
 		__field(void *, inode)
 		__field(unsigned int, may_flags)
@@ -165,6 +166,7 @@ TRACE_EVENT(nfsd_file_acquire,
 	),
 
 	TP_fast_assign(
+		__entry->xid = rqstp->rq_xid;
 		__entry->hash = hash;
 		__entry->inode = inode;
 		__entry->may_flags = may_flags;
@@ -175,8 +177,8 @@ TRACE_EVENT(nfsd_file_acquire,
 		__entry->status = status;
 	),
 
-	TP_printk("hash=0x%x inode=0x%p may_flags=%s ref=%d nf_flags=%s nf_may=%s nf_file=0x%p status=%u",
-			__entry->hash, __entry->inode,
+	TP_printk("xid=0x%x hash=0x%x inode=0x%p may_flags=%s ref=%d nf_flags=%s nf_may=%s nf_file=0x%p status=%u",
+			be32_to_cpu(__entry->xid), __entry->hash, __entry->inode,
 			show_nf_may(__entry->may_flags), __entry->nf_ref,
 			show_nf_flags(__entry->nf_flags),
 			show_nf_may(__entry->nf_may), __entry->nf_file,
