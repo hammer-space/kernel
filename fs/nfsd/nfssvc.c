@@ -340,8 +340,19 @@ static void nfsd_shutdown_generic(void)
 	nfsd_file_cache_shutdown();
 }
 
+/*
+ * Allow admin to disable lockd. This would typically be used to allow (e.g.)
+ * a userspace NLM server of some sort to be used.
+ */
+static bool nfsd_disable_lockd = false;
+module_param(nfsd_disable_lockd, bool, 0644);
+MODULE_PARM_DESC(nfsd_disable_lockd, "Allow lockd to be manually disabled.");
+
 static bool nfsd_needs_lockd(struct nfsd_net *nn)
 {
+	if (nfsd_disable_lockd)
+		return false;
+
 	return nfsd_vers(nn, 2, NFSD_TEST) || nfsd_vers(nn, 3, NFSD_TEST);
 }
 
