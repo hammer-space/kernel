@@ -1161,7 +1161,7 @@ static int nfs_server_list_show(struct seq_file *m, void *v)
 	if (clp->cl_cons_state != NFS_CS_READY)
 		return 0;
 
-	snprintf(more, 1024, " %s",
+	snprintf(more, sizeof(more), " %s",
 		test_bit(NFS_CS_LOCAL_IO, &clp->cl_flags) ? "local_io " : "");
 
 	rcu_read_lock();
