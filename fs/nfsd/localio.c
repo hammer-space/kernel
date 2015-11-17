@@ -92,7 +92,10 @@ out_err:
  * This is useful when the nfs client has the local server mounted - it can
  * avoid all the NFS overhead with reads, writes and commits.
  *
- * on successful return, caller is responsibe for calling path_put
+ * on successful return, caller is responsible for calling path_put. Also
+ * note that this is called from nfs.ko via find_symbol() to avoid an explicit
+ * dependency on knfsd. So, there is no forward declaration in a header file
+ * for it.
  */
 int nfsd_lookup_local_fh(struct rpc_clnt *rpc_clnt,
 			 const struct cred *cred,
@@ -145,4 +148,4 @@ out:
 EXPORT_SYMBOL_GPL(nfsd_lookup_local_fh);
 
 /* Compile time type checking, not used by anything */
-nfs_to_nfsd_lookup_t nfsd_lookup_local_fh_typecheck = nfsd_lookup_local_fh;
+static nfs_to_nfsd_lookup_t __maybe_unused nfsd_lookup_local_fh_typecheck = nfsd_lookup_local_fh;
