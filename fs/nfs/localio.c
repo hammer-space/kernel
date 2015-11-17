@@ -216,12 +216,19 @@ nfs_local_open_fh(struct nfs_client *clp, const struct cred *cred,
 	int flags = O_LARGEFILE;
 	int status;
 
-	if (mode & FMODE_READ && mode & FMODE_WRITE)
+	switch (mode & (FMODE_READ | FMODE_WRITE)) {
+	case FMODE_READ | FMODE_WRITE:
 		flags |= O_RDWR;
-	else if (mode & FMODE_READ)
+		break;
+	case FMODE_READ:
 		flags |= O_RDONLY;
-	else if (mode & FMODE_WRITE)
+		break;
+	case FMODE_WRITE:
 		flags |= O_WRONLY;
+		break;
+	default:
+		return ERR_PTR(-EINVAL);
+	}
 
 	status = ctx->lookup_f(clp->cl_rpcclient, cred, fh, mode, &path);
 	if (status < 0)
