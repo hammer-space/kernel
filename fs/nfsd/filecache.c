@@ -131,7 +131,7 @@ nfsd_file_alloc(struct inode *inode, unsigned int may, unsigned int hashval)
 		nf->nf_inode = inode;
 		nf->nf_hashval = hashval;
 		atomic_set(&nf->nf_ref, 1);
-		nf->nf_may = NFSD_FILE_MAY_MASK & may;
+		nf->nf_may = may & NFSD_FILE_MAY_MASK;
 		if (may & NFSD_MAY_NOT_BREAK_LEASE) {
 			if (may & NFSD_MAY_WRITE)
 				__set_bit(NFSD_FILE_BREAK_WRITE, &nf->nf_flags);
