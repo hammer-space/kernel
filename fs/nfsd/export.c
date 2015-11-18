@@ -392,12 +392,18 @@ static int check_export(struct inode *inode, int *flags, unsigned char *uuid)
 		return -EINVAL;
 	}
 
+#if 0
+	/*
+	 * FIXME: this check is currently broken until exportfs passes in the
+	 * right options when vetting exports. For now, we comment it out...
+	 */
 	if (inode->i_sb->s_export_op->flags & EXPORT_OP_NOSUBTREECHK &&
 	    !(*flags & NFSEXP_NOSUBTREECHECK)) {
 		dprintk("%s: %s does not support subtree checking!\n",
 			__func__, inode->i_sb->s_type->name);
 		return -EINVAL;
 	}
+#endif
 	return 0;
 
 }
