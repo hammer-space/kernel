@@ -1954,6 +1954,7 @@ static int ff_layout_initiate_commit(struct nfs_commit_data *data, int how)
 	u32 idx;
 	int vers, ret;
 	struct nfs_fh *fh;
+	bool localcommit = false;
 
 	if (!lseg || !(pnfs_is_valid_lseg(lseg) ||
 	    test_bit(NFS_LSEG_LAYOUTRETURN, &lseg->pls_flags)))
@@ -1987,10 +1988,17 @@ static int ff_layout_initiate_commit(struct nfs_commit_data *data, int how)
 	if (fh)
 		data->args.fh = fh;
 
+	/* Start IO accounting for local commit */
+	if (test_bit(NFS_CS_LOCAL_IO, &ds->ds_clp->cl_flags)) {
+		localcommit = true;
+		data->task.tk_start = ktime_get();
+		ff_layout_commit_record_layoutstats_start(&data->task, data);
+	}
+
 	ret = nfs_initiate_commit(ds->ds_clp, ds_clnt, data, ds->ds_clp->rpc_ops,
 				   vers == 3 ? &ff_layout_commit_call_ops_v3 :
 					       &ff_layout_commit_call_ops_v4,
-				   how, RPC_TASK_SOFTCONN, false);
+				   how, RPC_TASK_SOFTCONN, localcommit);
 	put_cred(ds_cred);
 	return ret;
 out_err:
