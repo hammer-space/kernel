@@ -1074,7 +1074,7 @@ static int filelayout_initiate_commit(struct nfs_commit_data *data, int how)
 	return nfs_initiate_commit(ds->ds_clp, ds_clnt, data,
 				   NFS_PROTO(data->inode),
 				   &filelayout_commit_call_ops, how,
-				   RPC_TASK_SOFTCONN);
+				   RPC_TASK_SOFTCONN, false);
 out_err:
 	pnfs_generic_prepare_to_resend_writes(data);
 	pnfs_generic_commit_release(data);
