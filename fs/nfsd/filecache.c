@@ -110,7 +110,7 @@ nfsd_file_mark_find_or_create(struct nfsd_file *nf, struct inode *inode)
 			nfm = new;
 			new = NULL;
 		}
-	} while (unlikely(err == EEXIST));
+	} while (unlikely(err == -EEXIST));
 
 	if (new)
 		kmem_cache_free(nfsd_file_mark_slab, new);
