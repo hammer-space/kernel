@@ -269,6 +269,10 @@ static bool nfsd_disable_lockd = false;
 module_param(nfsd_disable_lockd, bool, 0644);
 MODULE_PARM_DESC(nfsd_disable_lockd, "Allow lockd to be manually disabled.");
 
+static int nfsd_max_rpcs_per_clnt = 0;
+module_param(nfsd_max_rpcs_per_clnt, int, 0644);
+MODULE_PARM_DESC(nfsd_max_rpcs_per_xprt, "Maximum concurrent RPCs per client");
+
 static bool nfsd_needs_lockd(void)
 {
 	if (nfsd_disable_lockd)
@@ -720,6 +724,7 @@ nfsd(void *vrqstp)
 	for (;;) {
 		/* Update sv_maxconn if it has changed */
 		rqstp->rq_server->sv_maxconn = nn->max_connections;
+		rqstp->rq_server->sv_max_inflight = nfsd_max_rpcs_per_clnt;
 
 		/*
 		 * Find a socket with data available and call its
