@@ -374,6 +374,31 @@ static bool svc_xprt_has_something_to_do(struct svc_xprt *xprt)
 	return false;
 }
 
+static void
+svc_queue_xprt_to_pool(struct svc_xprt *xprt, struct svc_pool *pool)
+{
+	spin_lock_bh(&pool->sp_lock);
+	list_add_tail(&xprt->xpt_ready, &pool->sp_sockets);
+	pool->sp_stats.sockets_queued++;
+	spin_unlock_bh(&pool->sp_lock);
+}
+
+static bool
+svc_xprt_max_inflight(struct svc_xprt *xprt)
+{
+	struct svc_serv *server = xprt->xpt_server;
+
+	/* Limits only apply to active, non-listener sockets */
+	if (test_bit(XPT_CLOSE, &xprt->xpt_flags) ||
+	    test_bit(XPT_LISTENER, &xprt->xpt_flags))
+		return false;
+
+	if (server->sv_max_inflight &&
+	    atomic_read(&xprt->xpt_inflight) >= server->sv_max_inflight)
+		return true;
+	return false;
+}
+
 void svc_xprt_do_enqueue(struct svc_xprt *xprt)
 {
 	struct svc_pool *pool;
@@ -399,11 +424,8 @@ void svc_xprt_do_enqueue(struct svc_xprt *xprt)
 
 	atomic_long_inc(&pool->sp_stats.packets);
 
+	svc_queue_xprt_to_pool(xprt, pool);
 	dprintk("svc: transport %p put into queue\n", xprt);
-	spin_lock_bh(&pool->sp_lock);
-	list_add_tail(&xprt->xpt_ready, &pool->sp_sockets);
-	pool->sp_stats.sockets_queued++;
-	spin_unlock_bh(&pool->sp_lock);
 
 	/* find a thread for this xprt */
 	rcu_read_lock();
@@ -442,25 +464,29 @@ EXPORT_SYMBOL_GPL(svc_xprt_enqueue);
  */
 static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool)
 {
-	struct svc_xprt	*xprt = NULL;
+	struct svc_xprt	*xprt, *found = NULL;
 
 	if (list_empty(&pool->sp_sockets))
 		goto out;
 
 	spin_lock_bh(&pool->sp_lock);
 	if (likely(!list_empty(&pool->sp_sockets))) {
-		xprt = list_first_entry(&pool->sp_sockets,
-					struct svc_xprt, xpt_ready);
-		list_del_init(&xprt->xpt_ready);
-		svc_xprt_get(xprt);
+		list_for_each_entry(xprt, &pool->sp_sockets, xpt_ready) {
+			if (!svc_xprt_max_inflight(xprt)) {
+				list_del_init(&xprt->xpt_ready);
+				svc_xprt_get(xprt);
+				found = xprt;
 
-		dprintk("svc: transport %p dequeued, inuse=%d\n",
-			xprt, kref_read(&xprt->xpt_ref));
+				dprintk("svc: transport %p dequeued, inuse=%d\n",
+					xprt, atomic_read(&xprt->xpt_ref.refcount));
+				break;
+			}
+		}
 	}
 	spin_unlock_bh(&pool->sp_lock);
 out:
-	trace_svc_xprt_dequeue(xprt);
-	return xprt;
+	trace_svc_xprt_dequeue(found);
+	return found;
 }
 
 /**
