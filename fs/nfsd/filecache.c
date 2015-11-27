@@ -541,8 +541,8 @@ nfsd_file_find_locked(struct inode *inode, unsigned int may_flags,
 				 nf_node) {
 		if ((need & nf->nf_may) != need)
 			continue;
-		if (nf->nf_inode == inode)
-			return nfsd_file_get(nf);
+		if (nf->nf_inode == inode && nfsd_file_get(nf) != NULL)
+			return nf;
 	}
 	return NULL;
 }
