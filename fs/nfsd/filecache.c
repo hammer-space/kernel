@@ -24,6 +24,7 @@
 /* FIXME: dynamically size this for the machine somehow? */
 #define NFSD_FILE_HASH_BITS                   12
 #define NFSD_FILE_HASH_SIZE                  (1 << NFSD_FILE_HASH_BITS)
+#define NFSD_LAUNDRETTE_DELAY		     (60 * HZ)
 
 /* We only care about NFSD_MAY_READ/WRITE for this cache */
 #define NFSD_FILE_MAY_MASK	(NFSD_MAY_READ|NFSD_MAY_WRITE)
@@ -42,6 +43,8 @@ static struct kmem_cache		*nfsd_file_mark_slab;
 static struct nfsd_fcache_bucket	*nfsd_file_hashtbl;
 static struct list_lru			nfsd_file_lru;
 static struct fsnotify_group		*nfsd_file_fsnotify_group;
+static atomic_long_t			nfsd_filecache_count;
+static struct delayed_work		nfsd_filecache_laundrette;
 
 static void
 nfsd_file_slab_free(struct rcu_head *rcu)
@@ -180,6 +183,7 @@ nfsd_file_unhash(struct nfsd_file *nf)
 		clear_bit(NFSD_FILE_HASHED, &nf->nf_flags);
 		hlist_del_rcu(&nf->nf_node);
 		list_lru_del(&nfsd_file_lru, &nf->nf_lru);
+		atomic_long_dec(&nfsd_filecache_count);
 		return true;
 	}
 	return false;
@@ -354,6 +358,23 @@ nfsd_file_close_inode(struct inode *inode)
 	nfsd_file_dispose_list(&dispose);
 }
 
+/**
+ * nfsd_file_delayed_close - close unused nfsd_files
+ * @work: dummy
+ *
+ * Walk the LRU list and close any entries that have not been used since
+ * the last scan.
+ */
+static void
+nfsd_file_delayed_close(struct work_struct *work)
+{
+	list_lru_walk(&nfsd_file_lru, nfsd_file_lru_cb, NULL, LONG_MAX);
+
+	if (atomic_long_read(&nfsd_filecache_count) > 0)
+		schedule_delayed_work(&nfsd_filecache_laundrette,
+				NFSD_LAUNDRETTE_DELAY);
+}
+
 static int
 nfsd_file_lease_notifier_call(struct notifier_block *nb, unsigned long arg,
 			    void *data)
@@ -468,6 +489,8 @@ nfsd_file_cache_init(void)
 		INIT_HLIST_HEAD(&nfsd_file_hashtbl[i].nfb_head);
 		spin_lock_init(&nfsd_file_hashtbl[i].nfb_lock);
 	}
+
+	INIT_DELAYED_WORK(&nfsd_filecache_laundrette, nfsd_file_delayed_close);
 out:
 	return ret;
 out_notifier:
@@ -518,6 +541,7 @@ nfsd_file_cache_shutdown(void)
 				&nfsd_file_lease_notifier);
 	unregister_shrinker(&nfsd_file_shrinker);
 	nfsd_file_cache_purge();
+	cancel_delayed_work_sync(&nfsd_filecache_laundrette);
 	list_lru_destroy(&nfsd_file_lru);
 	rcu_barrier();
 	fsnotify_put_group(nfsd_file_fsnotify_group);
@@ -625,6 +649,9 @@ retry:
 		nfsd_file_hashtbl[hashval].nfb_maxcount = max(nfsd_file_hashtbl[hashval].nfb_maxcount,
 				nfsd_file_hashtbl[hashval].nfb_count);
 		spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
+		atomic_long_inc(&nfsd_filecache_count);
+		schedule_delayed_work(&nfsd_filecache_laundrette,
+				NFSD_LAUNDRETTE_DELAY);
 		nf = new;
 		new = NULL;
 		goto open_file;
