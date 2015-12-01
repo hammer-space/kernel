@@ -20,6 +20,7 @@
 #include <linux/module.h>
 #include <linux/kthread.h>
 #include <linux/slab.h>
+#include <linux/freezer.h>
 
 #include <linux/sunrpc/types.h>
 #include <linux/sunrpc/xdr.h>
@@ -492,6 +493,83 @@ svc_create(struct svc_program *prog, unsigned int bufsize,
 }
 EXPORT_SYMBOL_GPL(svc_create);
 
+static int
+svc_pool_manager(void *data)
+{
+	struct svc_serv *serv = data;
+	int i;
+
+	/*
+	 * thread is spawned with all signals set to SIG_IGN, re-enable
+	 * the ones that will bring down the thread
+	 */
+	allow_signal(SIGKILL);
+	allow_signal(SIGHUP);
+	allow_signal(SIGINT);
+	allow_signal(SIGQUIT);
+
+	set_freezable();
+
+	dprintk("svc: starting pool manager for %s\n", serv->sv_name);
+
+	while (true) {
+		if (signalled() || kthread_should_stop()) {
+			dprintk("svc: stopping pool manager for %s\n", serv->sv_name);
+			goto out;
+		}
+		try_to_freeze();
+
+		schedule_timeout_interruptible(60*60*HZ);
+
+		if (signalled() || kthread_should_stop()) {
+			dprintk("svc: stopping pool manager for %s\n", serv->sv_name);
+			goto out;
+		}
+		try_to_freeze();
+
+		if (!test_and_clear_bit(RPCSVC_FL_POOLMGR_RUNNING,
+					&serv->sv_flags))
+			continue;
+		else
+			set_current_state(TASK_RUNNING);
+
+		for (i = 0; i < serv->sv_nrpools; i++) {
+			struct svc_pool *pool = &serv->sv_pools[i];
+			int cpu = svc_pool_map_get_node(i);
+			struct task_struct *task;
+			struct svc_rqst *rqstp;
+
+			if (!test_and_clear_bit(SP_THREAD_SPAWN, &pool->sp_flags))
+				continue;
+
+			rqstp = svc_prepare_thread(serv, pool, cpu);
+			if (!rqstp) {
+				dprintk("svc: failed to prepare new thread\n");
+				break;
+			}
+			__module_get(serv->sv_ops->svo_module);
+			task = kthread_create_on_node(serv->sv_ops->svo_run_once, rqstp,
+						      cpu, "%s", serv->sv_name);
+			if (IS_ERR(task)) {
+				module_put(serv->sv_ops->svo_module);
+				svc_exit_thread(rqstp);
+				dprintk("svc: failed to spawn new thread\n");
+				break;
+			}
+
+			rqstp->rq_task = task;
+			if (serv->sv_nrpools > 1)
+				svc_pool_map_set_cpumask(task, pool->sp_id);
+
+			svc_sock_update_bufs(serv);
+			wake_up_process(task);
+		}
+	}
+
+out:
+	return 0;
+}
+
 struct svc_serv *
 svc_create_pooled(struct svc_program *prog, unsigned int bufsize,
 		  const struct svc_serv_ops *ops)
@@ -502,6 +580,16 @@ svc_create_pooled(struct svc_program *prog, unsigned int bufsize,
 	serv = __svc_create(prog, bufsize, npools, ops);
 	if (!serv)
 		goto out_err;
+
+	if (ops->svo_run_once) {
+		serv->sv_pool_mgr = kthread_run(svc_pool_manager,
+					serv, "%s-mgr", serv->sv_name);
+		if (IS_ERR(serv->sv_pool_mgr)) {
+			serv->sv_pool_mgr = NULL;
+			svc_destroy(serv);
+			goto out_err;
+		}
+	}
 	return serv;
 out_err:
 	svc_pool_map_put();
@@ -511,6 +599,9 @@ EXPORT_SYMBOL_GPL(svc_create_pooled);
 
 void svc_shutdown_net(struct svc_serv *serv, struct net *net)
 {
+	if (serv->sv_pool_mgr)
+		send_sig(SIGINT, serv->sv_pool_mgr, 1);
+
 	svc_close_net(serv, net);
 
 	if (serv->sv_ops->svo_shutdown)

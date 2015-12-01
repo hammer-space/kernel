@@ -48,6 +48,8 @@ struct svc_pool {
 #define	SP_TASK_PENDING		(0)		/* still work to do even if no
 						 * xprt is queued. */
 #define SP_CONGESTED		(1)
+#define SP_THREAD_SPAWN		(2)		/* ask manager thread to span new
+						 * service thread */
 	unsigned long		sp_flags;
 } ____cacheline_aligned_in_smp;
 
@@ -59,6 +61,11 @@ struct svc_serv_ops {
 
 	/* function for service threads to run */
 	int		(*svo_function)(void *);
+
+	/* service function that does the same as svo_function yet only runs
+	 * for a while.  Use by pool manager to dynamically increase # of
+	 * threads in a pool */
+	int		(*svo_run_once)(void *);
 
 	/* queue up a transport for servicing */
 	void		(*svo_enqueue_xprt)(struct svc_xprt *);
@@ -88,6 +95,8 @@ struct svc_serv {
 	unsigned int		sv_maxconn;	/* max connections allowed or
 						 * '0' causing max to be based
 						 * on number of threads. */
+#define RPCSVC_FL_POOLMGR_RUNNING	(0)	/* svc pool manager is running */
+	unsigned long		sv_flags;	/* service specific flags */
 
 	unsigned int		sv_max_payload;	/* datagram payload size */
 	unsigned int		sv_max_mesg;	/* max_payload + 1 page for overheads */
@@ -102,6 +111,7 @@ struct svc_serv {
 
 	unsigned int		sv_nrpools;	/* number of thread pools */
 	struct svc_pool *	sv_pools;	/* array of thread pools */
+	struct task_struct	*sv_pool_mgr;	/* pool manager thread */
 	const struct svc_serv_ops *sv_ops;	/* server operations */
 #if defined(CONFIG_SUNRPC_BACKCHANNEL)
 	struct list_head	sv_cb_list;	/* queue for callback requests
