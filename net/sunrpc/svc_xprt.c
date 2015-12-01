@@ -417,6 +417,7 @@ void svc_xprt_do_enqueue(struct svc_xprt *xprt)
 {
 	struct svc_pool *pool;
 	struct svc_rqst	*rqstp = NULL;
+	struct svc_serv *serv = xprt->xpt_server;
 	int cpu;
 
 	if (!svc_xprt_ready(xprt))
@@ -431,23 +432,40 @@ void svc_xprt_do_enqueue(struct svc_xprt *xprt)
 		return;
 
 	cpu = get_cpu();
-	pool = svc_pool_for_cpu(xprt->xpt_server, cpu);
+	pool = svc_pool_for_cpu(serv, cpu);
 
 	atomic_long_inc(&pool->sp_stats.packets);
-
-	svc_queue_xprt_to_pool(xprt, pool);
 
 	/* find a thread for this xprt */
 	rcu_read_lock();
 	list_for_each_entry_rcu(rqstp, &pool->sp_all_threads, rq_all) {
 		if (test_and_set_bit(RQ_BUSY, &rqstp->rq_flags))
 			continue;
+		svc_queue_xprt_to_pool(xprt, pool);
 		atomic_long_inc(&pool->sp_stats.threads_woken);
 		rqstp->rq_qtime = ktime_get();
 		wake_up_process(rqstp->rq_task);
 		goto out_unlock;
 	}
 	set_bit(SP_CONGESTED, &pool->sp_flags);
+
+	/* no more active threads to use. Mark and wake up manager thread.
+	 * When there are no threads in pool, it is startup case that we should
+	 * just queue the RPC.
+	 */
+	if (serv->sv_pool_mgr && !list_empty(&pool->sp_all_threads)) {
+		dprintk("%s: try to wake up pool manager %d\n", __func__, serv->sv_nrthreads);
+		svc_queue_xprt_to_pool(xprt, pool);
+		set_bit(SP_THREAD_SPAWN, &pool->sp_flags);
+		atomic_long_inc(&pool->sp_stats.threads_woken);
+		smp_mb__before_atomic();
+		set_bit(RPCSVC_FL_POOLMGR_RUNNING, &serv->sv_flags);
+		smp_mb__after_atomic();
+		wake_up_process(serv->sv_pool_mgr);
+		rqstp = NULL;
+		goto out_unlock;
+	}
+	svc_queue_xprt_to_pool(xprt, pool);
 	rqstp = NULL;
 out_unlock:
 	rcu_read_unlock();
