@@ -32,7 +32,7 @@
 #define NFSDDBG_FACILITY	NFSDDBG_SVC
 
 extern struct svc_program	nfsd_program;
-static int			nfsd(void *vrqstp);
+static int			nfsd(void *vrqstp, bool);
 
 /*
  * nfsd_mutex protects nn->nfsd_serv -- both the pointer itself and the members
@@ -494,9 +494,22 @@ static int nfsd_get_default_max_blksize(void)
 	return ret;
 }
 
+static int
+nfsd_svc_func(void *vrqstp)
+{
+	return nfsd(vrqstp, false);
+}
+
+static int
+nfsd_run_once(void *vrqstp)
+{
+	return nfsd(vrqstp, true);
+}
+
 static const struct svc_serv_ops nfsd_thread_sv_ops = {
 	.svo_shutdown		= nfsd_last_thread,
-	.svo_function		= nfsd,
+	.svo_function		= nfsd_svc_func,
+	.svo_run_once		= nfsd_run_once,
 	.svo_enqueue_xprt	= svc_xprt_do_enqueue,
 	.svo_setup		= svc_set_num_threads,
 	.svo_module		= THIS_MODULE,
@@ -683,12 +696,13 @@ out:
  * This is the NFS server kernel thread
  */
 static int
-nfsd(void *vrqstp)
+nfsd(void *vrqstp, bool run_once)
 {
 	struct svc_rqst *rqstp = (struct svc_rqst *) vrqstp;
 	struct svc_xprt *perm_sock = list_entry(rqstp->rq_server->sv_permsocks.next, typeof(struct svc_xprt), xpt_list);
 	struct net *net = perm_sock->xpt_net;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	long timeout;
 	int err;
 
 	/* Lock module and set up kernel thread */
@@ -725,13 +739,16 @@ nfsd(void *vrqstp)
 		/* Update sv_maxconn if it has changed */
 		rqstp->rq_server->sv_maxconn = nn->max_connections;
 		rqstp->rq_server->sv_max_inflight = nfsd_max_rpcs_per_clnt;
+		timeout = run_once ? 10*HZ : 60*60*HZ;
 
 		/*
 		 * Find a socket with data available and call its
 		 * recvfrom routine.
 		 */
-		while ((err = svc_recv(rqstp, 60*60*HZ)) == -EAGAIN)
-			;
+		while ((err = svc_recv(rqstp, timeout)) == -EAGAIN) {
+			if (run_once)
+				goto stop_svc;
+		}
 		if (err == -EINTR)
 			break;
 		validate_process_creds();
@@ -739,6 +756,7 @@ nfsd(void *vrqstp)
 		validate_process_creds();
 	}
 
+stop_svc:
 	/* Clear signals before calling svc_exit_thread() */
 	flush_signals(current);
 
