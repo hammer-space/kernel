@@ -389,6 +389,15 @@ static bool svc_xprt_ready(struct svc_xprt *xprt)
 }
 
 static void
+svc_queue_xprt_to_pool_head(struct svc_xprt *xprt, struct svc_pool *pool)
+{
+	spin_lock_bh(&pool->sp_lock);
+	list_add(&xprt->xpt_ready, &pool->sp_sockets);
+	pool->sp_stats.sockets_queued++;
+	spin_unlock_bh(&pool->sp_lock);
+}
+
+static void
 svc_queue_xprt_to_pool(struct svc_xprt *xprt, struct svc_pool *pool)
 {
 	spin_lock_bh(&pool->sp_lock);
@@ -448,25 +457,37 @@ void svc_xprt_do_enqueue(struct svc_xprt *xprt)
 		goto out_unlock;
 	}
 	set_bit(SP_CONGESTED, &pool->sp_flags);
+	rqstp = NULL;
 
-	/* no more active threads to use. Mark and wake up manager thread.
+	/*
+	 * No more active threads to use. Mark and wake up manager thread.
 	 * When there are no threads in pool, it is startup case that we should
 	 * just queue the RPC.
+	 * Only do this for xprt that does not have inflight RPCs.
 	 */
-	if (serv->sv_pool_mgr && !list_empty(&pool->sp_all_threads)) {
-		dprintk("%s: try to wake up pool manager %d\n", __func__, serv->sv_nrthreads);
-		svc_queue_xprt_to_pool(xprt, pool);
+	if (serv->sv_pool_mgr &&
+	    atomic_read(&xprt->xpt_inflight) == 0 &&
+	    !list_empty(&pool->sp_all_threads)) {
+		dprintk("%s: try to wake up pool manager %d\n",
+			__func__, serv->sv_nrthreads);
+
+		/*
+		 * The xprt is queued to the head of the pool so that it can be
+		 * serviced by the newly created thread or some other thread
+		 * that becomes available as soon as possible.
+		 */
+		queued = true;
+		svc_queue_xprt_to_pool_head(xprt, pool);
+
 		set_bit(SP_THREAD_SPAWN, &pool->sp_flags);
 		atomic_long_inc(&pool->sp_stats.threads_woken);
 		smp_mb__before_atomic();
 		set_bit(RPCSVC_FL_POOLMGR_RUNNING, &serv->sv_flags);
 		smp_mb__after_atomic();
 		wake_up_process(serv->sv_pool_mgr);
-		rqstp = NULL;
 		goto out_unlock;
 	}
 	svc_queue_xprt_to_pool(xprt, pool);
-	rqstp = NULL;
 out_unlock:
 	rcu_read_unlock();
 	put_cpu();
