@@ -203,16 +203,22 @@ nfsd_file_unhash_and_release_locked(struct nfsd_file *nf, struct list_head *disp
 	list_add(&nf->nf_lru, dispose);
 }
 
-void
-nfsd_file_put(struct nfsd_file *nf)
+static void
+nfsd_file_put_noref(struct nfsd_file *nf)
 {
 	trace_nfsd_file_put(nf);
-	set_bit(NFSD_FILE_REFERENCED, &nf->nf_flags);
-	smp_mb__after_atomic();
 	if (atomic_dec_and_test(&nf->nf_ref)) {
 		WARN_ON(test_bit(NFSD_FILE_HASHED, &nf->nf_flags));
 		nfsd_file_put_final(nf);
 	}
+}
+
+void
+nfsd_file_put(struct nfsd_file *nf)
+{
+	set_bit(NFSD_FILE_REFERENCED, &nf->nf_flags);
+	smp_mb__after_atomic();
+	nfsd_file_put_noref(nf);
 }
 
 struct nfsd_file *
@@ -274,12 +280,15 @@ nfsd_file_lru_cb(struct list_head *item, struct list_lru_one *lru,
 	    test_and_clear_bit(NFSD_FILE_REFERENCED, &nf->nf_flags))
 		return LRU_ROTATE;
 
+	atomic_inc(&nf->nf_ref);
+
 	spin_unlock(lock);
 	spin_lock(&nfsd_file_hashtbl[nf->nf_hashval].nfb_lock);
 	unhashed = nfsd_file_unhash(nf);
 	spin_unlock(&nfsd_file_hashtbl[nf->nf_hashval].nfb_lock);
 	if (unhashed)
-		nfsd_file_put(nf);
+		nfsd_file_put_noref(nf);
+	nfsd_file_put_noref(nf);
 	spin_lock(lock);
 	return unhashed ? LRU_REMOVED_RETRY : LRU_RETRY;
 }
