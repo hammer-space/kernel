@@ -172,18 +172,25 @@ nfsd_file_put_final_delayed(struct nfsd_file *nf)
 	return flush;
 }
 
-static bool
-nfsd_file_unhash(struct nfsd_file *nf)
+static void
+nfsd_file_do_unhash(struct nfsd_file *nf)
 {
 	lockdep_assert_held(&nfsd_file_hashtbl[nf->nf_hashval].nfb_lock);
 
 	trace_nfsd_file_unhash(nf);
-	if (test_bit(NFSD_FILE_HASHED, &nf->nf_flags)) {
-		--nfsd_file_hashtbl[nf->nf_hashval].nfb_count;
-		clear_bit(NFSD_FILE_HASHED, &nf->nf_flags);
-		hlist_del_rcu(&nf->nf_node);
+
+	--nfsd_file_hashtbl[nf->nf_hashval].nfb_count;
+	hlist_del_rcu(&nf->nf_node);
+	if (!list_empty(&nf->nf_lru))
 		list_lru_del(&nfsd_file_lru, &nf->nf_lru);
-		atomic_long_dec(&nfsd_filecache_count);
+	atomic_long_dec(&nfsd_filecache_count);
+}
+
+static bool
+nfsd_file_unhash(struct nfsd_file *nf)
+{
+	if (test_and_clear_bit(NFSD_FILE_HASHED, &nf->nf_flags)) {
+		nfsd_file_do_unhash(nf);
 		return true;
 	}
 	return false;
@@ -263,8 +270,8 @@ nfsd_file_lru_cb(struct list_head *item, struct list_lru_one *lru,
 	__releases(lock)
 	__acquires(lock)
 {
+	struct list_head *head = arg;
 	struct nfsd_file *nf = list_entry(item, struct nfsd_file, nf_lru);
-	bool unhashed;
 
 	/*
 	 * Do a lockless refcount check. The hashtable holds one reference, so
@@ -278,19 +285,27 @@ nfsd_file_lru_cb(struct list_head *item, struct list_lru_one *lru,
 	 */
 	if (atomic_read(&nf->nf_ref) > 1 ||
 	    test_and_clear_bit(NFSD_FILE_REFERENCED, &nf->nf_flags))
-		return LRU_ROTATE;
+		return LRU_SKIP;
 
-	atomic_inc(&nf->nf_ref);
+	if (!test_and_clear_bit(NFSD_FILE_HASHED, &nf->nf_flags))
+		return LRU_SKIP;
 
-	spin_unlock(lock);
-	spin_lock(&nfsd_file_hashtbl[nf->nf_hashval].nfb_lock);
-	unhashed = nfsd_file_unhash(nf);
-	spin_unlock(&nfsd_file_hashtbl[nf->nf_hashval].nfb_lock);
-	if (unhashed)
+	list_lru_isolate_move(lru, &nf->nf_lru, head);
+	return LRU_REMOVED;
+}
+
+static void
+nfsd_file_lru_dispose(struct list_head *head)
+{
+	while(!list_empty(head)) {
+		struct nfsd_file *nf = list_first_entry(head,
+				struct nfsd_file, nf_lru);
+		list_del_init(&nf->nf_lru);
+		spin_lock(&nfsd_file_hashtbl[nf->nf_hashval].nfb_lock);
+		nfsd_file_do_unhash(nf);
+		spin_unlock(&nfsd_file_hashtbl[nf->nf_hashval].nfb_lock);
 		nfsd_file_put_noref(nf);
-	nfsd_file_put_noref(nf);
-	spin_lock(lock);
-	return unhashed ? LRU_REMOVED_RETRY : LRU_RETRY;
+	}
 }
 
 static unsigned long
@@ -302,7 +317,12 @@ nfsd_file_lru_count(struct shrinker *s, struct shrink_control *sc)
 static unsigned long
 nfsd_file_lru_scan(struct shrinker *s, struct shrink_control *sc)
 {
-	return list_lru_shrink_walk(&nfsd_file_lru, sc, nfsd_file_lru_cb, NULL);
+	LIST_HEAD(head);
+	unsigned long ret;
+
+	ret = list_lru_shrink_walk(&nfsd_file_lru, sc, nfsd_file_lru_cb, &head);
+	nfsd_file_lru_dispose(&head);
+	return ret;
 }
 
 static struct shrinker	nfsd_file_shrinker = {
@@ -377,7 +397,10 @@ nfsd_file_close_inode(struct inode *inode)
 static void
 nfsd_file_delayed_close(struct work_struct *work)
 {
-	list_lru_walk(&nfsd_file_lru, nfsd_file_lru_cb, NULL, LONG_MAX);
+	LIST_HEAD(head);
+
+	list_lru_walk(&nfsd_file_lru, nfsd_file_lru_cb, &head, LONG_MAX);
+	nfsd_file_lru_dispose(&head);
 
 	if (atomic_long_read(&nfsd_filecache_count) > 0)
 		schedule_delayed_work(&nfsd_filecache_laundrette,
