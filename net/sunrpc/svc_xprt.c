@@ -479,11 +479,9 @@ void svc_xprt_do_enqueue(struct svc_xprt *xprt)
 		queued = true;
 		svc_queue_xprt_to_pool_head(xprt, pool);
 
-		set_bit(SP_THREAD_SPAWN, &pool->sp_flags);
+		atomic_inc(&serv->sv_new_threads);
+		atomic_inc(&pool->sp_new_threads);
 		atomic_long_inc(&pool->sp_stats.threads_woken);
-		smp_mb__before_atomic();
-		set_bit(RPCSVC_FL_POOLMGR_RUNNING, &serv->sv_flags);
-		smp_mb__after_atomic();
 		wake_up_process(serv->sv_pool_mgr);
 		goto out_unlock;
 	}

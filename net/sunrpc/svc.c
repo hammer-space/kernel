@@ -493,6 +493,24 @@ svc_create(struct svc_program *prog, unsigned int bufsize,
 }
 EXPORT_SYMBOL_GPL(svc_create);
 
+static bool
+svc_pool_manager_should_sleep(struct svc_serv *serv)
+{
+	/* did someone want to create new threads? */
+	if (atomic_read(&serv->sv_new_threads) > 0)
+		return false;
+
+	/* are we shutting down? */
+	if (signalled() || kthread_should_stop())
+		return false;
+
+	/* are we freezing? */
+	if (freezing(current))
+		return false;
+
+	return true;
+}
+
 static int
 svc_pool_manager(void *data)
 {
@@ -513,25 +531,18 @@ svc_pool_manager(void *data)
 	dprintk("svc: starting pool manager for %s\n", serv->sv_name);
 
 	while (true) {
-		if (signalled() || kthread_should_stop()) {
-			dprintk("svc: stopping pool manager for %s\n", serv->sv_name);
-			goto out;
-		}
-		try_to_freeze();
-
-		schedule_timeout_interruptible(60*60*HZ);
-
-		if (signalled() || kthread_should_stop()) {
-			dprintk("svc: stopping pool manager for %s\n", serv->sv_name);
-			goto out;
-		}
-		try_to_freeze();
-
-		if (!test_and_clear_bit(RPCSVC_FL_POOLMGR_RUNNING,
-					&serv->sv_flags))
-			continue;
+		set_current_state(TASK_INTERRUPTIBLE);
+		if (svc_pool_manager_should_sleep(serv))
+			schedule_timeout(60*60*HZ);
 		else
-			set_current_state(TASK_RUNNING);
+			__set_current_state(TASK_RUNNING);
+
+		if (signalled() || kthread_should_stop()) {
+			dprintk("svc: stopping pool manager for %s\n",
+				 serv->sv_name);
+			goto out;
+		}
+		try_to_freeze();
 
 		for (i = 0; i < serv->sv_nrpools; i++) {
 			struct svc_pool *pool = &serv->sv_pools[i];
@@ -539,7 +550,7 @@ svc_pool_manager(void *data)
 			struct task_struct *task;
 			struct svc_rqst *rqstp;
 
-			if (!test_and_clear_bit(SP_THREAD_SPAWN, &pool->sp_flags))
+			if (!atomic_read(&pool->sp_new_threads))
 				continue;
 
 			rqstp = svc_prepare_thread(serv, pool, cpu);
@@ -556,6 +567,8 @@ svc_pool_manager(void *data)
 				dprintk("svc: failed to spawn new thread\n");
 				break;
 			}
+			atomic_dec(&pool->sp_new_threads);
+			atomic_dec(&serv->sv_new_threads);
 
 			rqstp->rq_task = task;
 			if (serv->sv_nrpools > 1)
@@ -564,6 +577,9 @@ svc_pool_manager(void *data)
 			svc_sock_update_bufs(serv);
 			wake_up_process(task);
 		}
+
+		/* Just in case being asked to create constently. */
+		cond_resched();
 	}
 
 out:
@@ -600,7 +616,7 @@ EXPORT_SYMBOL_GPL(svc_create_pooled);
 void svc_shutdown_net(struct svc_serv *serv, struct net *net)
 {
 	if (serv->sv_pool_mgr)
-		send_sig(SIGINT, serv->sv_pool_mgr, 1);
+		kthread_stop(serv->sv_pool_mgr);
 
 	svc_close_net(serv, net);
 
