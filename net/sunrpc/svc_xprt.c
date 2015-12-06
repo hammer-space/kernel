@@ -503,12 +503,13 @@ static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool)
 			prev_inflight = inflight;
 		}
 		if (found) {
-			list_del_init(&xprt->xpt_ready);
-			svc_xprt_get(xprt);
-			atomic_inc(&xprt->xpt_inflight);
+			list_del_init(&found->xpt_ready);
+			svc_xprt_get(found);
+			atomic_inc(&found->xpt_inflight);
 
-			dprintk("svc: transport %p dequeued, inuse=%d\n", xprt,
-					atomic_read(&xprt->xpt_ref.refcount));
+			dprintk("svc: transport %p dequeued, inuse=%d\n",
+					found,
+					atomic_read(&found->xpt_ref.refcount));
 		}
 	}
 	spin_unlock_bh(&pool->sp_lock);
