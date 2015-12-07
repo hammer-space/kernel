@@ -524,7 +524,7 @@ svc_pool_manager(void *data)
 	while (true) {
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (svc_pool_manager_should_sleep(serv))
-			schedule_timeout(60*60*HZ);
+			schedule();
 		else
 			__set_current_state(TASK_RUNNING);
 
