@@ -501,7 +501,7 @@ svc_pool_manager_should_sleep(struct svc_serv *serv)
 		return false;
 
 	/* are we shutting down? */
-	if (signalled() || kthread_should_stop())
+	if (kthread_should_stop())
 		return false;
 
 	/* are we freezing? */
@@ -517,15 +517,6 @@ svc_pool_manager(void *data)
 	struct svc_serv *serv = data;
 	int i;
 
-	/*
-	 * thread is spawned with all signals set to SIG_IGN, re-enable
-	 * the ones that will bring down the thread
-	 */
-	allow_signal(SIGKILL);
-	allow_signal(SIGHUP);
-	allow_signal(SIGINT);
-	allow_signal(SIGQUIT);
-
 	set_freezable();
 
 	dprintk("svc: starting pool manager for %s\n", serv->sv_name);
@@ -537,7 +528,7 @@ svc_pool_manager(void *data)
 		else
 			__set_current_state(TASK_RUNNING);
 
-		if (signalled() || kthread_should_stop()) {
+		if (kthread_should_stop()) {
 			dprintk("svc: stopping pool manager for %s\n",
 				 serv->sv_name);
 			goto out;
