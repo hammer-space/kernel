@@ -1279,6 +1279,15 @@ static void ff_layout_io_track_ds_error(struct pnfs_layout_segment *lseg,
 		break;
 	}
 
+	switch (status) {
+	case -EJUKEBOX:
+	case -NFS4ERR_DELAY:
+	case -NFS4ERR_GRACE:
+		return;
+	default:
+		break;
+	}
+
 	mirror = FF_LAYOUT_COMP(lseg, idx);
 	err = ff_layout_track_ds_error(FF_LAYOUT_FROM_HDR(lseg->pls_layout),
 				       mirror, offset, length, status, opnum,
@@ -1553,7 +1562,6 @@ static int ff_layout_commit_done_cb(struct rpc_task *task,
 		pnfs_generic_prepare_to_resend_writes(data);
 		return -EAGAIN;
 	case -EAGAIN:
-		rpc_restart_call_prepare(task);
 		return -EAGAIN;
 	}
 
