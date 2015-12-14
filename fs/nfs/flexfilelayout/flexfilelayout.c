@@ -1280,7 +1280,6 @@ static void ff_layout_io_track_ds_error(struct pnfs_layout_segment *lseg,
 	}
 
 	switch (status) {
-	case EJUKEBOX:
 	case NFS4ERR_DELAY:
 	case NFS4ERR_GRACE:
 		return;
