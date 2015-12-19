@@ -1499,7 +1499,7 @@ static int ff_layout_write_done_cb(struct rpc_task *task,
 					    hdr->res.op_status, OP_WRITE,
 					    task->tk_status);
 	if (test_bit(NFS_IOHDR_LOCALIO, &hdr->flags)) {
-		dprintk("%s: local read status %d\n", __func__, task->tk_status);
+		dprintk("%s: local wrte status %d\n", __func__, task->tk_status);
 		if (task->tk_status < 0)
 			return task->tk_status;
 		else
@@ -1550,6 +1550,14 @@ static int ff_layout_commit_done_cb(struct rpc_task *task,
 					    data->args.offset, data->args.count,
 					    data->res.op_status, OP_COMMIT,
 					    task->tk_status);
+	if (test_bit(NFS_IOHDR_LOCALIO, &data->flags)) {
+		dprintk("%s: local commit status %d\n", __func__, task->tk_status);
+		if (task->tk_status < 0)
+			return task->tk_status;
+		else
+			goto out;
+	}
+
 	err = ff_layout_async_handle_error(task, NULL, data->ds_clp,
 					   data->lseg, data->ds_commit_index);
 
@@ -1563,6 +1571,7 @@ static int ff_layout_commit_done_cb(struct rpc_task *task,
 	case -EAGAIN:
 		return -EAGAIN;
 	}
+out:
 
 	ff_layout_set_layoutcommit(data->inode, data->lseg, data->lwb);
 
