@@ -594,7 +594,7 @@ svc_create_pooled(struct svc_program *prog, unsigned int bufsize,
 		if (IS_ERR(serv->sv_pool_mgr)) {
 			serv->sv_pool_mgr = NULL;
 			svc_destroy(serv);
-			goto out_err;
+			return NULL;
 		}
 	}
 	return serv;
@@ -606,9 +606,6 @@ EXPORT_SYMBOL_GPL(svc_create_pooled);
 
 void svc_shutdown_net(struct svc_serv *serv, struct net *net)
 {
-	if (serv->sv_pool_mgr)
-		kthread_stop(serv->sv_pool_mgr);
-
 	svc_close_net(serv, net);
 
 	if (serv->sv_ops->svo_shutdown)
@@ -646,8 +643,11 @@ svc_destroy(struct svc_serv *serv)
 
 	cache_clean_deferred(serv);
 
-	if (svc_serv_is_pooled(serv))
+	if (svc_serv_is_pooled(serv)) {
+		if (serv->sv_pool_mgr)
+			kthread_stop(serv->sv_pool_mgr);
 		svc_pool_map_put();
+	}
 
 	kfree(serv->sv_pools);
 	kfree(serv);
