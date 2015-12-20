@@ -201,7 +201,7 @@ int nfsd_nrthreads(struct net *net)
 
 	mutex_lock(&nfsd_mutex);
 	if (nn->nfsd_serv)
-		rv = nn->nfsd_serv->sv_nrthreads;
+		rv = nn->nfsd_serv->sv_nrthreads - nn->nfsd_serv->sv_tmpthreads;
 	mutex_unlock(&nfsd_mutex);
 	return rv;
 }
@@ -680,7 +680,7 @@ nfsd_svc(int nrservs, struct net *net)
 	 * we don't want to count in the return value,
 	 * so subtract 1
 	 */
-	error = nn->nfsd_serv->sv_nrthreads - 1;
+	error = nn->nfsd_serv->sv_nrthreads - nn->nfsd_serv->sv_tmpthreads - 1;
 out_shutdown:
 	if (error < 0 && !nfsd_up_before)
 		nfsd_shutdown_net(net);
@@ -764,6 +764,9 @@ stop_svc:
 	nfsdstats.th_cnt --;
 
 out:
+	/* Yes, nfsd() really _is_ the devil */
+	if (test_bit(RQ_RUNONCE, &rqstp->rq_flags))
+		rqstp->rq_server->sv_tmpthreads--;
 	rqstp->rq_server = NULL;
 
 	/* Release the thread */

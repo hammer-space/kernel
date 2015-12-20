@@ -43,6 +43,7 @@ struct svc_pool {
 	spinlock_t		sp_lock;	/* protects all fields */
 	struct list_head	sp_sockets;	/* pending sockets */
 	unsigned int		sp_nrthreads;	/* # of threads in pool */
+	unsigned int		sp_tmpthreads;	/* # of tmp threads in pool */
 	struct list_head	sp_all_threads;	/* all server threads */
 	struct svc_pool_stats	sp_stats;	/* statistics on pool operation */
 #define	SP_TASK_PENDING		(0)		/* still work to do even if no
@@ -94,6 +95,7 @@ struct svc_serv {
 	atomic_t		sv_new_threads;	/* # of threads to be created by
 						 * the pool manager thread */
 	unsigned int		sv_nrthreads;	/* # of server threads */
+	unsigned int		sv_tmpthreads;	/* # of temporary threads */
 	unsigned int		sv_maxconn;	/* max connections allowed or
 						 * '0' causing max to be based
 						 * on number of threads. */
@@ -281,6 +283,7 @@ struct svc_rqst {
 #define	RQ_VICTIM	(5)			/* about to be shut down */
 #define	RQ_BUSY		(6)			/* request is busy */
 #define	RQ_DATA		(7)			/* request has data */
+#define	RQ_RUNONCE	(8)			/* request is tmp */
 	unsigned long		rq_flags;	/* flags field */
 	ktime_t			rq_qtime;	/* enqueue time */
 
