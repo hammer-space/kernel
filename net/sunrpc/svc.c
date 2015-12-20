@@ -34,6 +34,9 @@
 #define RPCDBG_FACILITY	RPCDBG_SVCDSP
 
 static void svc_unregister(const struct svc_serv *serv, struct net *net);
+static struct svc_rqst *
+__svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node,
+		bool istmp);
 
 #define svc_serv_is_pooled(serv)    ((serv)->sv_ops->svo_function)
 
@@ -544,7 +547,7 @@ svc_pool_manager(void *data)
 			if (!atomic_read(&pool->sp_new_threads))
 				continue;
 
-			rqstp = svc_prepare_thread(serv, pool, cpu);
+			rqstp = __svc_prepare_thread(serv, pool, cpu, true);
 			if (!rqstp) {
 				dprintk("svc: failed to prepare new thread\n");
 				break;
@@ -729,8 +732,9 @@ out_enomem:
 }
 EXPORT_SYMBOL_GPL(svc_rqst_alloc);
 
-struct svc_rqst *
-svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node)
+static struct svc_rqst *
+__svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node,
+		bool istmp)
 {
 	struct svc_rqst	*rqstp;
 
@@ -738,12 +742,24 @@ svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node)
 	if (!rqstp)
 		return ERR_PTR(-ENOMEM);
 
+	if (istmp) {
+		serv->sv_tmpthreads++;
+		__set_bit(RQ_RUNONCE, &rqstp->rq_flags);
+	}
 	serv->sv_nrthreads++;
 	spin_lock_bh(&pool->sp_lock);
+	if (istmp)
+		pool->sp_tmpthreads++;
 	pool->sp_nrthreads++;
 	list_add_rcu(&rqstp->rq_all, &pool->sp_all_threads);
 	spin_unlock_bh(&pool->sp_lock);
 	return rqstp;
+}
+
+struct svc_rqst *
+svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node)
+{
+	return __svc_prepare_thread(serv, pool, node, false);
 }
 EXPORT_SYMBOL_GPL(svc_prepare_thread);
 
@@ -878,9 +894,11 @@ svc_set_num_threads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 {
 	if (pool == NULL) {
 		/* The -1 assumes caller has done a svc_get() */
+		nrservs += serv->sv_tmpthreads;
 		nrservs -= (serv->sv_nrthreads-1);
 	} else {
 		spin_lock_bh(&pool->sp_lock);
+		nrservs += pool->sp_tmpthreads;
 		nrservs -= pool->sp_nrthreads;
 		spin_unlock_bh(&pool->sp_lock);
 	}
@@ -954,6 +972,11 @@ svc_exit_thread(struct svc_rqst *rqstp)
 
 	spin_lock_bh(&pool->sp_lock);
 	pool->sp_nrthreads--;
+	if (test_bit(RQ_RUNONCE, &rqstp->rq_flags)) {
+		pool->sp_tmpthreads--;
+		if (serv)
+			serv->sv_tmpthreads--;
+	}
 	if (!test_and_set_bit(RQ_VICTIM, &rqstp->rq_flags))
 		list_del_rcu(&rqstp->rq_all);
 	spin_unlock_bh(&pool->sp_lock);
