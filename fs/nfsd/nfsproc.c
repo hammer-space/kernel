@@ -805,6 +805,7 @@ nfserrno (int errno)
 		{ nfserr_jukebox, -EWOULDBLOCK },
 		{ nfserr_jukebox, -ENOMEM },
 		{ nfserr_io, -ETXTBSY },
+		{ nfserr_io, -EBUSY},
 		{ nfserr_notsupp, -EOPNOTSUPP },
 		{ nfserr_toosmall, -ETOOSMALL },
 		{ nfserr_serverfault, -ESERVERFAULT },
