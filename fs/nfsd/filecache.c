@@ -83,7 +83,7 @@ nfsd_file_mark_find_or_create(struct nfsd_file *nf, struct inode *inode)
 {
 	int			err;
 	struct fsnotify_mark	*mark;
-	struct nfsd_file_mark	*nfm = NULL, *new = NULL;
+	struct nfsd_file_mark	*nfm = NULL, *new;
 
 	do {
 		mark = fsnotify_find_mark(&inode->i_fsnotify_marks,
@@ -98,25 +98,30 @@ nfsd_file_mark_find_or_create(struct nfsd_file *nf, struct inode *inode)
 		}
 
 		/* allocate a new nfm */
-		if (!new) {
-			new = kmem_cache_alloc(nfsd_file_mark_slab, GFP_KERNEL);
-			if (!new)
-				return NULL;
-			fsnotify_init_mark(&new->nfm_mark, nfsd_file_fsnotify_group);
-			new->nfm_mark.mask = FS_ATTRIB|FS_DELETE_SELF;
-			atomic_set(&new->nfm_ref, 1);
-		}
+		new = kmem_cache_alloc(nfsd_file_mark_slab, GFP_KERNEL);
+		if (!new)
+			return NULL;
+		fsnotify_init_mark(&new->nfm_mark, nfsd_file_fsnotify_group);
+		new->nfm_mark.mask = FS_ATTRIB|FS_DELETE_SELF;
+		atomic_set(&new->nfm_ref, 1);
 
 		err = fsnotify_add_mark(&new->nfm_mark, nf->nf_inode,
 				NULL, false);
-		if (likely(!err)) {
+		/*
+		 * If the add was successful, then return the object.
+		 * Otherwise, we need to put the reference we hold on the
+		 * nfm_mark. The fsnotify code will take a reference and put
+		 * it on failure, so we can't just free it directly. It's also
+		 * not safe to call fsnotify_destroy_mark on it as the
+		 * mark->group will be NULL. Thus, we can't let the nfm_ref
+		 * counter drive the destruction at this point.
+		 */
+		if (likely(!err))
 			nfm = new;
-			new = NULL;
-		}
+		else
+			fsnotify_put_mark(&new->nfm_mark);
 	} while (unlikely(err == -EEXIST));
 
-	if (new)
-		kmem_cache_free(nfsd_file_mark_slab, new);
 	return nfm;
 }
 
