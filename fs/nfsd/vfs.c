@@ -31,6 +31,7 @@
 #include <linux/exportfs.h>
 #include <linux/writeback.h>
 #include <linux/security.h>
+#include <linux/moduleparam.h>
 
 #ifdef CONFIG_NFSD_V3
 #include "xdr3.h"
@@ -1040,6 +1041,9 @@ out_nfserr:
 	return nfserr;
 }
 
+static bool may_use_splice __read_mostly;
+module_param(may_use_splice, bool, 0644);
+
 /*
  * Read data from a file. count must contain the requested read count
  * on entry. On return, *count contains the number of bytes actually read.
@@ -1060,7 +1064,8 @@ try_again:
 		return err;
 
 	file = nf->nf_file;
-	if (file->f_op->splice_read && test_bit(RQ_SPLICE_OK, &rqstp->rq_flags))
+	if (may_use_splice && file->f_op->splice_read &&
+	    test_bit(RQ_SPLICE_OK, &rqstp->rq_flags))
 		err = nfsd_splice_read(rqstp, fhp, file, offset, count);
 	else
 		err = nfsd_readv(rqstp, fhp, file, offset, vec, vlen, count);
