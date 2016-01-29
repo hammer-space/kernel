@@ -31,6 +31,7 @@
 #include <linux/exportfs.h>
 #include <linux/writeback.h>
 #include <linux/security.h>
+#include <linux/moduleparam.h>
 
 #ifdef CONFIG_NFSD_V3
 #include "xdr3.h"
@@ -923,11 +924,15 @@ __be32 nfsd_readv(struct file *file, loff_t offset, struct kvec *vec, int vlen,
 	return nfsd_finish_read(file, count, host_err);
 }
 
+static bool may_use_splice __read_mostly;
+module_param(may_use_splice, bool, 0644);
+
 static __be32
 nfsd_vfs_read(struct svc_rqst *rqstp, struct file *file,
          loff_t offset, struct kvec *vec, int vlen, unsigned long *count)
 {
-	if (file->f_op->splice_read && test_bit(RQ_SPLICE_OK, &rqstp->rq_flags))
+	if (may_use_splice && file->f_op->splice_read &&
+	    test_bit(RQ_SPLICE_OK, &rqstp->rq_flags))
 		return nfsd_splice_read(rqstp, file, offset, count);
 	else
 		return nfsd_readv(file, offset, vec, vlen, count);
