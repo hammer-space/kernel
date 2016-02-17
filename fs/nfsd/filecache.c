@@ -585,6 +585,7 @@ nfsd_file_cache_shutdown(void)
 	nfsd_file_fsnotify_group = NULL;
 	kmem_cache_destroy(nfsd_file_slab);
 	nfsd_file_slab = NULL;
+	fsnotify_flush();
 	kmem_cache_destroy(nfsd_file_mark_slab);
 	nfsd_file_mark_slab = NULL;
 	kfree(nfsd_file_hashtbl);

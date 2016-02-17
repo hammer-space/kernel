@@ -774,3 +774,18 @@ void fsnotify_wait_marks_destroyed(void)
 {
 	flush_delayed_work(&reaper_work);
 }
+
+/**
+ * fsnotify_flush - ensure that any mark cleanups have been flushed
+ *
+ * fsnotify trues to queue the final put of a fsnotify_mark to a global
+ * workqueue job. That means that there can be a small delay before the final
+ * cleanup is done. This function allows callers to ensure that any queued
+ * fsnotify_put_marks are completed before returning.
+ */
+void
+fsnotify_flush(void)
+{
+	flush_delayed_work(&reaper_work);
+}
+EXPORT_SYMBOL_GPL(fsnotify_flush);
