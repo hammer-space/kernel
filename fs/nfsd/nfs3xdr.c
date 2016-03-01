@@ -203,12 +203,14 @@ encode_saved_post_attr(struct svc_rqst *rqstp, __be32 *p, struct svc_fh *fhp)
  * Encode post-operation attributes.
  * The inode may be NULL if the call failed because of a stale file
  * handle. In this case, no attributes are returned.
+ * Ditto if the 'getattr' flag is unset.
  */
 static __be32 *
-encode_post_op_attr(struct svc_rqst *rqstp, __be32 *p, struct svc_fh *fhp)
+__encode_post_op_attr(struct svc_rqst *rqstp, __be32 *p, struct svc_fh *fhp,
+		bool getattr)
 {
 	struct dentry *dentry = fhp->fh_dentry;
-	if (!fhp->fh_no_wcc && dentry && d_really_is_positive(dentry)) {
+	if (getattr && dentry && d_really_is_positive(dentry)) {
 	        __be32 err;
 		struct kstat stat;
 
@@ -221,6 +223,18 @@ encode_post_op_attr(struct svc_rqst *rqstp, __be32 *p, struct svc_fh *fhp)
 	}
 	*p++ = xdr_zero;
 	return p;
+}
+
+static __be32 *
+encode_post_op_attr(struct svc_rqst *rqstp, __be32 *p, struct svc_fh *fhp)
+{
+	return __encode_post_op_attr(rqstp, p, fhp, true);
+}
+
+static __be32 *
+encode_post_op_attr_opportunistic(struct svc_rqst *rqstp, __be32 *p, struct svc_fh *fhp)
+{
+	return __encode_post_op_attr(rqstp, p, fhp, !fhp->fh_no_wcc);
 }
 
 /* Helper for NFSv3 ACLs */
@@ -251,7 +265,7 @@ encode_wcc_data(struct svc_rqst *rqstp, __be32 *p, struct svc_fh *fhp)
 	}
 	/* no pre- or post-attrs */
 	*p++ = xdr_zero;
-	return encode_post_op_attr(rqstp, p, fhp);
+	return encode_post_op_attr_opportunistic(rqstp, p, fhp);
 }
 
 /*
@@ -684,7 +698,7 @@ nfs3svc_encode_diropres(struct svc_rqst *rqstp, __be32 *p)
 		p = encode_fh(p, &resp->fh);
 		p = encode_post_op_attr(rqstp, p, &resp->fh);
 	}
-	p = encode_post_op_attr(rqstp, p, &resp->dirfh);
+	p = encode_post_op_attr_opportunistic(rqstp, p, &resp->dirfh);
 	return xdr_ressize_check(rqstp, p);
 }
 
@@ -694,7 +708,7 @@ nfs3svc_encode_accessres(struct svc_rqst *rqstp, __be32 *p)
 {
 	struct nfsd3_accessres *resp = rqstp->rq_resp;
 
-	p = encode_post_op_attr(rqstp, p, &resp->fh);
+	p = encode_post_op_attr_opportunistic(rqstp, p, &resp->fh);
 	if (resp->status == 0)
 		*p++ = htonl(resp->access);
 	return xdr_ressize_check(rqstp, p);
@@ -706,7 +720,7 @@ nfs3svc_encode_readlinkres(struct svc_rqst *rqstp, __be32 *p)
 {
 	struct nfsd3_readlinkres *resp = rqstp->rq_resp;
 
-	p = encode_post_op_attr(rqstp, p, &resp->fh);
+	p = encode_post_op_attr_opportunistic(rqstp, p, &resp->fh);
 	if (resp->status == 0) {
 		*p++ = htonl(resp->len);
 		xdr_ressize_check(rqstp, p);
@@ -728,7 +742,7 @@ nfs3svc_encode_readres(struct svc_rqst *rqstp, __be32 *p)
 {
 	struct nfsd3_readres *resp = rqstp->rq_resp;
 
-	p = encode_post_op_attr(rqstp, p, &resp->fh);
+	p = encode_post_op_attr_opportunistic(rqstp, p, &resp->fh);
 	if (resp->status == 0) {
 		*p++ = htonl(resp->count);
 		*p++ = htonl(resp->eof);
@@ -808,7 +822,7 @@ nfs3svc_encode_readdirres(struct svc_rqst *rqstp, __be32 *p)
 {
 	struct nfsd3_readdirres *resp = rqstp->rq_resp;
 
-	p = encode_post_op_attr(rqstp, p, &resp->fh);
+	p = encode_post_op_attr_opportunistic(rqstp, p, &resp->fh);
 
 	if (resp->status == 0) {
 		/* stupid readdir cookie */
@@ -891,7 +905,7 @@ static __be32 *encode_entryplus_baggage(struct nfsd3_readdirres *cd, __be32 *p, 
 		*p++ = 0;
 		goto out;
 	}
-	p = encode_post_op_attr(cd->rqstp, p, fh);
+	p = encode_post_op_attr_opportunistic(cd->rqstp, p, fh);
 	*p++ = xdr_one;			/* yes, a file handle follows */
 	p = encode_fh(p, fh);
 out:
