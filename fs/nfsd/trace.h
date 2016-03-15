@@ -15,14 +15,16 @@ DECLARE_EVENT_CLASS(nfsd_io_class,
 	TP_PROTO(struct svc_rqst *rqstp,
 		 struct svc_fh	*fhp,
 		 loff_t		offset,
-		 unsigned long	cnt),
-	TP_ARGS(rqstp, fhp, offset, cnt),
+		 unsigned long	cnt,
+		 __be32		status),
+	TP_ARGS(rqstp, fhp, offset, cnt, status),
 	TP_STRUCT__entry(
 		__field_struct(struct sockaddr_storage, ss)
 		__field(__be32, xid)
 		__field_struct(struct knfsd_fh, fh)
 		__field(loff_t, offset)
 		__field(unsigned long, cnt)
+		__field(__be32, status)
 	),
 	TP_fast_assign(
 		memcpy(&__entry->ss, &rqstp->rq_addr, sizeof(__entry->ss));
@@ -30,11 +32,12 @@ DECLARE_EVENT_CLASS(nfsd_io_class,
 		fh_copy_shallow(&__entry->fh, &fhp->fh_handle);
 		__entry->offset = offset;
 		__entry->cnt = cnt;
+		__entry->status = status;
 	),
-	TP_printk("addr=%pIScp xid=0x%x fh=0x%x offset=%lld len=%lu",
+	TP_printk("addr=%pIScp xid=0x%x fh=0x%x offset=%lld len=%lu status=%u",
 		  (struct sockaddr *)&__entry->ss,
 		  __be32_to_cpu(__entry->xid), knfsd_fh_hash(&__entry->fh),
-		  __entry->offset, __entry->cnt)
+		  __entry->offset, __entry->cnt, __entry->status)
 )
 
 #define DEFINE_NFSD_IO_EVENT(name)		\
@@ -42,8 +45,9 @@ DEFINE_EVENT(nfsd_io_class, name,		\
 	TP_PROTO(struct svc_rqst *rqstp,	\
 		 struct svc_fh	*fhp,		\
 		 loff_t		offset,		\
-		 unsigned long	cnt),		\
-	TP_ARGS(rqstp, fhp, offset, cnt))
+		 unsigned long	cnt,		\
+		 __be32		status),	\
+	TP_ARGS(rqstp, fhp, offset, cnt, status))
 
 DEFINE_NFSD_IO_EVENT(read_start);
 DEFINE_NFSD_IO_EVENT(read_opened);

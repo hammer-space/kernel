@@ -1042,13 +1042,13 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	int			retry = false;
 
 try_again:
-	trace_read_start(rqstp, fhp, offset, *count);
+	trace_read_start(rqstp, fhp, offset, *count, 0);
 	err = nfsd_file_acquire(rqstp, fhp, NFSD_MAY_READ, &nf);
 	if (err == nfs_ok) {
-		trace_read_opened(rqstp, fhp, offset, *count);
+		trace_read_opened(rqstp, fhp, offset, *count, err);
 		err = nfsd_vfs_read(rqstp, nf->nf_file, offset, vec, vlen,
 					count);
-		trace_read_io_done(rqstp, fhp, offset, *count);
+		trace_read_io_done(rqstp, fhp, offset, *count, err);
 		nfsd_file_put(nf);
 		if (!retry &&
 		    nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err)) {
@@ -1056,7 +1056,7 @@ try_again:
 			goto try_again;
 		}
 	}
-	trace_read_done(rqstp, fhp, offset, *count);
+	trace_read_done(rqstp, fhp, offset, *count, err);
 
 	return err;
 }
@@ -1075,20 +1075,20 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	bool			retry = false;
 
 try_again:
-	trace_write_start(rqstp, fhp, offset, *cnt);
+	trace_write_start(rqstp, fhp, offset, *cnt, 0);
 	err = nfsd_file_acquire(rqstp, fhp, NFSD_MAY_WRITE, &nf);
 	if (err == nfs_ok) {
-		trace_write_opened(rqstp, fhp, offset, *cnt);
+		trace_write_opened(rqstp, fhp, offset, *cnt, err);
 		err = nfsd_vfs_write(rqstp, fhp, nf->nf_file, offset, vec,
 					vlen, cnt, stable);
-		trace_write_io_done(rqstp, fhp, offset, *cnt);
+		trace_write_io_done(rqstp, fhp, offset, *cnt, err);
 		nfsd_file_put(nf);
 		if (!retry && nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err)) {
 			retry = true;
 			goto try_again;
 		}
 	}
-	trace_write_done(rqstp, fhp, offset, *cnt);
+	trace_write_done(rqstp, fhp, offset, *cnt, err);
 	return err;
 }
 
