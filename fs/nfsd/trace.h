@@ -18,18 +18,21 @@ DECLARE_EVENT_CLASS(nfsd_io_class,
 		 unsigned long	cnt),
 	TP_ARGS(rqstp, fhp, offset, cnt),
 	TP_STRUCT__entry(
+		__field_struct(struct sockaddr_storage, ss)
 		__field(__be32, xid)
 		__field_struct(struct knfsd_fh, fh)
 		__field(loff_t, offset)
 		__field(unsigned long, cnt)
 	),
 	TP_fast_assign(
+		memcpy(&__entry->ss, &rqstp->rq_addr, sizeof(__entry->ss));
 		__entry->xid = rqstp->rq_xid,
 		fh_copy_shallow(&__entry->fh, &fhp->fh_handle);
 		__entry->offset = offset;
 		__entry->cnt = cnt;
 	),
-	TP_printk("xid=0x%x fh=0x%x offset=%lld cnt=%lu",
+	TP_printk("addr=%pIScp xid=0x%x fh=0x%x offset=%lld len=%lu",
+		  (struct sockaddr *)&__entry->ss,
 		  __be32_to_cpu(__entry->xid), knfsd_fh_hash(&__entry->fh),
 		  __entry->offset, __entry->cnt)
 )
