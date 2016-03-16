@@ -15,23 +15,23 @@ DECLARE_EVENT_CLASS(nfsd_io_class,
 	TP_PROTO(struct svc_rqst *rqstp,
 		 struct svc_fh	*fhp,
 		 loff_t		offset,
-		 int		len),
-	TP_ARGS(rqstp, fhp, offset, len),
+		 unsigned long	cnt),
+	TP_ARGS(rqstp, fhp, offset, cnt),
 	TP_STRUCT__entry(
 		__field(__be32, xid)
 		__field_struct(struct knfsd_fh, fh)
 		__field(loff_t, offset)
-		__field(int, len)
+		__field(unsigned long, cnt)
 	),
 	TP_fast_assign(
 		__entry->xid = rqstp->rq_xid,
 		fh_copy_shallow(&__entry->fh, &fhp->fh_handle);
 		__entry->offset = offset;
-		__entry->len = len;
+		__entry->cnt = cnt;
 	),
-	TP_printk("xid=0x%x fh=0x%x offset=%lld len=%d",
+	TP_printk("xid=0x%x fh=0x%x offset=%lld cnt=%lu",
 		  __be32_to_cpu(__entry->xid), knfsd_fh_hash(&__entry->fh),
-		  __entry->offset, __entry->len)
+		  __entry->offset, __entry->cnt)
 )
 
 #define DEFINE_NFSD_IO_EVENT(name)		\
@@ -39,8 +39,8 @@ DEFINE_EVENT(nfsd_io_class, name,		\
 	TP_PROTO(struct svc_rqst *rqstp,	\
 		 struct svc_fh	*fhp,		\
 		 loff_t		offset,		\
-		 int		len),		\
-	TP_ARGS(rqstp, fhp, offset, len))
+		 unsigned long	cnt),		\
+	TP_ARGS(rqstp, fhp, offset, cnt))
 
 DEFINE_NFSD_IO_EVENT(read_start);
 DEFINE_NFSD_IO_EVENT(read_opened);
