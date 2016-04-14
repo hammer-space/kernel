@@ -349,9 +349,23 @@ nfs_local_file_open_cached(struct nfs_client *clp, const struct cred *cred,
 			   struct nfs_fh *fh, const fmode_t mode,
 			   struct nfs_open_context *ctx)
 {
-	if (!ctx->local_filp)
-		ctx->local_filp = nfs_local_open_fh(clp, cred, fh, ctx->mode);
-	return ctx->local_filp;
+	struct file	*new, *filp = ctx->local_filp;
+
+	if (filp) {
+		get_file(filp);
+	} else {
+		new = nfs_local_open_fh(clp, cred, fh, ctx->mode);
+		if (IS_ERR(new)) {
+			filp = new;
+		} else {
+			/* try to put this one in the slot */
+			filp = cmpxchg(&ctx->local_filp, NULL, new);
+			if (!filp)
+				filp = new;
+			get_file(filp);
+		}
+	}
+	return filp;
 }
 
 static struct file *
@@ -412,8 +426,11 @@ nfs_local_doio(struct nfs_client *clp, const struct cred *cred,
 	default:
 		dprintk("%s: invalid mode: %d\n", __func__,
 			hdr->rw_mode);
+		fput(filp);
 		return -EINVAL;
 	}
+
+	fput(filp);
 
 	if (status >= 0) {
 		hdr->res.count = status;
@@ -450,6 +467,7 @@ nfs_local_commit(struct nfs_client *clp, const struct cred *cred,
 
 	end = data->args.count ? data->args.offset + data->args.count : -1;
 	status = vfs_fsync_range(filp, data->args.offset, end, 0);
+	fput(filp);
 	if (status >= 0)
 		data->task.tk_status = 0;
 	else {

@@ -2510,6 +2510,8 @@ ff_local_open_fh(struct pnfs_layout_segment *lseg,
 	struct nfs4_ff_layout_mirror *mirror = FF_LAYOUT_COMP(lseg, ds_idx);
 
 	WARN_ON(!mirror->local_file);
+	if (mirror->local_file)
+		get_file(mirror->local_file);
 	return mirror->local_file;
 }
 
