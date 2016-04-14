@@ -39,7 +39,6 @@ struct nfs4_ff_layout_ds {
 	u32				ds_versions_cnt;
 	struct nfs4_ff_ds_version	*ds_versions;
 	struct nfs4_pnfs_ds		*ds;
-	bool				local_ds;
 };
 
 struct nfs4_ff_layout_ds_err {

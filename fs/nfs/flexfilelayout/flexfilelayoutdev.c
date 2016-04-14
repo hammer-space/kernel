@@ -479,7 +479,6 @@ nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg,
 		 */
 		if (ff_layout_ds_is_local(ds)) {
 			dprintk("%s: found local DS\n", __func__);
-			mirror->mirror_ds->local_ds = true;
 			nfs_local_enable(ds->ds_clp);
 		}
 		max_payload =
