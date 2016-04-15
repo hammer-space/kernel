@@ -226,10 +226,15 @@ static struct nfs4_ff_layout_mirror *ff_layout_alloc_mirror(gfp_t gfp_flags)
 
 static void ff_layout_free_mirror(struct nfs4_ff_layout_mirror *mirror)
 {
+	struct file *filp;
 	const struct cred	*cred;
 
-	if (mirror->local_file)
-		fput(mirror->local_file);
+	filp = rcu_access_pointer(mirror->ro_file);
+	if (filp)
+		fput(filp);
+	filp = rcu_access_pointer(mirror->rw_file);
+	if (filp)
+		fput(filp);
 	ff_layout_remove_mirror(mirror);
 	kfree(mirror->fh_versions);
 	cred = rcu_access_pointer(mirror->ro_cred);
@@ -2531,11 +2536,22 @@ ff_local_open_fh(struct pnfs_layout_segment *lseg,
 		 fmode_t mode)
 {
 	struct nfs4_ff_layout_mirror *mirror = FF_LAYOUT_COMP(lseg, ds_idx);
-	struct file *filp, *new;
+	struct file *filp, *new, __rcu **pfile;
+
+	if (mode & FMODE_WRITE) {
+		/*
+		 * Always request read and write access since this corresponds
+		 * to a rw layout.
+		 */
+		mode |= FMODE_READ;
+		pfile = &mirror->rw_file;
+	} else {
+		pfile = &mirror->ro_file;
+	}
 
 	rcu_read_lock();
 	do {
-		filp = rcu_dereference(mirror->local_file);
+		filp = rcu_dereference(*pfile);
 		if (filp) {
 			if (!get_file_rcu(filp))
 				filp = NULL;
@@ -2549,7 +2565,7 @@ ff_local_open_fh(struct pnfs_layout_segment *lseg,
 				get_file(new);
 
 				/* try to swap in the pointer */
-				filp = cmpxchg(&mirror->local_file, NULL, new);
+				filp = cmpxchg(pfile, NULL, new);
 				if (likely(!filp)) {
 					filp = new;
 				} else {
