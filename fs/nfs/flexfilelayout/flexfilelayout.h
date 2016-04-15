@@ -231,4 +231,7 @@ struct rpc_cred *ff_layout_get_ds_cred(struct pnfs_layout_segment *lseg,
 bool ff_layout_avoid_mds_available_ds(struct pnfs_layout_segment *lseg);
 bool ff_layout_avoid_read_on_rw(struct pnfs_layout_segment *lseg);
 
+struct file *ff_local_open_fh(struct pnfs_layout_segment *lseg, u32 ds_idx,
+		 struct nfs_client *clp, struct rpc_cred *cred,
+		 struct nfs_fh *fh, fmode_t mode);
 #endif /* FS_NFS_NFS4FLEXFILELAYOUT_H */
