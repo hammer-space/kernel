@@ -1849,9 +1849,17 @@ ff_layout_read_pagelist(struct nfs_pageio_descriptor *desc,
 
 	/* Start IO accounting for local read */
 	if (test_bit(NFS_CS_LOCAL_IO, &ds->ds_clp->cl_flags)) {
-		localread = true;
-		hdr->task.tk_start = ktime_get();
-		ff_layout_read_record_layoutstats_start(&hdr->task, hdr);
+		struct file *filp;
+
+		filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,
+					FMODE_READ);
+		if (!IS_ERR_OR_NULL(filp)) {
+			/* FIXME: we should pass this to the initiate func */
+			fput(filp);
+			localread = true;
+			hdr->task.tk_start = ktime_get();
+			ff_layout_read_record_layoutstats_start(&hdr->task, hdr);
+		}
 	}
 
 	/* Perform an asynchronous read to ds */
@@ -1924,9 +1932,17 @@ ff_layout_write_pagelist(struct nfs_pageio_descriptor *desc,
 
 	/* Start IO accounting for local write */
 	if (test_bit(NFS_CS_LOCAL_IO, &ds->ds_clp->cl_flags)) {
-		localwrite = true;
-		hdr->task.tk_start = ktime_get();
-		ff_layout_write_record_layoutstats_start(&hdr->task, hdr);
+		struct file *filp;
+
+		filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,
+					FMODE_READ|FMODE_WRITE);
+		if (!IS_ERR_OR_NULL(filp)) {
+			/* FIXME: we should pass this to the initiate func */
+			fput(filp);
+			localwrite = true;
+			hdr->task.tk_start = ktime_get();
+			ff_layout_write_record_layoutstats_start(&hdr->task, hdr);
+		}
 	}
 
 	/* Perform an asynchronous write */
@@ -2006,9 +2022,17 @@ static int ff_layout_initiate_commit(struct nfs_commit_data *data, int how)
 
 	/* Start IO accounting for local commit */
 	if (test_bit(NFS_CS_LOCAL_IO, &ds->ds_clp->cl_flags)) {
-		localcommit = true;
-		data->task.tk_start = ktime_get();
-		ff_layout_commit_record_layoutstats_start(&data->task, data);
+		struct file *filp;
+
+		filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,
+					FMODE_READ|FMODE_WRITE);
+		if (!IS_ERR_OR_NULL(filp)) {
+			/* FIXME: we should pass this to the initiate func */
+			fput(filp);
+			localcommit = true;
+			data->task.tk_start = ktime_get();
+			ff_layout_commit_record_layoutstats_start(&data->task, data);
+		}
 	}
 
 	ret = nfs_initiate_commit(ds->ds_clp, ds_clnt, data, ds->ds_clp->rpc_ops,
@@ -2498,8 +2522,7 @@ ff_layout_set_layoutdriver(struct nfs_server *server,
 	return 0;
 }
 
-
-static struct file *
+struct file *
 ff_local_open_fh(struct pnfs_layout_segment *lseg,
 		 u32 ds_idx,
 		 struct nfs_client *clp,
@@ -2508,11 +2531,39 @@ ff_local_open_fh(struct pnfs_layout_segment *lseg,
 		 fmode_t mode)
 {
 	struct nfs4_ff_layout_mirror *mirror = FF_LAYOUT_COMP(lseg, ds_idx);
+	struct file *filp, *new;
 
-	WARN_ON(!mirror->local_file);
-	if (mirror->local_file)
-		get_file(mirror->local_file);
-	return mirror->local_file;
+	rcu_read_lock();
+	do {
+		filp = rcu_dereference(mirror->local_file);
+		if (filp) {
+			if (!get_file_rcu(filp))
+				filp = NULL;
+		} else {
+			new = nfs_local_open_fh(clp, cred, fh, mode);
+			if (IS_ERR_OR_NULL(new)) {
+				filp = new;
+				nfs_local_disable(clp);
+			} else {
+				/* one for local_file slot, one to return */
+				get_file(new);
+
+				/* try to swap in the pointer */
+				filp = cmpxchg(&mirror->local_file, NULL, new);
+				if (likely(!filp)) {
+					filp = new;
+				} else {
+					/* already one there, get ref to it */
+					if (!get_file_rcu(filp))
+						filp = NULL;
+					fput(new);
+					fput(new);
+				}
+			}
+		}
+	} while (filp == NULL);
+	rcu_read_unlock();
+	return filp;
 }
 
 static struct nfs_client *

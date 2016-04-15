@@ -302,44 +302,6 @@ ff_layout_get_mirror_cred(struct nfs4_ff_layout_mirror *mirror, u32 iomode)
 	return cred;
 }
 
-static fmode_t ff_lseg_mode_to_fmode(struct pnfs_layout_segment *lseg)
-{
-	if (lseg->pls_range.iomode == IOMODE_READ)
-		return FMODE_READ;
-	return FMODE_READ|FMODE_WRITE;
-}
-
-/* cache local file ds is in local io mode */
-static void ff_layout_update_mirror_filp(struct pnfs_layout_segment *lseg,
-					 struct nfs4_ff_layout_mirror *mirror,
-					 struct nfs4_pnfs_ds *ds)
-{
-	struct nfs_fh *fh = &mirror->fh_versions[0];	/* XXX */
-	struct file *filp;
-	fmode_t mode;
-	struct cred *cred;
-
-	if (ds && ds->ds_clp &&
-	    test_bit(NFS_CS_LOCAL_IO, &ds->ds_clp->cl_flags)) {
-		/* FIXME: respect credential changes */
-		if (!mirror->local_file) {
-			cred = ff_layout_get_mirror_cred(mirror, IOMODE_RW);
-			if (!cred) {
-				nfs_local_disable(ds->ds_clp);
-				return;
-			}
-			mode = ff_lseg_mode_to_fmode(lseg);
-			filp = nfs_local_open_fh(ds->ds_clp, cred, fh, mode);
-			put_cred(cred);
-
-			if (IS_ERR_OR_NULL(filp))
-				nfs_local_disable(ds->ds_clp);
-			else if (cmpxchg(&mirror->local_file, NULL, filp))
-				fput(filp);
-		}
-	}
-}
-
 struct nfs_fh *
 nfs4_ff_layout_select_ds_fh(struct nfs4_ff_layout_mirror *mirror)
 {
@@ -458,7 +420,6 @@ nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg,
 	/* matching smp_wmb() in _nfs4_pnfs_v3/4_ds_connect */
 	smp_rmb();
 	if (ds->ds_clp) {
-		ff_layout_update_mirror_filp(lseg, mirror, ds);
 		goto out;
 	}
 
