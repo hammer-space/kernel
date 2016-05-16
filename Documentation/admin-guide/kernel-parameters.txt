@@ -2757,6 +2757,15 @@
 			callbacks the client will process in parallel for
 			a particular server.
 
+	nfs.localio_enabled=
+			[NFS] enable localio
+			If true, the NFS client will check if the NFS server
+			is actually a knfsd server running locally and,
+			if so, it will send READ and WRITE requests through
+			the VFS read() and write() calls directly to the
+			underlying filesystem.
+			The default setting is off.
+
 	nfs.max_session_slots=
 			[NFSv4.1] Sets the maximum number of session slots
 			the client will attempt to negotiate with the server.

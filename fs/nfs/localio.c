@@ -13,6 +13,7 @@
 #include <linux/sunrpc/addr.h>
 #include <linux/inetdevice.h>
 #include <net/addrconf.h>
+#include <linux/module.h>
 
 #include <linux/nfs.h>
 #include <linux/nfs_fs.h>
@@ -42,9 +43,13 @@ struct nfs_local_lookup_ctx {
 
 static struct nfs_local_lookup_ctx __local_lookup_ctx;
 
+static bool localio_enabled = false;
+module_param(localio_enabled, bool, 0644);
+
 bool nfs_server_is_local(const struct nfs_client *clp)
 {
-	return test_bit(NFS_CS_LOCAL_IO, &clp->cl_flags) != 0;
+	return test_bit(NFS_CS_LOCAL_IO, &clp->cl_flags) != 0 &&
+		localio_enabled;
 }
 EXPORT_SYMBOL_GPL(nfs_server_is_local);
 
