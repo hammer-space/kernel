@@ -408,6 +408,7 @@ extern struct file *nfs_local_open_fh(struct nfs_client *, struct rpc_cred *,
 extern int nfs_local_doio(struct nfs_client *, struct rpc_cred *, struct nfs_pgio_header *);
 extern int nfs_local_commit(struct nfs_client *, struct rpc_cred *, struct nfs_commit_data *);
 extern void nfs_probe_local_addr(struct nfs_client *clnt);
+extern bool nfs_server_is_local(const struct nfs_client *clp);
 
 /* super.c */
 extern const struct super_operations nfs_sops;

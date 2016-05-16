@@ -42,6 +42,12 @@ struct nfs_local_lookup_ctx {
 
 static struct nfs_local_lookup_ctx __local_lookup_ctx;
 
+bool nfs_server_is_local(const struct nfs_client *clp)
+{
+	return test_bit(NFS_CS_LOCAL_IO, &clp->cl_flags) != 0;
+}
+EXPORT_SYMBOL_GPL(nfs_server_is_local);
+
 void
 nfs_local_init(void)
 {
