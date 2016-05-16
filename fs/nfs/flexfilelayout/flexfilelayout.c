@@ -2563,13 +2563,15 @@ ff_local_open_fh(struct pnfs_layout_segment *lseg,
 		pfile = &mirror->ro_file;
 	}
 
-	rcu_read_lock();
 	do {
+		rcu_read_lock();
 		filp = rcu_dereference(*pfile);
 		if (filp) {
 			if (!get_file_rcu(filp))
 				filp = NULL;
+			rcu_read_unlock();
 		} else {
+			rcu_read_unlock();
 			new = nfs_local_open_fh(clp, cred, fh, mode);
 			if (IS_ERR_OR_NULL(new)) {
 				filp = new;
@@ -2579,20 +2581,22 @@ ff_local_open_fh(struct pnfs_layout_segment *lseg,
 				get_file(new);
 
 				/* try to swap in the pointer */
+				rcu_read_lock();
 				filp = cmpxchg(pfile, NULL, new);
 				if (likely(!filp)) {
+					rcu_read_unlock();
 					filp = new;
 				} else {
 					/* already one there, get ref to it */
 					if (!get_file_rcu(filp))
 						filp = NULL;
+					rcu_read_unlock();
 					fput(new);
 					fput(new);
 				}
 			}
 		}
 	} while (filp == NULL);
-	rcu_read_unlock();
 	return filp;
 }
 
