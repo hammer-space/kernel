@@ -485,7 +485,7 @@ size_t nfs_generic_pg_test(struct nfs_pageio_descriptor *desc,
 	bool limit_bsize = true;
 
 	/* if localio is enabled, ignore bsize */
-	if (clp && test_bit(NFS_CS_LOCAL_IO, &clp->cl_flags))
+	if (clp && nfs_server_is_local(clp))
 		limit_bsize = false;
 
 	if (limit_bsize && mirror->pg_count > mirror->pg_bsize) {
@@ -845,8 +845,7 @@ static int nfs_generic_pg_pgios(struct nfs_pageio_descriptor *desc)
 	nfs_pgheader_init(desc, hdr, nfs_pgio_header_free);
 	ret = nfs_generic_pgio(desc, hdr);
 	if (ret == 0) {
-		localio = test_bit(NFS_CS_LOCAL_IO,
-				&NFS_SERVER(hdr->inode)->nfs_client->cl_flags);
+		localio = nfs_server_is_local(NFS_SERVER(hdr->inode)->nfs_client);
 		ret = nfs_initiate_pgio(desc,
 					NFS_SERVER(hdr->inode)->nfs_client,
 					NFS_CLIENT(hdr->inode),

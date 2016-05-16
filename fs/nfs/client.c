@@ -1162,7 +1162,7 @@ static int nfs_server_list_show(struct seq_file *m, void *v)
 		return 0;
 
 	snprintf(more, sizeof(more), " %s",
-		test_bit(NFS_CS_LOCAL_IO, &clp->cl_flags) ? "local_io " : "");
+		nfs_server_is_local(clp) ? "local_io " : "");
 
 	rcu_read_lock();
 	seq_printf(m, "v%u %s %s %3d %-20s %s\n",

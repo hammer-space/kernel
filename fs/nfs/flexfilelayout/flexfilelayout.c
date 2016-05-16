@@ -1867,7 +1867,7 @@ ff_layout_read_pagelist(struct nfs_pageio_descriptor *desc,
 	hdr->mds_offset = offset;
 
 	/* Start IO accounting for local read */
-	if (test_bit(NFS_CS_LOCAL_IO, &ds->ds_clp->cl_flags)) {
+	if (nfs_server_is_local(ds->ds_clp)) {
 		struct file *filp;
 
 		filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,
@@ -1950,7 +1950,7 @@ ff_layout_write_pagelist(struct nfs_pageio_descriptor *desc,
 	hdr->args.offset = offset;
 
 	/* Start IO accounting for local write */
-	if (test_bit(NFS_CS_LOCAL_IO, &ds->ds_clp->cl_flags)) {
+	if (nfs_server_is_local(ds->ds_clp)) {
 		struct file *filp;
 
 		filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,
@@ -2040,7 +2040,7 @@ static int ff_layout_initiate_commit(struct nfs_commit_data *data, int how)
 		data->args.fh = fh;
 
 	/* Start IO accounting for local commit */
-	if (test_bit(NFS_CS_LOCAL_IO, &ds->ds_clp->cl_flags)) {
+	if (nfs_server_is_local(ds->ds_clp)) {
 		struct file *filp;
 
 		filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,

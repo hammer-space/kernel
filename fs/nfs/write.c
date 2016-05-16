@@ -1825,7 +1825,7 @@ nfs_commit_list(struct inode *inode, struct list_head *head, int how,
 	atomic_inc(&cinfo->mds->rpcs_out);
 	return nfs_initiate_commit(clp, NFS_CLIENT(inode), data,
 				   NFS_PROTO(inode), data->mds_ops, how, 0,
-				   test_bit(NFS_CS_LOCAL_IO, &clp->cl_flags));
+				   nfs_server_is_local(clp));
 }
 
 /*

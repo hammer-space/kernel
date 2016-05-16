@@ -410,6 +410,7 @@ extern int nfs_local_doio(struct nfs_client *, const struct cred *,
 extern int nfs_local_commit(struct nfs_client *, const struct cred *,
 			    struct nfs_commit_data *);
 extern void nfs_probe_local_addr(struct nfs_client *clnt);
+extern bool nfs_server_is_local(const struct nfs_client *clp);
 
 /* super.c */
 extern const struct super_operations nfs_sops;
