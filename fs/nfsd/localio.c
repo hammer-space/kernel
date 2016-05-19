@@ -63,13 +63,16 @@ nfsd_local_fakerqst_create(struct rpc_clnt *rpc_clnt, const struct cred *cred)
 		goto out_err;
 	}
 
-	/* set up enough for svcauth_unix_set_client to be able to wait
-	 * for the cache downcall */
+	/*
+	 * set up enough for svcauth_unix_set_client to be able to wait
+	 * for the cache downcall. Note that we do _not_ want to allow the
+	 * request to be deferred for later revisit since this rqst and xprt
+	 * are not set up to run inside of the normal svc_rqst engine.
+	 */
 	INIT_LIST_HEAD(&rqstp->rq_xprt->xpt_deferred);
 	kref_init(&rqstp->rq_xprt->xpt_ref);
-	set_bit(RQ_USEDEFERRAL, &rqstp->rq_flags);
-	rqstp->rq_chandle.defer = svc_defer;
-	rqstp->rq_chandle.thread_wait = 1;
+	spin_lock_init(&rqstp->rq_xprt->xpt_lock);
+	rqstp->rq_chandle.thread_wait = 5 * HZ;
 
 	status = svcauth_unix_set_client(rqstp);
 	if (status != SVC_OK) {
