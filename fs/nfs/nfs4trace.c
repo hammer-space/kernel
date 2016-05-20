@@ -16,4 +16,6 @@
 EXPORT_TRACEPOINT_SYMBOL_GPL(nfs4_pnfs_read);
 EXPORT_TRACEPOINT_SYMBOL_GPL(nfs4_pnfs_write);
 EXPORT_TRACEPOINT_SYMBOL_GPL(nfs4_pnfs_commit_ds);
+EXPORT_TRACEPOINT_SYMBOL_GPL(ff_layout_read_done_error);
+EXPORT_TRACEPOINT_SYMBOL_GPL(ff_layout_write_done_error);
 #endif
