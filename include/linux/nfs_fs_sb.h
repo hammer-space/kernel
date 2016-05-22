@@ -269,5 +269,6 @@ struct nfs_server {
 #define NFS_CAP_DENY_ACLS	(1U << 28)
 #define NFS_CAP_TIME_CREATE	(1U << 29)
 #define NFS_CAP_HIDDEN		(1U << 30)
+#define NFS_CAP_SYSTEM		(1U << 31)
 
 #endif

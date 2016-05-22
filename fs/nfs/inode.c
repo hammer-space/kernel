@@ -492,6 +492,7 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 		memset(&inode->i_ctime, 0, sizeof(inode->i_ctime));
 		memset(&nfsi->timecreate, 0, sizeof(nfsi->timecreate));
 		nfsi->hidden = 0;
+		nfsi->system = 0;
 		inode_set_iversion_raw(inode, 0);
 		inode->i_size = 0;
 		clear_nlink(inode);
@@ -523,6 +524,10 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 		if (fattr->valid & NFS_ATTR_FATTR_HIDDEN)
 			nfsi->hidden = (fattr->hsa_flags & NFS_HSA_HIDDEN) != 0;
 		else if (nfs_server_capable(inode, NFS_CAP_HIDDEN))
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_ATTR);
+		if (fattr->valid & NFS_ATTR_FATTR_SYSTEM)
+			nfsi->system = (fattr->hsa_flags & NFS_HSA_SYSTEM) != 0;
+		else if (nfs_server_capable(inode, NFS_CAP_SYSTEM))
 			nfs_set_cache_invalid(inode, NFS_INO_INVALID_ATTR);
 		if (fattr->valid & NFS_ATTR_FATTR_CHANGE)
 			inode_set_iversion_raw(inode, fattr->change_attr);
@@ -1921,6 +1926,15 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 	if (fattr->valid & NFS_ATTR_FATTR_HIDDEN) {
 		nfsi->hidden = (fattr->hsa_flags | NFS_HSA_HIDDEN) != 0;
 	} else if (server->caps & NFS_CAP_HIDDEN) {
+		nfsi->cache_validity |= save_cache_validity &
+				(NFS_INO_INVALID_ATTR
+				| NFS_INO_REVAL_FORCED);
+		cache_revalidated = false;
+	}
+
+	if (fattr->valid & NFS_ATTR_FATTR_SYSTEM) {
+		nfsi->system = (fattr->hsa_flags | NFS_HSA_SYSTEM) != 0;
+	} else if (server->caps & NFS_CAP_SYSTEM) {
 		nfsi->cache_validity |= save_cache_validity &
 				(NFS_INO_INVALID_ATTR
 				| NFS_INO_REVAL_FORCED);

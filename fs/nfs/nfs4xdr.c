@@ -4163,6 +4163,26 @@ static int decode_attr_hidden(struct xdr_stream *xdr, uint32_t *bitmap, uint32_t
 	return 0;
 }
 
+static int decode_attr_system(struct xdr_stream *xdr, uint32_t *bitmap, uint32_t *res)
+{
+	__be32 *p;
+
+	*res = 0;
+	if (unlikely(bitmap[1] & (FATTR4_WORD1_SYSTEM - 1U)))
+		return -EIO;
+	if (likely(bitmap[1] & FATTR4_WORD1_SYSTEM)) {
+		p = xdr_inline_decode(xdr, 4);
+		if (unlikely(!p))
+			return -EIO;
+		if (be32_to_cpup(p)) {
+			*res |= NFS_HSA_SYSTEM;
+		}
+		bitmap[1] &= ~FATTR4_WORD1_SYSTEM;
+	}
+	dprintk("%s: system file: =%s\n", __func__, (*res & NFS_HSA_HIDDEN) == 0 ? "false" : "true");
+	return 0;
+}
+
 static int decode_attr_time_metadata(struct xdr_stream *xdr, uint32_t *bitmap, struct timespec *time)
 {
 	int status = 0;
@@ -4689,6 +4709,11 @@ static int decode_getfattr_attrs(struct xdr_stream *xdr, uint32_t *bitmap,
 	fattr->valid |= status;
 
 	status = decode_attr_space_used(xdr, bitmap, &fattr->du.nfs3.used);
+	if (status < 0)
+		goto xdr_error;
+	fattr->valid |= status;
+
+	status = decode_attr_system(xdr, bitmap, &fattr->hsa_flags);
 	if (status < 0)
 		goto xdr_error;
 	fattr->valid |= status;
