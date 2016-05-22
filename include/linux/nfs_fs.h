@@ -127,6 +127,7 @@ struct nfs_inode {
 	 */
 
 	struct timespec		timecreate;
+	struct timespec		timebackup;
 	bool			hidden;
 	bool			system;
 	bool			archive;

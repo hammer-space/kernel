@@ -263,5 +263,6 @@ struct nfs_server {
 #define NFS_CAP_HIDDEN		(1U << 28)
 #define NFS_CAP_SYSTEM		(1U << 29)
 #define NFS_CAP_ARCHIVE		(1U << 30)
+#define NFS_CAP_TIME_BACKUP	(1U << 31)
 
 #endif
