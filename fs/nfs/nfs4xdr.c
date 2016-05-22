@@ -4183,6 +4183,24 @@ static int decode_attr_system(struct xdr_stream *xdr, uint32_t *bitmap, uint32_t
 	return 0;
 }
 
+static int decode_attr_time_backup(struct xdr_stream *xdr, uint32_t *bitmap, struct timespec *time)
+{
+	int status = 0;
+
+	time->tv_sec = 0;
+	time->tv_nsec = 0;
+	if (unlikely(bitmap[1] & (FATTR4_WORD1_TIME_BACKUP - 1U)))
+		return -EIO;
+	if (likely(bitmap[1] & FATTR4_WORD1_TIME_BACKUP)) {
+		status = decode_attr_time(xdr, time);
+		if (status == 0)
+			status = NFS_ATTR_FATTR_TIME_BACKUP;
+		bitmap[1] &= ~FATTR4_WORD1_TIME_BACKUP;
+	}
+	dprintk("%s: time_backup=%ld\n", __func__, (long)time->tv_sec);
+	return status;
+}
+
 static int decode_attr_archive(struct xdr_stream *xdr, uint32_t *bitmap, uint32_t *res)
 {
 	__be32 *p;
@@ -4744,6 +4762,11 @@ static int decode_getfattr_attrs(struct xdr_stream *xdr, uint32_t *bitmap,
 	fattr->valid |= status;
 
 	status = decode_attr_time_access(xdr, bitmap, &fattr->atime);
+	if (status < 0)
+		goto xdr_error;
+	fattr->valid |= status;
+
+	status = decode_attr_time_backup(xdr, bitmap, &fattr->time_backup);
 	if (status < 0)
 		goto xdr_error;
 	fattr->valid |= status;

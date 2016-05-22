@@ -72,6 +72,7 @@ struct nfs_fattr {
 	struct timespec		ctime;
 	struct timespec		time_create;
 	__u32			hsa_flags;	/* hidden, system, archive flags bitfield */
+	struct timespec		time_backup;
 	__u64			change_attr;	/* NFSv4 change attribute */
 	__u64			pre_change_attr;/* pre-op NFSv4 change attribute */
 	__u64			pre_size;	/* pre_op_attr.size	  */
@@ -114,6 +115,7 @@ struct nfs_fattr {
 #define NFS_ATTR_FATTR_HIDDEN           (1U << 27)
 #define NFS_ATTR_FATTR_SYSTEM           (1U << 28)
 #define NFS_ATTR_FATTR_ARCHIVE          (1U << 29)
+#define NFS_ATTR_FATTR_TIME_BACKUP      (1U << 30)
 
 #define NFS_ATTR_FATTR (NFS_ATTR_FATTR_TYPE \
 		| NFS_ATTR_FATTR_MODE \
@@ -131,6 +133,7 @@ struct nfs_fattr {
 		| NFS_ATTR_FATTR_HIDDEN \
 		| NFS_ATTR_FATTR_SYSTEM \
 		| NFS_ATTR_FATTR_ARCHIVE \
+		| NFS_ATTR_FATTR_TIME_BACKUP \
 		| NFS_ATTR_FATTR_CHANGE)
 #define NFS_ATTR_FATTR_V2 (NFS_ATTR_FATTR \
 		| NFS_ATTR_FATTR_BLOCKS_USED)

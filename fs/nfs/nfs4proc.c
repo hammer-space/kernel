@@ -209,6 +209,7 @@ const u32 nfs4_fattr_bitmap[3] = {
 	| FATTR4_WORD1_TIME_ACCESS
 	| FATTR4_WORD1_TIME_CREATE
 	| FATTR4_WORD1_SYSTEM
+	| FATTR4_WORD1_TIME_BACKUP
 	| FATTR4_WORD1_TIME_METADATA
 	| FATTR4_WORD1_TIME_MODIFY
 	| FATTR4_WORD1_MOUNTED_ON_FILEID,
@@ -3674,6 +3675,8 @@ static int _nfs4_server_capabilities(struct nfs_server *server, struct nfs_fh *f
 			server->caps |= NFS_CAP_TIME_CREATE;
 		if (res.attr_bitmask[1] & FATTR4_WORD1_SYSTEM)
 			server->caps |= NFS_CAP_SYSTEM;
+		if (res.attr_bitmask[1] & FATTR4_WORD1_TIME_BACKUP)
+			server->caps |= NFS_CAP_TIME_BACKUP;
 #ifdef CONFIG_NFS_V4_SECURITY_LABEL
 		if (res.attr_bitmask[2] & FATTR4_WORD2_SECURITY_LABEL)
 			server->caps |= NFS_CAP_SECURITY_LABEL;
