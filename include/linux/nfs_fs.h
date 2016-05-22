@@ -130,7 +130,7 @@ struct nfs_inode {
 	 */
 
 	struct timespec		timecreate;
-
+	bool			hidden;
 	/*
 	 * read_cache_jiffies is when we started read-caching this inode.
 	 * attrtimeo is for how long the cached information is assumed

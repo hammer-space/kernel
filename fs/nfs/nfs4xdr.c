@@ -4143,6 +4143,26 @@ static int decode_attr_time_create(struct xdr_stream *xdr, uint32_t *bitmap, str
 	return status;
 }
 
+static int decode_attr_hidden(struct xdr_stream *xdr, uint32_t *bitmap, uint32_t *res)
+{
+	__be32 *p;
+
+	*res = 0;
+	if (unlikely(bitmap[0] & (FATTR4_WORD0_HIDDEN - 1U)))
+		return -EIO;
+	if (likely(bitmap[0] & FATTR4_WORD0_HIDDEN)) {
+		p = xdr_inline_decode(xdr, 4);
+		if (unlikely(!p))
+			return -EIO;
+		if (be32_to_cpup(p)) {
+			*res |= NFS_HSA_HIDDEN;
+		}
+		bitmap[0] &= ~FATTR4_WORD0_HIDDEN;
+	}
+	dprintk("%s: hidden file: =%s\n", __func__, (*res & NFS_HSA_HIDDEN) == 0 ? "false" : "true");
+	return 0;
+}
+
 static int decode_attr_time_metadata(struct xdr_stream *xdr, uint32_t *bitmap, struct timespec *time)
 {
 	int status = 0;
@@ -4622,6 +4642,11 @@ static int decode_getfattr_attrs(struct xdr_stream *xdr, uint32_t *bitmap,
 		goto xdr_error;
 
 	status = decode_attr_fileid(xdr, bitmap, &fattr->fileid);
+	if (status < 0)
+		goto xdr_error;
+	fattr->valid |= status;
+
+	status = decode_attr_hidden(xdr, bitmap, &fattr->hsa_flags);
 	if (status < 0)
 		goto xdr_error;
 	fattr->valid |= status;

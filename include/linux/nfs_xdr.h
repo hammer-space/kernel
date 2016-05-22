@@ -15,6 +15,9 @@
 #define NFS_DEF_FILE_IO_SIZE	(4096U)
 #define NFS_MIN_FILE_IO_SIZE	(1024U)
 
+/* HIDDEN bitfield in hsa_flags in nfs_fattr */
+#define NFS_HSA_HIDDEN		(1U << 0)
+
 struct nfs4_string {
 	unsigned int len;
 	char *data;
@@ -66,6 +69,7 @@ struct nfs_fattr {
 	struct timespec		mtime;
 	struct timespec		ctime;
 	struct timespec		time_create;
+	__u32			hsa_flags;	/* hidden, system, archive flags bitfield */
 	__u64			change_attr;	/* NFSv4 change attribute */
 	__u64			pre_change_attr;/* pre-op NFSv4 change attribute */
 	__u64			pre_size;	/* pre_op_attr.size	  */
@@ -105,6 +109,7 @@ struct nfs_fattr {
 #define NFS_ATTR_FATTR_GROUP_NAME	(1U << 24)
 #define NFS_ATTR_FATTR_V4_SECURITY_LABEL (1U << 25)
 #define NFS_ATTR_FATTR_TIME_CREATE	(1U << 26)
+#define NFS_ATTR_FATTR_HIDDEN           (1U << 27)
 
 #define NFS_ATTR_FATTR (NFS_ATTR_FATTR_TYPE \
 		| NFS_ATTR_FATTR_MODE \
@@ -119,6 +124,7 @@ struct nfs_fattr {
 		| NFS_ATTR_FATTR_MTIME \
 		| NFS_ATTR_FATTR_CTIME \
 		| NFS_ATTR_FATTR_TIME_CREATE \
+		| NFS_ATTR_FATTR_HIDDEN \
 		| NFS_ATTR_FATTR_CHANGE)
 #define NFS_ATTR_FATTR_V2 (NFS_ATTR_FATTR \
 		| NFS_ATTR_FATTR_BLOCKS_USED)
