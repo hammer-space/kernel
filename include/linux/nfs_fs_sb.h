@@ -262,5 +262,6 @@ struct nfs_server {
 #define NFS_CAP_TIME_CREATE	(1U << 27)
 #define NFS_CAP_HIDDEN		(1U << 28)
 #define NFS_CAP_SYSTEM		(1U << 29)
+#define NFS_CAP_ARCHIVE		(1U << 30)
 
 #endif
