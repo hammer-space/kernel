@@ -128,6 +128,35 @@ nfs4_file_flush(struct file *file, fl_owner_t id)
 	return vfs_fsync(file, 0);
 }
 
+static long nfs4_ioctl_file_dates_flags(struct file *dst_file, void __user *argp)
+{
+	int ret = 0;
+	struct nfs_inode *nfsi;
+	struct nfs_ioctl_file_dates_flags_args args;
+	struct inode *dst_inode = file_inode(dst_file);
+	struct nfs_server *server = NFS_SERVER(dst_inode);
+
+	ret = nfs_revalidate_inode(server, dst_inode);
+	if (ret != 0)
+		return ret;
+
+	nfsi = NFS_I(dst_inode);
+	args.hidden = nfsi->hidden;
+	args.system = nfsi->system;
+	args.archive = nfsi->archive;
+
+	args.timebackup_seconds = nfsi->timebackup.tv_sec;
+	args.timebackup_nseconds = nfsi->timebackup.tv_nsec;
+
+	args.timecreate_seconds = nfsi->timecreate.tv_sec;
+	args.timecreate_nseconds = nfsi->timecreate.tv_nsec;
+
+	if (copy_to_user(argp, &args, sizeof(args)))
+		return -EFAULT;
+
+	return 0;
+}
+
 #ifdef CONFIG_NFS_V4_2
 static ssize_t nfs4_copy_file_range(struct file *file_in, loff_t pos_in,
 				    struct file *file_out, loff_t pos_out,
@@ -242,6 +271,19 @@ out_unlock:
 out:
 	return ret < 0 ? ret : count;
 }
+
+long nfs4_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	void __user *argp = (void __user *)arg;
+
+	switch (cmd) {
+	case NFS_IOC_FILE_DATES_FLAGS:
+		return nfs4_ioctl_file_dates_flags(file, argp);
+	}
+
+	return -ENOTTY;
+}
+
 #endif /* CONFIG_NFS_V4_2 */
 
 const struct file_operations nfs4_file_operations = {
@@ -262,6 +304,8 @@ const struct file_operations nfs4_file_operations = {
 	.copy_file_range = nfs4_copy_file_range,
 	.llseek		= nfs4_file_llseek,
 	.fallocate	= nfs42_fallocate,
+	.unlocked_ioctl	= nfs4_ioctl,
+	.compat_ioctl	= nfs4_ioctl,
 	.remap_file_range = nfs42_remap_file_range,
 #else
 	.llseek		= nfs_file_llseek,

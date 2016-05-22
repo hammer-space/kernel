@@ -35,6 +35,19 @@
 
 #define NFS_PIPE_DIRNAME "nfs"
 
+/* NFS ioctls */
+#define NFS_IOC_FILE_DATES_FLAGS	_IOR('N', 10, struct nfs_ioctl_file_dates_flags_args *)
+
+struct nfs_ioctl_file_dates_flags_args {
+	bool hidden;
+	bool system;
+	bool archive;
+	__u64 timebackup_seconds;
+	__u32 timebackup_nseconds;
+	__u64 timecreate_seconds;
+	__u32 timecreate_nseconds;
+};
+
 /*
  * NFS stats. The good thing with these values is that NFSv3 errors are
  * a superset of NFSv2 errors (with the exception of NFSERR_WFLUSH which
