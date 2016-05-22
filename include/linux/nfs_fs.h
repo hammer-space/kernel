@@ -126,6 +126,12 @@ struct nfs_inode {
 	unsigned long		cache_validity;		/* bit mask */
 
 	/*
+	 * NFS Attributes not included in struct inode
+	 */
+
+	struct timespec		timecreate;
+
+	/*
 	 * read_cache_jiffies is when we started read-caching this inode.
 	 * attrtimeo is for how long the cached information is assumed
 	 * to be valid. A successful attribute revalidation doubles
