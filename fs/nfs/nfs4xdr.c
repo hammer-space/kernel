@@ -4183,6 +4183,26 @@ static int decode_attr_system(struct xdr_stream *xdr, uint32_t *bitmap, uint32_t
 	return 0;
 }
 
+static int decode_attr_archive(struct xdr_stream *xdr, uint32_t *bitmap, uint32_t *res)
+{
+	__be32 *p;
+
+	*res = 0;
+	if (unlikely(bitmap[0] & (FATTR4_WORD0_ARCHIVE - 1U)))
+		return -EIO;
+	if (likely(bitmap[0] & FATTR4_WORD0_ARCHIVE)) {
+		p = xdr_inline_decode(xdr, 4);
+		if (unlikely(!p))
+			return -EIO;
+		if (be32_to_cpup(p)) {
+			*res |= NFS_HSA_ARCHIVE;
+		}
+		bitmap[0] &= ~FATTR4_WORD0_ARCHIVE;
+	}
+	dprintk("%s: archive file: =%s\n", __func__, (*res & NFS_HSA_ARCHIVE) == 0 ? "false" : "true");
+	return 0;
+}
+
 static int decode_attr_time_metadata(struct xdr_stream *xdr, uint32_t *bitmap, struct timespec *time)
 {
 	int status = 0;
@@ -4656,6 +4676,11 @@ static int decode_getfattr_attrs(struct xdr_stream *xdr, uint32_t *bitmap,
 	status = decode_attr_error(xdr, bitmap, &err);
 	if (status < 0)
 		goto xdr_error;
+
+	status = decode_attr_archive(xdr, bitmap, &fattr->hsa_flags);
+	if (status < 0)
+		goto xdr_error;
+	fattr->valid |= status;
 
 	status = decode_attr_filehandle(xdr, bitmap, fh);
 	if (status < 0)

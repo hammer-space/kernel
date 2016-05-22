@@ -18,6 +18,7 @@
 /* HIDDEN, SYSTEM bitfields in hsa_flags in nfs_fattr */
 #define NFS_HSA_HIDDEN		(1U << 0)
 #define NFS_HSA_SYSTEM		(1U << 1)
+#define NFS_HSA_ARCHIVE		(1U << 2)
 
 struct nfs4_string {
 	unsigned int len;
@@ -112,6 +113,7 @@ struct nfs_fattr {
 #define NFS_ATTR_FATTR_TIME_CREATE	(1U << 26)
 #define NFS_ATTR_FATTR_HIDDEN           (1U << 27)
 #define NFS_ATTR_FATTR_SYSTEM           (1U << 28)
+#define NFS_ATTR_FATTR_ARCHIVE          (1U << 29)
 
 #define NFS_ATTR_FATTR (NFS_ATTR_FATTR_TYPE \
 		| NFS_ATTR_FATTR_MODE \
@@ -128,6 +130,7 @@ struct nfs_fattr {
 		| NFS_ATTR_FATTR_TIME_CREATE \
 		| NFS_ATTR_FATTR_HIDDEN \
 		| NFS_ATTR_FATTR_SYSTEM \
+		| NFS_ATTR_FATTR_ARCHIVE \
 		| NFS_ATTR_FATTR_CHANGE)
 #define NFS_ATTR_FATTR_V2 (NFS_ATTR_FATTR \
 		| NFS_ATTR_FATTR_BLOCKS_USED)

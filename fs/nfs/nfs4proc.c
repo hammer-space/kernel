@@ -198,6 +198,7 @@ const u32 nfs4_fattr_bitmap[3] = {
 	| FATTR4_WORD0_SIZE
 	| FATTR4_WORD0_FSID
 	| FATTR4_WORD0_HIDDEN
+	| FATTR4_WORD0_ARCHIVE
 	| FATTR4_WORD0_FILEID,
 	FATTR4_WORD1_MODE
 	| FATTR4_WORD1_NUMLINKS
@@ -3653,6 +3654,8 @@ static int _nfs4_server_capabilities(struct nfs_server *server, struct nfs_fh *f
 			server->caps |= NFS_CAP_FILEID;
 		if (res.attr_bitmask[0] & FATTR4_WORD0_HIDDEN)
 			server->caps |= NFS_CAP_HIDDEN;
+		if (res.attr_bitmask[0] & FATTR4_WORD0_ARCHIVE)
+			server->caps |= NFS_CAP_ARCHIVE;
 		if (res.attr_bitmask[1] & FATTR4_WORD1_MODE)
 			server->caps |= NFS_CAP_MODE;
 		if (res.attr_bitmask[1] & FATTR4_WORD1_NUMLINKS)
