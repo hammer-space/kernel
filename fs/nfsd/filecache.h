@@ -33,6 +33,7 @@ struct nfsd_file {
 	struct list_head	nf_lru;
 	struct rcu_head		nf_rcu;
 	struct file		*nf_file;
+	const struct cred	*nf_cred;
 #define NFSD_FILE_HASHED	(0)
 #define NFSD_FILE_PENDING	(1)
 #define NFSD_FILE_BREAK_READ	(2)

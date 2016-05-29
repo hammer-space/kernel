@@ -51,6 +51,7 @@ nfsd_file_slab_free(struct rcu_head *rcu)
 {
 	struct nfsd_file *nf = container_of(rcu, struct nfsd_file, nf_rcu);
 
+	put_cred(nf->nf_cred);
 	kmem_cache_free(nfsd_file_slab, nf);
 }
 
@@ -135,6 +136,7 @@ nfsd_file_alloc(struct inode *inode, unsigned int may, unsigned int hashval)
 		INIT_HLIST_NODE(&nf->nf_node);
 		INIT_LIST_HEAD(&nf->nf_lru);
 		nf->nf_file = NULL;
+		nf->nf_cred = get_current_cred();
 		nf->nf_flags = 0;
 		nf->nf_inode = inode;
 		nf->nf_hashval = hashval;
@@ -592,6 +594,26 @@ nfsd_file_cache_shutdown(void)
 	nfsd_file_hashtbl = NULL;
 }
 
+static bool
+nfsd_match_cred(const struct cred *c1, const struct cred *c2)
+{
+	int i;
+
+	if (!uid_eq(c1->fsuid, c2->fsuid))
+		return false;
+	if (!gid_eq(c1->fsgid, c2->fsgid))
+		return false;
+	if (c1->group_info == NULL || c2->group_info == NULL)
+		return c1->group_info == c2->group_info;
+	if (c1->group_info->ngroups != c2->group_info->ngroups)
+		return false;
+	for (i = 0; i < c1->group_info->ngroups; i++) {
+		if (!gid_eq(c1->group_info->gid[i], c2->group_info->gid[i]))
+			return false;
+	}
+	return true;
+}
+
 static struct nfsd_file *
 nfsd_file_find_locked(struct inode *inode, unsigned int may_flags,
 			unsigned int hashval)
@@ -603,7 +625,11 @@ nfsd_file_find_locked(struct inode *inode, unsigned int may_flags,
 				 nf_node) {
 		if ((need & nf->nf_may) != need)
 			continue;
-		if (nf->nf_inode == inode && nfsd_file_get(nf) != NULL)
+		if (nf->nf_inode != inode)
+			continue;
+		if (!nfsd_match_cred(nf->nf_cred, current_cred()))
+			continue;
+		if (nfsd_file_get(nf) != NULL)
 			return nf;
 	}
 	return NULL;
