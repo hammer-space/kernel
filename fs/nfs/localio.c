@@ -364,23 +364,20 @@ nfs_local_file_open_cached(struct nfs_client *clp, const struct cred *cred,
 			   struct nfs_fh *fh, const fmode_t mode,
 			   struct nfs_open_context *ctx)
 {
-	struct file	*new, *filp = ctx->local_filp;
+	struct file *filp = ctx->local_filp;
 
-	if (filp) {
-		get_file(filp);
-	} else {
-		new = nfs_local_open_fh(clp, cred, fh, ctx->mode);
-		if (IS_ERR(new)) {
+	if (!filp) {
+		struct file *new = nfs_local_open_fh(clp, cred, fh, ctx->mode);
+		if (IS_ERR_OR_NULL(new))
+			return new;
+		/* try to put this one in the slot */
+		filp = cmpxchg(&ctx->local_filp, NULL, new);
+		if (filp != NULL)
+			fput(new);
+		else
 			filp = new;
-		} else {
-			/* try to put this one in the slot */
-			filp = cmpxchg(&ctx->local_filp, NULL, new);
-			if (!filp)
-				filp = new;
-			get_file(filp);
-		}
 	}
-	return filp;
+	return get_file(filp);
 }
 
 static struct file *
