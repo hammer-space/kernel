@@ -19,6 +19,8 @@
 static void
 nfsd_local_fakerqst_destroy(struct svc_rqst *rqstp)
 {
+	if (rqstp->rq_client)
+		auth_domain_put(rqstp->rq_client);
 	if (rqstp->rq_cred.cr_group_info)
 		put_group_info(rqstp->rq_cred.cr_group_info);
 	kfree(rqstp->rq_cred.cr_principal);
@@ -124,10 +126,9 @@ int nfsd_lookup_local_fh(struct rpc_clnt *rpc_clnt,
 		status = -EINVAL;
 		goto out;
 	}
+	fh_init(&fh, NFS4_FHSIZE);
 	fh.fh_handle.fh_size = nfs_fh->size;
 	memcpy(fh.fh_handle.fh_base.fh_pad, nfs_fh->data, nfs_fh->size);
-	fh.fh_dentry = NULL;
-	fh.fh_export = NULL;
 
 	if (fmode & FMODE_READ)
 		mayflags |= NFSD_MAY_READ;
@@ -141,8 +142,10 @@ int nfsd_lookup_local_fh(struct rpc_clnt *rpc_clnt,
 		goto out;
 	}
 
-	path->mnt = fh.fh_export->ex_path.mnt;
-	path->dentry = fh.fh_dentry;
+	path->mnt = mntget(fh.fh_export->ex_path.mnt);
+	path->dentry = dget(fh.fh_dentry);
+
+	fh_put(&fh);
 
 out:
 	if (rqstp && !IS_ERR(rqstp))
