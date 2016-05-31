@@ -222,6 +222,7 @@ nfs_local_open_fh(struct nfs_client *clp, const struct cred *cred,
 		  struct nfs_fh *fh, const fmode_t mode)
 {
 	struct nfs_local_lookup_ctx *ctx = &__local_lookup_ctx;
+	const struct cred *save_cred;
 	struct path path;
 	struct file *filp;
 	int flags = O_LARGEFILE;
@@ -241,15 +242,18 @@ nfs_local_open_fh(struct nfs_client *clp, const struct cred *cred,
 		return ERR_PTR(-EINVAL);
 	}
 
-	status = ctx->lookup_f(clp->cl_rpcclient, cred, fh, mode, &path);
-	if (status < 0)
-		return ERR_PTR(status);
+	/* Save creds before calling into nfsd */
+	save_cred = get_current_cred();
 
-	filp = dentry_open(&path, flags, current_cred());
-	path_put(&path);
+	status = ctx->lookup_f(clp->cl_rpcclient, cred, fh, mode, &path);
+	if (status >= 0) {
+		filp = dentry_open(&path, flags, current_cred());
+		path_put(&path);
+	} else
+		filp = ERR_PTR(status);
 
 	/* undo any changes to current credentials by nfsd */
-	revert_creds(get_cred(current_real_cred()));
+	revert_creds(save_cred);
 
 	dprintk("%s: open local file %p", __func__, filp);
 	return filp;
