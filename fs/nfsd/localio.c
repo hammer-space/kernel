@@ -38,10 +38,8 @@ nfsd_local_fakerqst_create(struct rpc_clnt *rpc_clnt, const struct cred *cred)
 	int status;
 
 	rqstp = kzalloc(sizeof(*rqstp), GFP_KERNEL);
-	if (!rqstp) {
-		status = -ENOMEM;
-		goto out_err;
-	}
+	if (!rqstp)
+		return ERR_PTR(-ENOMEM);
 
 	rqstp->rq_xprt = kzalloc(sizeof(*rqstp->rq_xprt), GFP_KERNEL);
 	if (!rqstp->rq_xprt) {
@@ -86,8 +84,7 @@ nfsd_local_fakerqst_create(struct rpc_clnt *rpc_clnt, const struct cred *cred)
 	return rqstp;
 
 out_err:
-	if (rqstp && !IS_ERR(rqstp))
-		nfsd_local_fakerqst_destroy(rqstp);
+	nfsd_local_fakerqst_destroy(rqstp);
 	return ERR_PTR(status);
 }
 
@@ -116,10 +113,8 @@ int nfsd_lookup_local_fh(struct rpc_clnt *rpc_clnt,
 	__be32 beres;
 
 	rqstp = nfsd_local_fakerqst_create(rpc_clnt, cred);
-	if (IS_ERR(rqstp)) {
-		status = PTR_ERR(rqstp);
-		goto out;
-	}
+	if (IS_ERR(rqstp))
+		return PTR_ERR(rqstp);
 
 	/* nfs_fh -> svc_fh */
 	if (nfs_fh->size > NFS4_FHSIZE) {
@@ -148,8 +143,7 @@ int nfsd_lookup_local_fh(struct rpc_clnt *rpc_clnt,
 	fh_put(&fh);
 
 out:
-	if (rqstp && !IS_ERR(rqstp))
-		nfsd_local_fakerqst_destroy(rqstp);
+	nfsd_local_fakerqst_destroy(rqstp);
 	return status;
 }
 EXPORT_SYMBOL_GPL(nfsd_lookup_local_fh);
