@@ -264,10 +264,11 @@ static int
 nfs_do_local_read(struct nfs_pgio_header *hdr, struct file *filp)
 {
 	struct inode *ino = file_inode(filp);
-	size_t bytes = 0;
-	struct page *page;
+	struct page *page, **ppage;
+	unsigned int len, pgbase;
+	unsigned int remainder = hdr->args.count;
+	unsigned int bytes = 0;
 	ssize_t status = 0;
-	size_t len, idx, pgbase;
 	loff_t pos;
 	mm_segment_t oldfs;
 
@@ -276,28 +277,37 @@ nfs_do_local_read(struct nfs_pgio_header *hdr, struct file *filp)
 	dprintk("%s: vfs_read count=%u pos=%llu\n",
 		__func__, hdr->args.count, pos);
 
+	ppage = &hdr->args.pages[hdr->args.pgbase >> PAGE_SHIFT];
+	pgbase = hdr->args.pgbase & ~PAGE_MASK;
+	hdr->res.eof = false;
+
 	oldfs = get_fs();
 	set_fs(KERNEL_DS);
-	while (bytes < hdr->args.count) {
-		idx = (hdr->args.pgbase + bytes) / PAGE_SIZE;
-		page = hdr->args.pages[idx];
-		pgbase = (idx == 0) ? hdr->args.pgbase : 0;
-		len = min(hdr->args.count - bytes, PAGE_SIZE - pgbase);
+	do {
+		page = *ppage;
+		len = min_t(unsigned int, remainder, PAGE_SIZE - pgbase);
 
 		status = vfs_read(filp, kmap(page) + pgbase, len, &pos);
 		kunmap(page);
 
-		if (status > 0)
-			bytes += status;
-		else
+		if (status != len) {
+			if (status >= 0) {
+				bytes += status;
+				hdr->res.eof = true;
+			}
 			break;
-	}
+		}
+		bytes += status;
+		remainder -= status;
+		ppage++;
+		pgbase = 0;
+	} while (remainder != 0);
 	set_fs(oldfs);
 
 	if (hdr->args.offset + bytes >= i_size_read(ino))
 		hdr->res.eof = true;
 
-	dprintk("%s: read %lu bytes eof %d.\n", __func__, bytes, hdr->res.eof);
+	dprintk("%s: read %u bytes eof %d.\n", __func__, bytes, hdr->res.eof);
 
 	/* return bytes read on partial reads */
 	if (!bytes)
@@ -315,10 +325,11 @@ nfs_set_local_verifier(struct nfs_writeverf *verf, enum nfs3_stable_how how)
 static int
 nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp)
 {
-	size_t bytes = 0;
-	struct page *page;
+	struct page *page, **ppage;
+	unsigned int len, pgbase;
+	unsigned int remainder = hdr->args.count;
+	unsigned int bytes = 0;
 	ssize_t status = 0;
-	size_t len, idx, pgbase;
 	loff_t pos;
 	mm_segment_t oldfs;
 
@@ -328,27 +339,32 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp)
 		__func__, hdr->args.count, pos,
 		(hdr->args.stable == NFS_UNSTABLE) ?  "unstable" : "stable");
 
+	ppage = &hdr->args.pages[hdr->args.pgbase >> PAGE_SHIFT];
+	pgbase = hdr->args.pgbase & ~PAGE_MASK;
+
 	oldfs = get_fs();
 	set_fs(KERNEL_DS);
-	while (bytes < hdr->args.count) {
-		idx = (hdr->args.pgbase + bytes) / PAGE_SIZE;
-		page = hdr->args.pages[idx];
-		pgbase = (idx == 0) ? hdr->args.pgbase : 0;
-		len = min(hdr->args.count - bytes, PAGE_SIZE - pgbase);
+	do {
+		page = *ppage;
+		len = min_t(unsigned int, remainder, PAGE_SIZE - pgbase);
 
 		status = vfs_write(filp, ((char __user *)kmap(page)) + pgbase,
 				   len, &pos);
 		kunmap(page);
 
-		if (status > 0)
-			bytes += status;
-		else {
+		if (status != len) {
+			if (status > 0)
+				bytes += status;
 			break;
 		}
-	}
+		bytes += status;
+		remainder -= status;
+		ppage++;
+		pgbase = 0;
+	} while (remainder != 0);
 	set_fs(oldfs);
 
-	dprintk("%s: wrote %lu bytes.\n", __func__, bytes);
+	dprintk("%s: wrote %u bytes.\n", __func__, bytes);
 
 	if (bytes > 0 && hdr->args.stable != NFS_UNSTABLE) {
 		dprintk("stable write calling commit %llu - %u\n",
