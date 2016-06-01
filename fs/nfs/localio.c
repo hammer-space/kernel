@@ -332,6 +332,9 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp)
 	ppage = &hdr->args.pages[hdr->args.pgbase >> PAGE_SHIFT];
 	pgbase = hdr->args.pgbase & ~PAGE_MASK;
 
+	/* It is always better to defer the commit */
+	hdr->args.stable = NFS_UNSTABLE;
+
 	oldfs = get_fs();
 	set_fs(KERNEL_DS);
 	do {
@@ -355,13 +358,6 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp)
 	set_fs(oldfs);
 
 	dprintk("%s: wrote %u bytes.\n", __func__, bytes);
-
-	if (bytes > 0 && hdr->args.stable != NFS_UNSTABLE) {
-		dprintk("stable write calling commit %llu - %u\n",
-			hdr->args.offset, hdr->args.count);
-		status = vfs_fsync_range(filp, hdr->args.offset,
-					 hdr->args.offset + bytes, 0);
-	}
 
 	nfs_set_local_verifier(hdr->res.verf, hdr->args.stable);
 
