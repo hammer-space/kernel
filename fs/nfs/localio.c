@@ -305,6 +305,13 @@ nfs_do_local_read(struct nfs_pgio_header *hdr, struct file *filp)
 	return bytes;
 }
 
+static void
+nfs_set_local_verifier(struct nfs_writeverf *verf, enum nfs3_stable_how how)
+{
+	memset(verf->verifier.data, 0xaa, sizeof(verf->verifier.data));
+	verf->committed = how;
+}
+
 static int
 nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp)
 {
@@ -350,8 +357,7 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp)
 					 hdr->args.offset + bytes, 0);
 	}
 
-	hdr->res.verf = &hdr->verf;
-	hdr->res.verf->committed = hdr->args.stable;
+	nfs_set_local_verifier(hdr->res.verf, hdr->args.stable);
 
 	/* return bytes written on partial writes */
 	if (!bytes)
@@ -480,9 +486,10 @@ nfs_local_commit(struct nfs_client *clp, const struct cred *cred,
 	end = data->args.count ? data->args.offset + data->args.count : -1;
 	status = vfs_fsync_range(filp, data->args.offset, end, 0);
 	fput(filp);
-	if (status >= 0)
+	if (status >= 0) {
+		nfs_set_local_verifier(data->res.verf, NFS_FILE_SYNC);
 		data->task.tk_status = 0;
-	else {
+	} else {
 		nfs_local_disable(clp);
 		data->task.tk_status = status;
 	}
