@@ -30,7 +30,6 @@ static struct svc_rqst *
 nfsd_local_fakerqst_create(struct rpc_clnt *rpc_clnt, const struct cred *cred)
 {
 	struct svc_rqst *rqstp;
-	struct sockaddr_in6 *sin6;
 	/* XXX use current->nsproxy->net_ns instead? */
 	struct net *net = rpc_net_ns(rpc_clnt);
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
@@ -52,9 +51,11 @@ nfsd_local_fakerqst_create(struct rpc_clnt *rpc_clnt, const struct cred *cred)
 	set_bit(RQ_SECURE, &rqstp->rq_flags);
 	rqstp->rq_proc = 1;	/* XXX just can't be zero! */
 	rqstp->rq_server = nn->nfsd_serv;
-	rqstp->rq_addr.ss_family = AF_INET6;
-	sin6 = (struct sockaddr_in6 *)&rqstp->rq_addr;
-	memcpy(&sin6->sin6_addr, &in6addr_loopback, sizeof(struct in6_addr));
+
+	/* Note: we're connecting to ourself, so source addr == peer addr */
+	rqstp->rq_addrlen = rpc_peeraddr(rpc_clnt,
+			(struct sockaddr *)&rqstp->rq_addr,
+			sizeof(rqstp->rq_addr));
 
 	if (!rpcauth_map_to_svc_cred(rpc_clnt->cl_auth, cred,
 				     &rqstp->rq_cred)) {
