@@ -117,7 +117,7 @@ enum nfs3_stable_how {
 	NFS_INVALID_STABLE_HOW = -1
 };
 
-typedef int (*nfs_to_nfsd_lookup_t)(struct rpc_clnt *, const struct cred *,
+typedef int (*nfs_to_nfsd_open_t)(struct rpc_clnt *, const struct cred *,
 				    const struct nfs_fh *, const fmode_t,
-				    struct path *);
+				    struct file **);
 #endif /* _LINUX_NFS_H */

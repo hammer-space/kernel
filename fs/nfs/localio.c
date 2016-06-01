@@ -34,14 +34,14 @@
  * allows some sanity checking, like giving up on localio if nfsd isn't loaded.
  */
 
-struct nfs_local_lookup_ctx {
+struct nfs_local_open_ctx {
 	spinlock_t lock;
-	nfs_to_nfsd_lookup_t lookup_f;
+	nfs_to_nfsd_open_t open_f;
 	struct module *mod;
 	atomic_t refcount;
 };
 
-static struct nfs_local_lookup_ctx __local_lookup_ctx;
+static struct nfs_local_open_ctx __local_open_ctx __read_mostly;
 
 static bool localio_enabled = false;
 module_param(localio_enabled, bool, 0644);
@@ -56,9 +56,9 @@ EXPORT_SYMBOL_GPL(nfs_server_is_local);
 void
 nfs_local_init(void)
 {
-	struct nfs_local_lookup_ctx *ctx = &__local_lookup_ctx;
+	struct nfs_local_open_ctx *ctx = &__local_open_ctx;
 
-	ctx->lookup_f = NULL;
+	ctx->open_f = NULL;
 	ctx->mod = NULL;
 	spin_lock_init(&ctx->lock);
 	atomic_set(&ctx->refcount, 0);
@@ -67,7 +67,7 @@ nfs_local_init(void)
 static bool
 nfs_local_get_lookup_ctx(void)
 {
-	struct nfs_local_lookup_ctx *ctx = &__local_lookup_ctx;
+	struct nfs_local_open_ctx *ctx = &__local_open_ctx;
 	const s32 *crc = NULL;
 	struct module *mod;
 	const struct kernel_symbol *sym;
@@ -75,7 +75,7 @@ nfs_local_get_lookup_ctx(void)
 	atomic_inc(&ctx->refcount);
 
 	spin_lock(&ctx->lock);
-	if (ctx->lookup_f == NULL) {
+	if (ctx->open_f == NULL) {
 		spin_unlock(&ctx->lock);
 
 		mutex_lock(&module_mutex);
@@ -84,7 +84,7 @@ nfs_local_get_lookup_ctx(void)
 			mutex_unlock(&module_mutex);
 			goto out_bad;
 		}
-		sym = find_symbol("nfsd_lookup_local_fh", &ctx->mod, &crc,
+		sym = find_symbol("nfsd_open_local_fh", &ctx->mod, &crc,
 				  true, true);
 		mutex_unlock(&module_mutex);
 		if (!sym)
@@ -95,10 +95,10 @@ nfs_local_get_lookup_ctx(void)
 		spin_lock(&ctx->lock);
 
 		/* catch race */
-		if (ctx->lookup_f != NULL)
+		if (ctx->open_f != NULL)
 			goto out_bad_unlock;
 
-		ctx->lookup_f = (nfs_to_nfsd_lookup_t) kernel_symbol_value(sym);
+		ctx->open_f = (nfs_to_nfsd_open_t) kernel_symbol_value(sym);
 		ctx->mod = mod;
 	}
 	spin_unlock(&ctx->lock);
@@ -117,11 +117,11 @@ out_bad:
 static void
 nfs_local_put_lookup_ctx(void)
 {
-	struct nfs_local_lookup_ctx *ctx = &__local_lookup_ctx;
+	struct nfs_local_open_ctx *ctx = &__local_open_ctx;
 	struct module *mod;
 
 	if (atomic_dec_and_lock(&ctx->refcount, &ctx->lock)) {
-		ctx->lookup_f = NULL;
+		ctx->open_f = NULL;
 		mod = ctx->mod;
 		ctx->mod = NULL;
 		spin_unlock(&ctx->lock);
@@ -221,9 +221,7 @@ struct file *
 nfs_local_open_fh(struct nfs_client *clp, const struct cred *cred,
 		  struct nfs_fh *fh, const fmode_t mode)
 {
-	struct nfs_local_lookup_ctx *ctx = &__local_lookup_ctx;
-	const struct cred *save_cred;
-	struct path path;
+	struct nfs_local_open_ctx *ctx = &__local_open_ctx;
 	struct file *filp;
 	int flags = O_LARGEFILE;
 	int status;
@@ -242,18 +240,10 @@ nfs_local_open_fh(struct nfs_client *clp, const struct cred *cred,
 		return ERR_PTR(-EINVAL);
 	}
 
-	/* Save creds before calling into nfsd */
-	save_cred = get_current_cred();
-
-	status = ctx->lookup_f(clp->cl_rpcclient, cred, fh, mode, &path);
-	if (status >= 0) {
-		filp = dentry_open(&path, flags, current_cred());
-		path_put(&path);
-	} else
+	status = ctx->open_f(clp->cl_rpcclient, cred, fh, mode, &filp);
+	if (status < 0)
 		filp = ERR_PTR(status);
 
-	/* undo any changes to current credentials by nfsd */
-	revert_creds(save_cred);
 
 	dprintk("%s: open local file %p", __func__, filp);
 	return filp;

@@ -13,6 +13,7 @@
 #include "nfsd.h"
 #include "vfs.h"
 #include "netns.h"
+#include "filecache.h"
 
 #define NFSDDBG_FACILITY		NFSDDBG_FH
 
@@ -89,7 +90,7 @@ out_err:
 }
 
 /*
- * nfsd_lookup_local_fh - lookup a local filehandle @nfs_fh and map to @path
+ * nfsd_open_local_fh - lookup a local filehandle @nfs_fh and map to @file
  *
  * This function maps a local fh to a path on a local filesystem.
  * This is useful when the nfs client has the local server mounted - it can
@@ -100,21 +101,28 @@ out_err:
  * dependency on knfsd. So, there is no forward declaration in a header file
  * for it.
  */
-int nfsd_lookup_local_fh(struct rpc_clnt *rpc_clnt,
+int nfsd_open_local_fh(struct rpc_clnt *rpc_clnt,
 			 const struct cred *cred,
 			 const struct nfs_fh *nfs_fh,
 			 const fmode_t fmode,
-			 struct path *path)
+			 struct file **pfilp)
 {
+	const struct cred *save_cred;
 	struct svc_rqst *rqstp;
 	struct svc_fh fh;
+	struct nfsd_file *nf;
 	int status = 0;
 	int mayflags = 0;
 	__be32 beres;
 
+	/* Save creds before calling into nfsd */
+	save_cred = get_current_cred();
+
 	rqstp = nfsd_local_fakerqst_create(rpc_clnt, cred);
-	if (IS_ERR(rqstp))
-		return PTR_ERR(rqstp);
+	if (IS_ERR(rqstp)) {
+		status = PTR_ERR(rqstp);
+		goto out_revertcred;
+	}
 
 	/* nfs_fh -> svc_fh */
 	if (nfs_fh->size > NFS4_FHSIZE) {
@@ -130,23 +138,26 @@ int nfsd_lookup_local_fh(struct rpc_clnt *rpc_clnt,
 	if (fmode & FMODE_WRITE)
 		mayflags |= NFSD_MAY_WRITE;
 
-	beres = fh_verify(rqstp, &fh, 0, mayflags);
+	beres = nfsd_file_acquire(rqstp, &fh, mayflags, &nf);
 	if (beres) {
 		status = nfs_stat_to_errno(be32_to_cpu(beres));
 		dprintk("%s: fh_verify failed %d\n", __func__, status);
-		goto out;
+		goto out_fh_put;
 	}
 
-	path->mnt = mntget(fh.fh_export->ex_path.mnt);
-	path->dentry = dget(fh.fh_dentry);
+	*pfilp = get_file(nf->nf_file);
 
+	nfsd_file_put(nf);
+out_fh_put:
 	fh_put(&fh);
 
 out:
 	nfsd_local_fakerqst_destroy(rqstp);
+out_revertcred:
+	revert_creds(save_cred);
 	return status;
 }
-EXPORT_SYMBOL_GPL(nfsd_lookup_local_fh);
+EXPORT_SYMBOL_GPL(nfsd_open_local_fh);
 
 /* Compile time type checking, not used by anything */
-static nfs_to_nfsd_lookup_t __maybe_unused nfsd_lookup_local_fh_typecheck = nfsd_lookup_local_fh;
+static nfs_to_nfsd_open_t __maybe_unused nfsd_open_local_fh_typecheck = nfsd_open_local_fh;
