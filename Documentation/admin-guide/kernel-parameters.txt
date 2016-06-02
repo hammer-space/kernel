@@ -2832,6 +2832,16 @@
 			driver. A non-zero value sets the minimum interval
 			in seconds between layoutstats transmissions.
 
+	nfsd.commit_is_datasync=
+			[NFS] commit uses datasync
+			If true, the NFS server will translate COMMIT into a
+			fdatasync() operation.
+			This may enhance performance, but in the case of
+			a kernel crash, it could cause the loss of c/mtime
+			and NFSv4 change attribute updates that are due to
+			WRITEs. Data integrity is guaranteed, however.
+			The default setting is off.
+
 	nfsd.nfs4_disable_idmapping=
 			[NFSv4] When set to the default of '1', the NFSv4
 			server will return only numeric uids and gids to

@@ -50,6 +50,10 @@
 
 #define NFSDDBG_FACILITY		NFSDDBG_FILEOP
 
+static bool commit_is_datasync __read_mostly;
+module_param(commit_is_datasync, bool, 0644);
+
+
 /* 
  * Called from nfsd_lookup and encode_dirent. Check if we have crossed 
  * a mount point.
@@ -977,7 +981,7 @@ static int wait_for_concurrent_writes(struct file *file)
 
 	if (inode->i_state & I_DIRTY) {
 		dprintk("nfsd: write sync %d\n", task_pid_nr(current));
-		err = vfs_fsync(file, 0);
+		err = vfs_fsync(file, commit_is_datasync);
 	}
 	last_ino = inode->i_ino;
 	last_dev = inode->i_sb->s_dev;
@@ -1146,7 +1150,8 @@ try_again:
 	if (err)
 		goto out;
 	if (EX_ISSYNC(fhp->fh_export)) {
-		int err2 = vfs_fsync_range(nf->nf_file, offset, end, 0);
+		int err2 = vfs_fsync_range(nf->nf_file, offset, end,
+				commit_is_datasync);
 
 		if (!retry && nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err)) {
 			nfsd_file_put(nf);
