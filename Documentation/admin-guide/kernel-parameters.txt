@@ -2764,7 +2764,7 @@
 			if so, it will send READ and WRITE requests through
 			the VFS read() and write() calls directly to the
 			underlying filesystem.
-			The default setting is off.
+			The default setting is on.
 
 	nfs.max_session_slots=
 			[NFSv4.1] Sets the maximum number of session slots
