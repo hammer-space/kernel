@@ -43,7 +43,7 @@ struct nfs_local_open_ctx {
 
 static struct nfs_local_open_ctx __local_open_ctx __read_mostly;
 
-static bool localio_enabled = false;
+static bool localio_enabled __read_mostly = true;
 module_param(localio_enabled, bool, 0644);
 
 bool nfs_server_is_local(const struct nfs_client *clp)
