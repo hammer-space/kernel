@@ -312,6 +312,28 @@ nfs_set_local_verifier(struct nfs_writeverf *verf, enum nfs3_stable_how how)
 	verf->committed = how;
 }
 
+static void
+nfs_get_vfs_attr(struct file *filp, struct nfs_fattr *fattr)
+{
+	struct kstat stat;
+
+	if (fattr != NULL && vfs_getattr(&filp->f_path, &stat,
+					 STATX_ATIME | STATX_MTIME | STATX_CTIME | STATX_SIZE,
+					 AT_STATX_SYNC_AS_STAT) == 0) {
+		fattr->valid = NFS_ATTR_FATTR_CHANGE | NFS_ATTR_FATTR_SIZE |
+			NFS_ATTR_FATTR_ATIME | NFS_ATTR_FATTR_MTIME |
+			NFS_ATTR_FATTR_CTIME;
+		fattr->size = stat.size;
+		fattr->atime.tv_sec = stat.atime.tv_sec;
+		fattr->atime.tv_nsec = stat.atime.tv_nsec;
+		fattr->mtime.tv_sec = stat.mtime.tv_sec;
+		fattr->mtime.tv_nsec = stat.mtime.tv_nsec;
+		fattr->ctime.tv_sec = stat.ctime.tv_sec;
+		fattr->ctime.tv_nsec = stat.ctime.tv_nsec;
+		fattr->change_attr = nfs_timespec_to_change_attr(&fattr->ctime);
+	}
+}
+
 static int
 nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp)
 {
@@ -360,6 +382,7 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp)
 	dprintk("%s: wrote %u bytes.\n", __func__, bytes);
 
 	nfs_set_local_verifier(hdr->res.verf, hdr->args.stable);
+	nfs_get_vfs_attr(filp, hdr->res.fattr);
 
 	/* return bytes written on partial writes */
 	if (!bytes)
