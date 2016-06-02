@@ -46,6 +46,9 @@ static struct nfs_local_open_ctx __local_open_ctx __read_mostly;
 static bool localio_enabled __read_mostly = true;
 module_param(localio_enabled, bool, 0644);
 
+static bool localio_datasync __read_mostly;
+module_param(localio_datasync, bool, 0644);
+
 bool nfs_server_is_local(const struct nfs_client *clp)
 {
 	return test_bit(NFS_CS_LOCAL_IO, &clp->cl_flags) != 0 &&
@@ -509,7 +512,7 @@ nfs_local_commit(struct nfs_client *clp, const struct cred *cred,
 		data->args.offset, data->args.count);
 
 	end = data->args.count ? data->args.offset + data->args.count : -1;
-	status = vfs_fsync_range(filp, data->args.offset, end, 0);
+	status = vfs_fsync_range(filp, data->args.offset, end, localio_datasync);
 	fput(filp);
 	if (status >= 0) {
 		nfs_set_local_verifier(data->res.verf, NFS_FILE_SYNC);

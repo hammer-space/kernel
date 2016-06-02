@@ -2757,6 +2757,17 @@
 			callbacks the client will process in parallel for
 			a particular server.
 
+	nfs.localio_datasync=
+			[NFS] localio uses datasync
+			If true, the NFS client will translate COMMIT into a
+			fdatasync() operation when bypassing the server and
+			doing I/O directly to the underlying filesystem.
+			This may enhance performance, but in the case of
+			a kernel crash, it could cause the loss of c/mtime
+			and NFSv4 change attribute updates that are due to
+			WRITEs. Data integrity is guaranteed, however.
+			The default setting is off.
+
 	nfs.localio_enabled=
 			[NFS] enable localio
 			If true, the NFS client will check if the NFS server
