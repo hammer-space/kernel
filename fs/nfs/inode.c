@@ -1932,7 +1932,7 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 	}
 
 	if (fattr->valid & NFS_ATTR_FATTR_HIDDEN) {
-		nfsi->hidden = (fattr->hsa_flags | NFS_HSA_HIDDEN) != 0;
+		nfsi->hidden = (fattr->hsa_flags & NFS_HSA_HIDDEN) != 0;
 	} else if (server->caps & NFS_CAP_HIDDEN) {
 		nfsi->cache_validity |= save_cache_validity &
 				(NFS_INO_INVALID_ATTR
@@ -1941,7 +1941,7 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 	}
 
 	if (fattr->valid & NFS_ATTR_FATTR_SYSTEM) {
-		nfsi->system = (fattr->hsa_flags | NFS_HSA_SYSTEM) != 0;
+		nfsi->system = (fattr->hsa_flags & NFS_HSA_SYSTEM) != 0;
 	} else if (server->caps & NFS_CAP_SYSTEM) {
 		nfsi->cache_validity |= save_cache_validity &
 				(NFS_INO_INVALID_ATTR
@@ -1950,7 +1950,7 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 	}
 
 	if (fattr->valid & NFS_ATTR_FATTR_ARCHIVE) {
-		nfsi->archive = (fattr->hsa_flags | NFS_HSA_ARCHIVE) != 0;
+		nfsi->archive = (fattr->hsa_flags & NFS_HSA_ARCHIVE) != 0;
 	} else if (server->caps & NFS_CAP_ARCHIVE) {
 		nfsi->cache_validity |= save_cache_validity &
 				(NFS_INO_INVALID_ATTR
