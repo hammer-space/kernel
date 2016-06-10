@@ -68,6 +68,7 @@ struct svc_xprt {
 #define XPT_LOCAL	12		/* connection from loopback interface */
 #define XPT_KILL_TEMP   13		/* call xpo_kill_temp_xprt before closing */
 #define XPT_CONG_CTRL	14		/* has congestion control */
+#define XPT_RESCUE	15		/* rescue thread allocated */
 
 	struct svc_serv		*xpt_server;	/* service for transport */
 	atomic_t    	    	xpt_reserved;	/* space on outq that is rsvd */

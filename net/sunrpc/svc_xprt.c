@@ -361,7 +361,8 @@ static void svc_xprt_release_slot(struct svc_rqst *rqstp)
 {
 	struct svc_xprt	*xprt = rqstp->rq_xprt;
 	if (test_and_clear_bit(RQ_DATA, &rqstp->rq_flags)) {
-		atomic_dec(&xprt->xpt_inflight);
+		if (atomic_dec_and_test(&xprt->xpt_inflight))
+			clear_bit(XPT_RESCUE, &xprt->xpt_flags);
 		smp_wmb(); /* See smp_rmb() in svc_xprt_ready() */
 		svc_xprt_enqueue(xprt);
 	}
@@ -448,7 +449,8 @@ void svc_xprt_do_enqueue(struct svc_xprt *xprt)
 	 */
 	if (serv->sv_pool_mgr &&
 	    atomic_read(&xprt->xpt_inflight) == 0 &&
-	    !list_empty(&pool->sp_all_threads)) {
+	    !list_empty(&pool->sp_all_threads) &&
+	    !test_and_set_bit(XPT_RESCUE, &xprt->xpt_flags)) {
 		dprintk("%s: try to wake up pool manager %d\n",
 			__func__, serv->sv_nrthreads);
 
