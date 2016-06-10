@@ -334,8 +334,14 @@ EXPORT_SYMBOL_GPL(svc_print_addr);
 
 static bool svc_xprt_slots_in_range(struct svc_xprt *xprt)
 {
+	struct svc_serv *server = xprt->xpt_server;
 	unsigned int limit = svc_rpc_per_connection_limit;
-	int nrqsts = atomic_read(&xprt->xpt_nr_rqsts);
+	int nrqsts = atomic_read(&xprt->xpt_inflight);
+
+	if (limit == 0)
+		limit = server->sv_max_inflight;
+	else if (server->sv_max_inflight != 0)
+		limit = min(limit, server->sv_max_inflight);
 
 	return limit == 0 || (nrqsts >= 0 && nrqsts < limit);
 }
@@ -345,7 +351,7 @@ static bool svc_xprt_reserve_slot(struct svc_rqst *rqstp, struct svc_xprt *xprt)
 	if (!test_bit(RQ_DATA, &rqstp->rq_flags)) {
 		if (!svc_xprt_slots_in_range(xprt))
 			return false;
-		atomic_inc(&xprt->xpt_nr_rqsts);
+		atomic_inc(&xprt->xpt_inflight);
 		set_bit(RQ_DATA, &rqstp->rq_flags);
 	}
 	return true;
@@ -355,7 +361,7 @@ static void svc_xprt_release_slot(struct svc_rqst *rqstp)
 {
 	struct svc_xprt	*xprt = rqstp->rq_xprt;
 	if (test_and_clear_bit(RQ_DATA, &rqstp->rq_flags)) {
-		atomic_dec(&xprt->xpt_nr_rqsts);
+		atomic_dec(&xprt->xpt_inflight);
 		smp_wmb(); /* See smp_rmb() in svc_xprt_ready() */
 		svc_xprt_enqueue(xprt);
 	}
@@ -480,7 +486,7 @@ EXPORT_SYMBOL_GPL(svc_xprt_enqueue);
 static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool)
 {
 	struct svc_xprt	*xprt, *found = NULL;
-	int inflight, max_inflight;
+	int inflight;
 	int prev_inflight = INT_MAX;
 
 	if (list_empty(&pool->sp_sockets))
@@ -497,12 +503,11 @@ static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool)
 			}
 
 			/* Enforce per-xprt concurrent RPC limits */
-			inflight = atomic_read(&xprt->xpt_inflight);
-			max_inflight = xprt->xpt_server->sv_max_inflight;
-			if (max_inflight && inflight >= max_inflight)
+			if (!svc_xprt_slots_in_range(xprt))
 				continue;
 
 			/* Next prefer xprts with fewer inflight RPCs */
+			inflight = atomic_read(&xprt->xpt_inflight);
 			if (inflight >= prev_inflight)
 				continue;
 
@@ -514,7 +519,6 @@ static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool)
 		if (found) {
 			list_del_init(&found->xpt_ready);
 			svc_xprt_get(found);
-			atomic_inc(&found->xpt_inflight);
 		}
 	}
 	spin_unlock_bh(&pool->sp_lock);
