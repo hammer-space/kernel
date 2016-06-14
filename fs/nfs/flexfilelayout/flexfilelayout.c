@@ -1519,7 +1519,7 @@ static int ff_layout_write_done_cb(struct rpc_task *task,
 
 	trace_nfs4_pnfs_write(hdr, task->tk_status);
 	if (task->tk_status < 0) {
-		trace_ff_layout_read_done_error(hdr->ds_clp,
+		trace_ff_layout_write_done_error(hdr->ds_clp,
 						hdr->args.fh,
 						hdr->inode,
 						&hdr->args.stateid,
