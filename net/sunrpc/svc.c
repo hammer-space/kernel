@@ -810,6 +810,8 @@ found_pool:
 		set_bit(RQ_VICTIM, &rqstp->rq_flags);
 		list_del_rcu(&rqstp->rq_all);
 		task = rqstp->rq_task;
+		if (task)
+			get_task_struct(task);
 	}
 	spin_unlock_bh(&pool->sp_lock);
 
@@ -869,6 +871,7 @@ svc_signal_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 		if (task == NULL)
 			break;
 		send_sig(SIGINT, task, 1);
+		put_task_struct(task);
 		nrservs++;
 	} while (nrservs < 0);
 
