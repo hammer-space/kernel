@@ -201,7 +201,7 @@ int nfsd_nrthreads(struct net *net)
 
 	mutex_lock(&nfsd_mutex);
 	if (nn->nfsd_serv)
-		rv = nn->nfsd_serv->sv_nrthreads - nn->nfsd_serv->sv_tmpthreads;
+		rv = svc_get_num_threads(nn->nfsd_serv, NULL);
 	mutex_unlock(&nfsd_mutex);
 	return rv;
 }
@@ -567,10 +567,12 @@ int nfsd_get_nrthreads(int n, int *nthreads, struct net *net)
 {
 	int i = 0;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	struct svc_serv *serv = nn->nfsd_serv;
+	struct svc_pool *pool = &serv->sv_pools[0];
 
 	if (nn->nfsd_serv != NULL) {
-		for (i = 0; i < nn->nfsd_serv->sv_nrpools && i < n; i++)
-			nthreads[i] = nn->nfsd_serv->sv_pools[i].sp_nrthreads;
+		for (i = 0; i < serv->sv_nrpools && i < n; i++)
+			nthreads[i] = svc_get_num_threads(serv, &pool[i]);
 	}
 
 	return 0;
@@ -680,7 +682,7 @@ nfsd_svc(int nrservs, struct net *net)
 	 * we don't want to count in the return value,
 	 * so subtract 1
 	 */
-	error = nn->nfsd_serv->sv_nrthreads - nn->nfsd_serv->sv_tmpthreads - 1;
+	error = svc_get_num_threads(nn->nfsd_serv, NULL) - 1;
 out_shutdown:
 	if (error < 0 && !nfsd_up_before)
 		nfsd_shutdown_net(net);

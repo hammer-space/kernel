@@ -882,6 +882,44 @@ svc_signal_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 	return 0;
 }
 
+static int
+svc_pool_count_threads(struct svc_pool *pool)
+{
+	int ret;
+
+	spin_lock_bh(&pool->sp_lock);
+	ret = pool->sp_nrthreads - pool->sp_tmpthreads;
+	spin_unlock_bh(&pool->sp_lock);
+	return ret;
+}
+
+static int
+svc_serv_count_threads(struct svc_serv *serv)
+{
+	int i, ret = 0;
+
+	for (i = 0; i < serv->sv_nrpools; i++)
+		ret += svc_pool_count_threads(&serv->sv_pools[i]);
+	return ret;
+}
+
+/*
+ * Count the number of threads, excluding emergency threads.
+ * If `pool' is non-NULL, applies only to threads in that pool.
+ *
+ * The caller is expected to ensure exclusion between this and server
+ * startup or shutdown.
+ */
+int
+svc_get_num_threads(struct svc_serv *serv, struct svc_pool *pool)
+{
+
+	if (pool != NULL)
+		return svc_pool_count_threads(pool);
+	return svc_serv_count_threads(serv);
+}
+EXPORT_SYMBOL_GPL(svc_get_num_threads);
+
 /*
  * Create or destroy enough new threads to make the number
  * of threads the given number.  If `pool' is non-NULL, applies
@@ -899,16 +937,7 @@ svc_signal_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 int
 svc_set_num_threads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 {
-	if (pool == NULL) {
-		/* The -1 assumes caller has done a svc_get() */
-		nrservs += serv->sv_tmpthreads;
-		nrservs -= (serv->sv_nrthreads-1);
-	} else {
-		spin_lock_bh(&pool->sp_lock);
-		nrservs += pool->sp_tmpthreads;
-		nrservs -= pool->sp_nrthreads;
-		spin_unlock_bh(&pool->sp_lock);
-	}
+	nrservs -= svc_get_num_threads(serv, pool);
 
 	if (nrservs > 0)
 		return svc_start_kthreads(serv, pool, nrservs);
@@ -939,14 +968,7 @@ svc_stop_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 int
 svc_set_num_threads_sync(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 {
-	if (pool == NULL) {
-		/* The -1 assumes caller has done a svc_get() */
-		nrservs -= (serv->sv_nrthreads-1);
-	} else {
-		spin_lock_bh(&pool->sp_lock);
-		nrservs -= pool->sp_nrthreads;
-		spin_unlock_bh(&pool->sp_lock);
-	}
+	nrservs -= svc_get_num_threads(serv, pool);
 
 	if (nrservs > 0)
 		return svc_start_kthreads(serv, pool, nrservs);
