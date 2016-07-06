@@ -32,7 +32,7 @@
 #define NFSDDBG_FACILITY	NFSDDBG_SVC
 
 extern struct svc_program	nfsd_program;
-static int			nfsd(void *vrqstp, bool);
+static int			nfsd(void *vrqstp);
 
 /*
  * nfsd_mutex protects nn->nfsd_serv -- both the pointer itself and the members
@@ -494,22 +494,10 @@ static int nfsd_get_default_max_blksize(void)
 	return ret;
 }
 
-static int
-nfsd_svc_func(void *vrqstp)
-{
-	return nfsd(vrqstp, false);
-}
-
-static int
-nfsd_run_once(void *vrqstp)
-{
-	return nfsd(vrqstp, true);
-}
-
 static const struct svc_serv_ops nfsd_thread_sv_ops = {
 	.svo_shutdown		= nfsd_last_thread,
-	.svo_function		= nfsd_svc_func,
-	.svo_run_once		= nfsd_run_once,
+	.svo_function		= nfsd,
+	.svo_run_once		= nfsd,
 	.svo_enqueue_xprt	= svc_xprt_do_enqueue,
 	.svo_setup		= svc_set_num_threads,
 	.svo_module		= THIS_MODULE,
@@ -698,7 +686,7 @@ out:
  * This is the NFS server kernel thread
  */
 static int
-nfsd(void *vrqstp, bool run_once)
+nfsd(void *vrqstp)
 {
 	struct svc_rqst *rqstp = (struct svc_rqst *) vrqstp;
 	struct svc_xprt *perm_sock = list_entry(rqstp->rq_server->sv_permsocks.next, typeof(struct svc_xprt), xpt_list);
