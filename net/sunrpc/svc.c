@@ -791,7 +791,7 @@ choose_victim(struct svc_serv *serv, struct svc_pool *pool, unsigned int *state)
 		for (i = 0; i < serv->sv_nrpools; i++) {
 			pool = &serv->sv_pools[--(*state) % serv->sv_nrpools];
 			spin_lock_bh(&pool->sp_lock);
-			if (!list_empty(&pool->sp_all_threads))
+			if (pool->sp_nrthreads != pool->sp_tmpthreads)
 				goto found_pool;
 			spin_unlock_bh(&pool->sp_lock);
 		}
@@ -806,12 +806,16 @@ found_pool:
 		 * Remove from the pool->sp_all_threads list
 		 * so we don't try to kill it again.
 		 */
-		rqstp = list_entry(pool->sp_all_threads.next, struct svc_rqst, rq_all);
-		set_bit(RQ_VICTIM, &rqstp->rq_flags);
-		list_del_rcu(&rqstp->rq_all);
-		task = rqstp->rq_task;
-		if (task)
+		list_for_each_entry_rcu(rqstp, &pool->sp_all_threads, rq_all) {
+			if (test_bit(RQ_RUNONCE, &rqstp->rq_flags))
+				continue;
+			task = rqstp->rq_task;
+			if (!task)
+				continue;
+			set_bit(RQ_VICTIM, &rqstp->rq_flags);
+			list_del_rcu(&rqstp->rq_all);
 			get_task_struct(task);
+		}
 	}
 	spin_unlock_bh(&pool->sp_lock);
 
