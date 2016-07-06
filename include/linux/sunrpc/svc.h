@@ -95,7 +95,6 @@ struct svc_serv {
 	atomic_t		sv_new_threads;	/* # of threads to be created by
 						 * the pool manager thread */
 	unsigned int		sv_nrthreads;	/* # of server threads */
-	unsigned int		sv_tmpthreads;	/* # of temporary threads */
 	unsigned int		sv_maxconn;	/* max connections allowed or
 						 * '0' causing max to be based
 						 * on number of threads. */

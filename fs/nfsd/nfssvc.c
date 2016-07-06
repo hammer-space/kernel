@@ -761,9 +761,6 @@ nfsd(void *vrqstp, bool run_once)
 	nfsdstats.th_cnt --;
 
 out:
-	/* Yes, nfsd() really _is_ the devil */
-	if (test_bit(RQ_RUNONCE, &rqstp->rq_flags))
-		rqstp->rq_server->sv_tmpthreads--;
 	rqstp->rq_server = NULL;
 
 	/* Release the thread */

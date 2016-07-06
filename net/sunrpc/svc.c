@@ -742,14 +742,12 @@ __svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node,
 	if (!rqstp)
 		return ERR_PTR(-ENOMEM);
 
-	if (istmp) {
-		serv->sv_tmpthreads++;
-		__set_bit(RQ_RUNONCE, &rqstp->rq_flags);
-	}
 	serv->sv_nrthreads++;
 	spin_lock_bh(&pool->sp_lock);
-	if (istmp)
+	if (istmp) {
+		__set_bit(RQ_RUNONCE, &rqstp->rq_flags);
 		pool->sp_tmpthreads++;
+	}
 	pool->sp_nrthreads++;
 	list_add_rcu(&rqstp->rq_all, &pool->sp_all_threads);
 	spin_unlock_bh(&pool->sp_lock);
@@ -1001,11 +999,8 @@ svc_exit_thread(struct svc_rqst *rqstp)
 
 	spin_lock_bh(&pool->sp_lock);
 	pool->sp_nrthreads--;
-	if (test_bit(RQ_RUNONCE, &rqstp->rq_flags)) {
+	if (test_bit(RQ_RUNONCE, &rqstp->rq_flags))
 		pool->sp_tmpthreads--;
-		if (serv)
-			serv->sv_tmpthreads--;
-	}
 	if (!test_and_set_bit(RQ_VICTIM, &rqstp->rq_flags))
 		list_del_rcu(&rqstp->rq_all);
 	spin_unlock_bh(&pool->sp_lock);
