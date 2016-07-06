@@ -702,7 +702,6 @@ nfsd(void *vrqstp, bool run_once)
 	struct svc_xprt *perm_sock = list_entry(rqstp->rq_server->sv_permsocks.next, typeof(struct svc_xprt), xpt_list);
 	struct net *net = perm_sock->xpt_net;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
-	long timeout;
 	int err;
 
 	/* Lock module and set up kernel thread */
@@ -739,16 +738,13 @@ nfsd(void *vrqstp, bool run_once)
 		/* Update sv_maxconn if it has changed */
 		rqstp->rq_server->sv_maxconn = nn->max_connections;
 		rqstp->rq_server->sv_max_inflight = nfsd_max_rpcs_per_clnt;
-		timeout = run_once ? 10*HZ : 60*60*HZ;
 
 		/*
 		 * Find a socket with data available and call its
 		 * recvfrom routine.
 		 */
-		while ((err = svc_recv(rqstp, timeout)) == -EAGAIN) {
-			if (run_once)
-				goto stop_svc;
-		}
+		while ((err = svc_recv(rqstp, 60*60*HZ)) == -EAGAIN)
+			;
 		if (err == -EINTR)
 			break;
 		validate_process_creds();
@@ -756,7 +752,6 @@ nfsd(void *vrqstp, bool run_once)
 		validate_process_creds();
 	}
 
-stop_svc:
 	/* Clear signals before calling svc_exit_thread() */
 	flush_signals(current);
 
