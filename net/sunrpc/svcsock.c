@@ -536,7 +536,8 @@ static int svc_udp_recvfrom(struct svc_rqst *rqstp)
 	size_t len;
 	int err;
 
-	if (test_and_clear_bit(XPT_CHNGBUF, &svsk->sk_xprt.xpt_flags))
+	if (test_and_clear_bit(XPT_CHNGBUF, &svsk->sk_xprt.xpt_flags)) {
+		int nthreads = svc_get_num_threads(serv, NULL);
 	    /* udp sockets need large rcvbuf as all pending
 	     * requests are still in that buffer.  sndbuf must
 	     * also be large enough that there is enough space
@@ -545,9 +546,10 @@ static int svc_udp_recvfrom(struct svc_rqst *rqstp)
 	     * provides an upper bound on the number of threads
 	     * which will access the socket.
 	     */
-	    svc_sock_setbufsize(svsk->sk_sock,
-				(serv->sv_nrthreads+3) * serv->sv_max_mesg,
-				(serv->sv_nrthreads+3) * serv->sv_max_mesg);
+		svc_sock_setbufsize(svsk->sk_sock,
+				(nthreads+3) * serv->sv_max_mesg,
+				(nthreads+3) * serv->sv_max_mesg);
+	}
 
 	clear_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
 	skb = NULL;
