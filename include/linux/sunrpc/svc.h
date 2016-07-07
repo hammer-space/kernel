@@ -109,6 +109,7 @@ struct svc_serv {
 
 	char *			sv_name;	/* service name */
 
+	struct mutex		sv_pool_mutex;	/* Protect thread create/destroy */
 	unsigned int		sv_nrpools;	/* number of thread pools */
 	struct svc_pool *	sv_pools;	/* array of thread pools */
 	struct task_struct	*sv_pool_mgr;	/* pool manager thread */
