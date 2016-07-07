@@ -436,7 +436,7 @@ __svc_create(struct svc_program *prog, unsigned int bufsize, int npools,
 		return NULL;
 	serv->sv_name      = prog->pg_name;
 	serv->sv_program   = prog;
-	serv->sv_nrthreads = 1;
+	atomic_set(&serv->sv_refcount, 1);
 	serv->sv_stats     = prog->pg_stats;
 	if (bufsize > RPCSVC_MAXPAYLOAD)
 		bufsize = RPCSVC_MAXPAYLOAD;
@@ -618,22 +618,19 @@ EXPORT_SYMBOL_GPL(svc_shutdown_net);
 
 /*
  * Destroy an RPC service. Should be called with appropriate locking to
- * protect the sv_nrthreads, sv_permsocks and sv_tempsocks.
+ * protect the sv_refcount, sv_permsocks and sv_tempsocks.
  */
 void
 svc_destroy(struct svc_serv *serv)
 {
 	dprintk("svc: svc_destroy(%s, %d)\n",
 				serv->sv_program->pg_name,
-				serv->sv_nrthreads);
+				atomic_read(&serv->sv_refcount));
 
-	if (serv->sv_nrthreads) {
-		if (--(serv->sv_nrthreads) != 0) {
-			svc_sock_update_bufs(serv);
-			return;
-		}
-	} else
-		printk("svc_destroy: no threads for serv=%p!\n", serv);
+	if (!atomic_dec_and_test(&serv->sv_refcount)) {
+		svc_sock_update_bufs(serv);
+		return;
+	}
 
 	del_timer_sync(&serv->sv_temptimer);
 
@@ -742,7 +739,7 @@ __svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node,
 	if (!rqstp)
 		return ERR_PTR(-ENOMEM);
 
-	serv->sv_nrthreads++;
+	svc_get(serv);
 	spin_lock_bh(&pool->sp_lock);
 	if (istmp) {
 		__set_bit(RQ_RUNONCE, &rqstp->rq_flags);
@@ -827,7 +824,7 @@ svc_start_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 	struct svc_rqst	*rqstp;
 	struct task_struct *task;
 	struct svc_pool *chosen_pool;
-	unsigned int state = serv->sv_nrthreads-1;
+	unsigned int state = atomic_read(&serv->sv_refcount)-1;
 	int node;
 
 	do {
@@ -865,7 +862,7 @@ static int
 svc_signal_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 {
 	struct task_struct *task;
-	unsigned int state = serv->sv_nrthreads-1;
+	unsigned int state = atomic_read(&serv->sv_refcount)-1;
 
 	/* destroy old threads */
 	do {
@@ -950,7 +947,7 @@ static int
 svc_stop_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 {
 	struct task_struct *task;
-	unsigned int state = serv->sv_nrthreads-1;
+	unsigned int state = atomic_read(&serv->sv_refcount)-1;
 
 	/* destroy old threads */
 	do {

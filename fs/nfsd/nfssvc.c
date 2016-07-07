@@ -569,7 +569,7 @@ int nfsd_get_nrthreads(int n, int *nthreads, struct net *net)
 void nfsd_destroy(struct net *net)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
-	int destroy = (nn->nfsd_serv->sv_nrthreads == 1);
+	int destroy = (atomic_read(&nn->nfsd_serv->sv_refcount) == 1);
 
 	if (destroy)
 		svc_shutdown_net(nn->nfsd_serv, net);

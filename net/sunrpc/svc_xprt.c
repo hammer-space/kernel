@@ -451,8 +451,8 @@ void svc_xprt_do_enqueue(struct svc_xprt *xprt)
 	    atomic_read(&xprt->xpt_inflight) == 0 &&
 	    !list_empty(&pool->sp_all_threads) &&
 	    !test_and_set_bit(XPT_RESCUE, &xprt->xpt_flags)) {
-		dprintk("%s: try to wake up pool manager %d\n",
-			__func__, serv->sv_nrthreads);
+		dprintk("%s: try to wake up pool manager\n",
+			__func__);
 
 		svc_queue_xprt_to_pool(xprt, pool);
 		atomic_inc(&serv->sv_new_threads);

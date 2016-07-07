@@ -94,7 +94,7 @@ struct svc_serv {
 	spinlock_t		sv_lock;
 	atomic_t		sv_new_threads;	/* # of threads to be created by
 						 * the pool manager thread */
-	unsigned int		sv_nrthreads;	/* # of server threads */
+	atomic_t		sv_refcount;	/* refcount */
 	unsigned int		sv_maxconn;	/* max connections allowed or
 						 * '0' causing max to be based
 						 * on number of threads. */
@@ -125,14 +125,14 @@ struct svc_serv {
 };
 
 /*
- * We use sv_nrthreads as a reference count.  svc_destroy() drops
+ * We use sv_refcount as a reference count.  svc_destroy() drops
  * this refcount, so we need to bump it up around operations that
  * change the number of threads.  Horrible, but there it is.
  * Should be called with the "service mutex" held.
  */
 static inline void svc_get(struct svc_serv *serv)
 {
-	serv->sv_nrthreads++;
+	atomic_inc(&serv->sv_refcount);
 }
 
 /*
