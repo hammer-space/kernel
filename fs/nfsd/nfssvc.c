@@ -749,7 +749,7 @@ nfsd(void *vrqstp)
 	nfsdstats.th_cnt --;
 
 out:
-	rqstp->rq_server = NULL;
+	svc_get(rqstp->rq_server);
 
 	/* Release the thread */
 	svc_exit_thread(rqstp);

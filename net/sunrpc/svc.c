@@ -464,6 +464,7 @@ __svc_create(struct svc_program *prog, unsigned int bufsize, int npools,
 
 	__svc_init_bc(serv);
 
+	mutex_init(&serv->sv_pool_mutex);
 	serv->sv_nrpools = npools;
 	serv->sv_pools =
 		kcalloc(serv->sv_nrpools, sizeof(struct svc_pool),
@@ -518,6 +519,7 @@ static int
 svc_pool_manager(void *data)
 {
 	struct svc_serv *serv = data;
+	int nthreads;
 	int i;
 
 	set_freezable();
@@ -538,6 +540,17 @@ svc_pool_manager(void *data)
 		}
 		try_to_freeze();
 
+		mutex_lock(&serv->sv_pool_mutex);
+		/* Detect shutdown */
+		nthreads = svc_get_num_threads(serv, NULL);
+		if (!nthreads) {
+			atomic_set(&serv->sv_new_threads, 0);
+			for (i = 0; i < serv->sv_nrpools; i++)
+				atomic_set(&serv->sv_pools[i].sp_new_threads, 0);
+			mutex_unlock(&serv->sv_pool_mutex);
+			continue;
+		}
+
 		for (i = 0; i < serv->sv_nrpools; i++) {
 			struct svc_pool *pool = &serv->sv_pools[i];
 			int cpu = svc_pool_map_get_node(i);
@@ -556,10 +569,11 @@ svc_pool_manager(void *data)
 			task = kthread_create_on_node(serv->sv_ops->svo_run_once, rqstp,
 						      cpu, "%s", serv->sv_name);
 			if (IS_ERR(task)) {
+				mutex_unlock(&serv->sv_pool_mutex);
 				module_put(serv->sv_ops->svo_module);
 				svc_exit_thread(rqstp);
 				dprintk("svc: failed to spawn new thread\n");
-				break;
+				goto next;
 			}
 			atomic_dec(&pool->sp_new_threads);
 			atomic_dec(&serv->sv_new_threads);
@@ -571,7 +585,8 @@ svc_pool_manager(void *data)
 			svc_sock_update_bufs(serv);
 			wake_up_process(task);
 		}
-
+		mutex_unlock(&serv->sv_pool_mutex);
+next:
 		/* Just in case being asked to create constently. */
 		cond_resched();
 	}
@@ -732,6 +747,7 @@ EXPORT_SYMBOL_GPL(svc_rqst_alloc);
 static struct svc_rqst *
 __svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node,
 		bool istmp)
+	__must_hold(&serv->sv_pool_mutex)
 {
 	struct svc_rqst	*rqstp;
 
@@ -754,7 +770,12 @@ __svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node,
 struct svc_rqst *
 svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node)
 {
-	return __svc_prepare_thread(serv, pool, node, false);
+	struct svc_rqst *rqstp;
+
+	mutex_lock(&serv->sv_pool_mutex);
+	rqstp = __svc_prepare_thread(serv, pool, node, false);
+	mutex_unlock(&serv->sv_pool_mutex);
+	return rqstp;
 }
 EXPORT_SYMBOL_GPL(svc_prepare_thread);
 
@@ -994,6 +1015,7 @@ svc_exit_thread(struct svc_rqst *rqstp)
 	struct svc_serv	*serv = rqstp->rq_server;
 	struct svc_pool	*pool = rqstp->rq_pool;
 
+	mutex_lock(&serv->sv_pool_mutex);
 	spin_lock_bh(&pool->sp_lock);
 	pool->sp_nrthreads--;
 	if (test_bit(RQ_RUNONCE, &rqstp->rq_flags))
@@ -1001,12 +1023,12 @@ svc_exit_thread(struct svc_rqst *rqstp)
 	if (!test_and_set_bit(RQ_VICTIM, &rqstp->rq_flags))
 		list_del_rcu(&rqstp->rq_all);
 	spin_unlock_bh(&pool->sp_lock);
+	mutex_unlock(&serv->sv_pool_mutex);
 
 	svc_rqst_free(rqstp);
 
 	/* Release the server */
-	if (serv)
-		svc_destroy(serv);
+	svc_destroy(serv);
 }
 EXPORT_SYMBOL_GPL(svc_exit_thread);
 
