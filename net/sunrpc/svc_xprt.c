@@ -651,7 +651,7 @@ int svc_port_is_privileged(struct sockaddr *sin)
 static void svc_check_conn_limits(struct svc_serv *serv)
 {
 	unsigned int limit = serv->sv_maxconn ? serv->sv_maxconn :
-				(serv->sv_nrthreads+3) * 20;
+				(svc_get_num_threads(serv, NULL)+3) * 20;
 
 	if (serv->sv_tmpcnt > limit) {
 		struct svc_xprt *xprt = NULL;
