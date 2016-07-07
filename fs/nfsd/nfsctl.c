@@ -752,7 +752,7 @@ static ssize_t __write_ports_addfd(char *buf, struct net *net)
 	}
 
 	/* Decrease the count, but don't shut down the service */
-	nn->nfsd_serv->sv_nrthreads--;
+	atomic_dec(&nn->nfsd_serv->sv_refcount);
 	return err;
 }
 
@@ -788,7 +788,7 @@ static ssize_t __write_ports_addxprt(char *buf, struct net *net)
 		goto out_close;
 
 	/* Decrease the count, but don't shut down the service */
-	nn->nfsd_serv->sv_nrthreads--;
+	atomic_dec(&nn->nfsd_serv->sv_refcount);
 	return 0;
 out_close:
 	xprt = svc_find_xprt(nn->nfsd_serv, transport, net, PF_INET, port);
