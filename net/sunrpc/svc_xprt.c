@@ -398,7 +398,10 @@ static void
 svc_queue_xprt_to_pool(struct svc_xprt *xprt, struct svc_pool *pool)
 {
 	spin_lock_bh(&pool->sp_lock);
-	list_add_tail(&xprt->xpt_ready, &pool->sp_sockets);
+	if (test_bit(XPT_CLOSE, &xprt->xpt_flags))
+		list_add(&xprt->xpt_ready, &pool->sp_sockets);
+	else
+		list_add_tail(&xprt->xpt_ready, &pool->sp_sockets);
 	pool->sp_stats.sockets_queued++;
 	spin_unlock_bh(&pool->sp_lock);
 }
