@@ -283,7 +283,7 @@ struct svc_rqst {
 #define	RQ_VICTIM	(5)			/* about to be shut down */
 #define	RQ_BUSY		(6)			/* request is busy */
 #define	RQ_DATA		(7)			/* request has data */
-#define	RQ_RUNONCE	(8)			/* request is tmp */
+#define	RQ_RESCUE	(8)			/* Rescue thread */
 	unsigned long		rq_flags;	/* flags field */
 	ktime_t			rq_qtime;	/* enqueue time */
 

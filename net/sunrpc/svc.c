@@ -758,7 +758,7 @@ __svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node,
 	svc_get(serv);
 	spin_lock_bh(&pool->sp_lock);
 	if (istmp) {
-		__set_bit(RQ_RUNONCE, &rqstp->rq_flags);
+		__set_bit(RQ_RESCUE, &rqstp->rq_flags);
 		pool->sp_tmpthreads++;
 	}
 	pool->sp_nrthreads++;
@@ -823,7 +823,7 @@ found_pool:
 		 * so we don't try to kill it again.
 		 */
 		list_for_each_entry_rcu(rqstp, &pool->sp_all_threads, rq_all) {
-			if (test_bit(RQ_RUNONCE, &rqstp->rq_flags))
+			if (test_bit(RQ_RESCUE, &rqstp->rq_flags))
 				continue;
 			task = rqstp->rq_task;
 			if (!task)
@@ -1018,7 +1018,7 @@ svc_exit_thread(struct svc_rqst *rqstp)
 	mutex_lock(&serv->sv_pool_mutex);
 	spin_lock_bh(&pool->sp_lock);
 	pool->sp_nrthreads--;
-	if (test_bit(RQ_RUNONCE, &rqstp->rq_flags))
+	if (test_bit(RQ_RESCUE, &rqstp->rq_flags))
 		pool->sp_tmpthreads--;
 	if (!test_and_set_bit(RQ_VICTIM, &rqstp->rq_flags))
 		list_del_rcu(&rqstp->rq_all);

@@ -784,9 +784,9 @@ static struct svc_xprt *svc_get_next_xprt(struct svc_rqst *rqstp, long timeout)
 		goto out_found;
 
 	/*
-	 * If this is an emergency thread and there is nothing queued, exit
+	 * If this is a rescue thread and there is nothing queued, exit
 	 */
-	if (test_bit(RQ_RUNONCE, &rqstp->rq_flags))
+	if (test_bit(RQ_RESCUE, &rqstp->rq_flags))
 		return ERR_PTR(-EINTR);
 
 	/*
