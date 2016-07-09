@@ -494,7 +494,7 @@ EXPORT_SYMBOL_GPL(svc_xprt_enqueue);
 /*
  * Dequeue the first transport, if there is one.
  */
-static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool)
+static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool, bool rescue)
 {
 	struct svc_xprt	*xprt, *found = NULL;
 	int inflight;
@@ -520,6 +520,10 @@ static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool)
 			/* Next prefer xprts with fewer inflight RPCs */
 			inflight = atomic_read(&xprt->xpt_inflight);
 			if (inflight >= prev_inflight)
+				continue;
+
+			/* Rescue threads service xprts with no inflight RPC */
+			if (rescue && inflight != 0)
 				continue;
 
 			found = xprt;
@@ -765,7 +769,7 @@ static struct svc_xprt *svc_assign_xprt(struct svc_rqst *rqstp)
 
 	if (rqstp->rq_xprt != NULL)
 		return rqstp->rq_xprt;
-	xprt = svc_xprt_dequeue(pool);
+	xprt = svc_xprt_dequeue(pool, test_bit(RQ_RESCUE, &rqstp->rq_flags));
 	if (xprt == NULL)
 		return NULL;
 	rqstp->rq_xprt = xprt;
