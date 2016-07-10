@@ -498,11 +498,9 @@ svc_create(struct svc_program *prog, unsigned int bufsize,
 EXPORT_SYMBOL_GPL(svc_create);
 
 static bool
-svc_pool_manager_should_sleep(struct svc_serv *serv)
+svc_pool_manager_should_sleep(struct svc_serv *serv, int nthreads)
 {
-	/* did someone want to create new threads? */
-	if (atomic_read(&serv->sv_new_threads) > 0)
-		return false;
+	int i;
 
 	/* are we shutting down? */
 	if (kthread_should_stop())
@@ -512,6 +510,16 @@ svc_pool_manager_should_sleep(struct svc_serv *serv)
 	if (freezing(current))
 		return false;
 
+	/* are we shutting down? */
+	if (nthreads == 0)
+		return true;
+
+	/* did someone want to create new threads? */
+	for (i = 0; i < serv->sv_nrpools; i++) {
+		struct svc_pool *pool = &serv->sv_pools[i];
+		if (pool->sp_tmpthreads < atomic_read(&pool->sp_need_rescue))
+			return false;
+	}
 	return true;
 }
 
@@ -526,30 +534,32 @@ svc_pool_manager(void *data)
 
 	dprintk("svc: starting pool manager for %s\n", serv->sv_name);
 
+	mutex_lock(&serv->sv_pool_mutex);
+	nthreads = svc_get_num_threads(serv, NULL);
 	while (true) {
 		set_current_state(TASK_INTERRUPTIBLE);
-		if (svc_pool_manager_should_sleep(serv))
+		if (svc_pool_manager_should_sleep(serv, nthreads)) {
+			mutex_unlock(&serv->sv_pool_mutex);
 			schedule();
-		else
+			mutex_lock(&serv->sv_pool_mutex);
+		} else
 			__set_current_state(TASK_RUNNING);
 
 		if (kthread_should_stop()) {
 			dprintk("svc: stopping pool manager for %s\n",
 				 serv->sv_name);
-			goto out;
+			break;
 		}
-		try_to_freeze();
+		if (unlikely(freezing(current))) {
+			mutex_unlock(&serv->sv_pool_mutex);
+			try_to_freeze();
+			mutex_lock(&serv->sv_pool_mutex);
+		}
 
-		mutex_lock(&serv->sv_pool_mutex);
 		/* Detect shutdown */
 		nthreads = svc_get_num_threads(serv, NULL);
-		if (!nthreads) {
-			atomic_set(&serv->sv_new_threads, 0);
-			for (i = 0; i < serv->sv_nrpools; i++)
-				atomic_set(&serv->sv_pools[i].sp_new_threads, 0);
-			mutex_unlock(&serv->sv_pool_mutex);
+		if (!nthreads)
 			continue;
-		}
 
 		for (i = 0; i < serv->sv_nrpools; i++) {
 			struct svc_pool *pool = &serv->sv_pools[i];
@@ -557,7 +567,7 @@ svc_pool_manager(void *data)
 			struct task_struct *task;
 			struct svc_rqst *rqstp;
 
-			if (!atomic_read(&pool->sp_new_threads))
+			if (pool->sp_tmpthreads >= atomic_read(&pool->sp_need_rescue))
 				continue;
 
 			rqstp = __svc_prepare_thread(serv, pool, cpu, true);
@@ -573,10 +583,10 @@ svc_pool_manager(void *data)
 				module_put(serv->sv_ops->svo_module);
 				svc_exit_thread(rqstp);
 				dprintk("svc: failed to spawn new thread\n");
-				goto next;
+				yield();
+				mutex_lock(&serv->sv_pool_mutex);
+				break;
 			}
-			atomic_dec(&pool->sp_new_threads);
-			atomic_dec(&serv->sv_new_threads);
 
 			rqstp->rq_task = task;
 			if (serv->sv_nrpools > 1)
@@ -585,13 +595,9 @@ svc_pool_manager(void *data)
 			svc_sock_update_bufs(serv);
 			wake_up_process(task);
 		}
-		mutex_unlock(&serv->sv_pool_mutex);
-next:
-		/* Just in case being asked to create constently. */
-		cond_resched();
 	}
+	mutex_unlock(&serv->sv_pool_mutex);
 
-out:
 	return 0;
 }
 
@@ -1018,8 +1024,12 @@ svc_exit_thread(struct svc_rqst *rqstp)
 	mutex_lock(&serv->sv_pool_mutex);
 	spin_lock_bh(&pool->sp_lock);
 	pool->sp_nrthreads--;
-	if (test_bit(RQ_RESCUE, &rqstp->rq_flags))
+	if (test_bit(RQ_RESCUE, &rqstp->rq_flags)) {
 		pool->sp_tmpthreads--;
+		/* Handle races with svc_xprt_do_enqueue() */
+		if (pool->sp_tmpthreads < atomic_read(&pool->sp_need_rescue))
+			wake_up_process(serv->sv_pool_mgr);
+	}
 	if (!test_and_set_bit(RQ_VICTIM, &rqstp->rq_flags))
 		list_del_rcu(&rqstp->rq_all);
 	spin_unlock_bh(&pool->sp_lock);
