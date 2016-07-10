@@ -50,8 +50,8 @@ struct svc_pool {
 						 * xprt is queued. */
 #define SP_CONGESTED		(1)
 	unsigned long		sp_flags;
-	atomic_t		sp_new_threads;	/* # of threads to be created by
-						 * the poo manager thread */
+	atomic_t		sp_need_rescue;	/* # of queued xprts that
+						 * might need rescuing */
 } ____cacheline_aligned_in_smp;
 
 struct svc_serv;
@@ -92,8 +92,6 @@ struct svc_serv {
 	struct svc_program *	sv_program;	/* RPC program */
 	struct svc_stat *	sv_stats;	/* RPC statistics */
 	spinlock_t		sv_lock;
-	atomic_t		sv_new_threads;	/* # of threads to be created by
-						 * the pool manager thread */
 	atomic_t		sv_refcount;	/* refcount */
 	unsigned int		sv_maxconn;	/* max connections allowed or
 						 * '0' causing max to be based

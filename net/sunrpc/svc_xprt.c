@@ -361,8 +361,7 @@ static void svc_xprt_release_slot(struct svc_rqst *rqstp)
 {
 	struct svc_xprt	*xprt = rqstp->rq_xprt;
 	if (test_and_clear_bit(RQ_DATA, &rqstp->rq_flags)) {
-		if (atomic_dec_and_test(&xprt->xpt_inflight))
-			clear_bit(XPT_RESCUE, &xprt->xpt_flags);
+		atomic_dec(&xprt->xpt_inflight);
 		svc_xprt_enqueue(xprt);
 	}
 }
@@ -388,6 +387,17 @@ svc_queue_xprt_to_pool(struct svc_xprt *xprt, struct svc_pool *pool)
 	list_add_tail(&xprt->xpt_ready, &pool->sp_sockets);
 	pool->sp_stats.sockets_queued++;
 	spin_unlock_bh(&pool->sp_lock);
+}
+
+static void
+svc_dequeue_xprt_from_pool(struct svc_xprt *xprt, struct svc_pool *pool)
+	__must_hold(&pool->sp_lock)
+{
+	list_del_init(&xprt->xpt_ready);
+	if (test_bit(XPT_RESCUE, &xprt->xpt_flags)) {
+		atomic_dec(&pool->sp_need_rescue);
+		clear_bit(XPT_RESCUE, &xprt->xpt_flags);
+	}
 }
 
 void svc_xprt_do_enqueue(struct svc_xprt *xprt)
@@ -445,8 +455,7 @@ void svc_xprt_do_enqueue(struct svc_xprt *xprt)
 			__func__);
 
 		svc_queue_xprt_to_pool(xprt, pool);
-		atomic_inc(&serv->sv_new_threads);
-		atomic_inc(&pool->sp_new_threads);
+		atomic_inc(&pool->sp_need_rescue);
 		atomic_long_inc(&pool->sp_stats.threads_woken);
 		wake_up_process(serv->sv_pool_mgr);
 		goto out_unlock;
@@ -510,7 +519,7 @@ static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool)
 			prev_inflight = inflight;
 		}
 		if (found) {
-			list_del_init(&found->xpt_ready);
+			svc_dequeue_xprt_from_pool(found, pool);
 			svc_xprt_get(found);
 
 			dprintk("svc: transport %p dequeued, inuse=%d\n",
@@ -1170,7 +1179,7 @@ static struct svc_xprt *svc_dequeue_net(struct svc_serv *serv, struct net *net)
 		list_for_each_entry_safe(xprt, tmp, &pool->sp_sockets, xpt_ready) {
 			if (xprt->xpt_net != net)
 				continue;
-			list_del_init(&xprt->xpt_ready);
+			svc_dequeue_xprt_from_pool(xprt, pool);
 			spin_unlock_bh(&pool->sp_lock);
 			return xprt;
 		}
