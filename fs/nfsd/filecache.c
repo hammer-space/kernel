@@ -24,7 +24,7 @@
 /* FIXME: dynamically size this for the machine somehow? */
 #define NFSD_FILE_HASH_BITS                   12
 #define NFSD_FILE_HASH_SIZE                  (1 << NFSD_FILE_HASH_BITS)
-#define NFSD_LAUNDRETTE_DELAY		     (60 * HZ)
+#define NFSD_LAUNDRETTE_DELAY		     (2 * HZ)
 
 #define NFSD_FILE_LRU_RESCAN		     (0)
 #define NFSD_FILE_LRU_THRESHOLD		     (4096)
