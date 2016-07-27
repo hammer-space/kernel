@@ -26,6 +26,8 @@
 #define NFSD_FILE_HASH_SIZE                  (1 << NFSD_FILE_HASH_BITS)
 #define NFSD_LAUNDRETTE_DELAY		     (60 * HZ)
 
+#define NFSD_FILE_LRU_RESCAN		     (0)
+
 /* We only care about NFSD_MAY_READ/WRITE for this cache */
 #define NFSD_FILE_MAY_MASK	(NFSD_MAY_READ|NFSD_MAY_WRITE)
 
@@ -42,6 +44,7 @@ static struct kmem_cache		*nfsd_file_slab;
 static struct kmem_cache		*nfsd_file_mark_slab;
 static struct nfsd_fcache_bucket	*nfsd_file_hashtbl;
 static struct list_lru			nfsd_file_lru;
+static long				nfsd_file_lru_flags;
 static struct fsnotify_group		*nfsd_file_fsnotify_group;
 static atomic_long_t			nfsd_filecache_count;
 static struct delayed_work		nfsd_filecache_laundrette;
@@ -227,21 +230,26 @@ nfsd_file_unhash_and_release_locked(struct nfsd_file *nf, struct list_head *disp
 	list_add(&nf->nf_lru, dispose);
 }
 
-static void
+static int
 nfsd_file_put_noref(struct nfsd_file *nf)
 {
+	int count;
 	trace_nfsd_file_put(nf);
-	if (atomic_dec_and_test(&nf->nf_ref)) {
+
+	count = atomic_dec_return(&nf->nf_ref);
+	if (!count) {
 		WARN_ON(test_bit(NFSD_FILE_HASHED, &nf->nf_flags));
 		nfsd_file_put_final(nf);
 	}
+	return count;
 }
 
 void
 nfsd_file_put(struct nfsd_file *nf)
 {
 	set_bit(NFSD_FILE_REFERENCED, &nf->nf_flags);
-	nfsd_file_put_noref(nf);
+	if (nfsd_file_put_noref(nf) == 1)
+		nfsd_file_schedule_laundrette();
 }
 
 struct nfsd_file *
@@ -299,15 +307,20 @@ nfsd_file_lru_cb(struct list_head *item, struct list_lru_one *lru,
 	 * counter. Here we check the counter and then test and clear the flag.
 	 * That order is deliberate to ensure that we can do this locklessly.
 	 */
-	if (atomic_read(&nf->nf_ref) > 1 ||
-	    test_and_clear_bit(NFSD_FILE_REFERENCED, &nf->nf_flags))
-		return LRU_SKIP;
+	if (atomic_read(&nf->nf_ref) > 1)
+		goto out_skip;
+	if (test_and_clear_bit(NFSD_FILE_REFERENCED, &nf->nf_flags))
+		goto out_rescan;;
 
 	if (!test_and_clear_bit(NFSD_FILE_HASHED, &nf->nf_flags))
-		return LRU_SKIP;
+		goto out_skip;
 
 	list_lru_isolate_move(lru, &nf->nf_lru, head);
 	return LRU_REMOVED;
+out_rescan:
+	set_bit(NFSD_FILE_LRU_RESCAN, &nfsd_file_lru_flags);
+out_skip:
+	return LRU_SKIP;
 }
 
 static void
@@ -418,7 +431,8 @@ nfsd_file_delayed_close(struct work_struct *work)
 	list_lru_walk(&nfsd_file_lru, nfsd_file_lru_cb, &head, LONG_MAX);
 	nfsd_file_lru_dispose(&head);
 
-	nfsd_file_schedule_laundrette();
+	if (test_and_clear_bit(NFSD_FILE_LRU_RESCAN, &nfsd_file_lru_flags))
+		nfsd_file_schedule_laundrette();
 }
 
 static int
@@ -721,7 +735,6 @@ retry:
 				nfsd_file_hashtbl[hashval].nfb_count);
 		spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
 		atomic_long_inc(&nfsd_filecache_count);
-		nfsd_file_schedule_laundrette();
 		nf = new;
 		new = NULL;
 		goto open_file;
