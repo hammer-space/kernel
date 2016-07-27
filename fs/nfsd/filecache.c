@@ -241,7 +241,6 @@ void
 nfsd_file_put(struct nfsd_file *nf)
 {
 	set_bit(NFSD_FILE_REFERENCED, &nf->nf_flags);
-	smp_mb__after_atomic();
 	nfsd_file_put_noref(nf);
 }
 
