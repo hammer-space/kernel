@@ -27,6 +27,7 @@
 #define NFSD_LAUNDRETTE_DELAY		     (60 * HZ)
 
 #define NFSD_FILE_LRU_RESCAN		     (0)
+#define NFSD_FILE_LRU_THRESHOLD		     (4096)
 
 /* We only care about NFSD_MAY_READ/WRITE for this cache */
 #define NFSD_FILE_MAY_MASK	(NFSD_MAY_READ|NFSD_MAY_WRITE)
@@ -52,11 +53,17 @@ static struct delayed_work		nfsd_filecache_laundrette;
 static void
 nfsd_file_schedule_laundrette(void)
 {
-	if (atomic_long_read(&nfsd_filecache_count) == 0)
+	long count = atomic_long_read(&nfsd_filecache_count);
+	unsigned long timeout = NFSD_LAUNDRETTE_DELAY;
+
+	if (count == 0)
 		return;
 
-	schedule_delayed_work(&nfsd_filecache_laundrette,
-				NFSD_LAUNDRETTE_DELAY);
+	/* Be more aggressive about scanning if over the threshold */
+	if (count > NFSD_FILE_LRU_THRESHOLD)
+		timeout = 0;
+
+	schedule_delayed_work(&nfsd_filecache_laundrette, timeout);
 }
 
 static void
