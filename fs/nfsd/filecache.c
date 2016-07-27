@@ -47,6 +47,16 @@ static atomic_long_t			nfsd_filecache_count;
 static struct delayed_work		nfsd_filecache_laundrette;
 
 static void
+nfsd_file_schedule_laundrette(void)
+{
+	if (atomic_long_read(&nfsd_filecache_count) == 0)
+		return;
+
+	schedule_delayed_work(&nfsd_filecache_laundrette,
+				NFSD_LAUNDRETTE_DELAY);
+}
+
+static void
 nfsd_file_slab_free(struct rcu_head *rcu)
 {
 	struct nfsd_file *nf = container_of(rcu, struct nfsd_file, nf_rcu);
@@ -409,9 +419,7 @@ nfsd_file_delayed_close(struct work_struct *work)
 	list_lru_walk(&nfsd_file_lru, nfsd_file_lru_cb, &head, LONG_MAX);
 	nfsd_file_lru_dispose(&head);
 
-	if (atomic_long_read(&nfsd_filecache_count) > 0)
-		schedule_delayed_work(&nfsd_filecache_laundrette,
-				NFSD_LAUNDRETTE_DELAY);
+	nfsd_file_schedule_laundrette();
 }
 
 static int
@@ -714,8 +722,7 @@ retry:
 				nfsd_file_hashtbl[hashval].nfb_count);
 		spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
 		atomic_long_inc(&nfsd_filecache_count);
-		schedule_delayed_work(&nfsd_filecache_laundrette,
-				NFSD_LAUNDRETTE_DELAY);
+		nfsd_file_schedule_laundrette();
 		nf = new;
 		new = NULL;
 		goto open_file;
