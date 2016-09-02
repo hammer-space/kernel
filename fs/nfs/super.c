@@ -2329,7 +2329,7 @@ static void nfs_initialise_sb(struct super_block *sb)
 }
 
 /*
- * Finish setting up an NFS2/3 superblock
+ * Finish setting up an NFS2/3/4 superblock
  */
 void nfs_fill_super(struct super_block *sb, struct nfs_mount_info *mount_info)
 {
@@ -2340,15 +2340,18 @@ void nfs_fill_super(struct super_block *sb, struct nfs_mount_info *mount_info)
 	sb->s_blocksize = 0;
 	sb->s_xattr = server->nfs_client->cl_nfs_mod->xattr;
 	sb->s_op = server->nfs_client->cl_nfs_mod->sops;
+	sb->s_time_gran = 1;
 	if (data && data->bsize)
 		sb->s_blocksize = nfs_block_size(data->bsize, &sb->s_blocksize_bits);
 
-	if (server->nfs_client->rpc_ops->version != 2) {
+	if (server->nfs_client->rpc_ops->version > 3) {
 		/* The VFS shouldn't apply the umask to mode bits. We will do
 		 * so ourselves when necessary.
 		 */
 		sb->s_flags |= SB_RICHACL;
-		sb->s_time_gran = 1;
+		sb->s_export_op = &nfs_export_ops;
+	} else if (server->nfs_client->rpc_ops->version == 3) {
+		sb->s_flags |= SB_POSIXACL;
 		sb->s_export_op = &nfs_export_ops;
 	}
 
@@ -2373,12 +2376,13 @@ static void nfs_clone_super(struct super_block *sb,
 	sb->s_time_gran = 1;
 	sb->s_export_op = old_sb->s_export_op;
 
-	if (server->nfs_client->rpc_ops->version != 2) {
+	if (server->nfs_client->rpc_ops->version > 3) {
 		/* The VFS shouldn't apply the umask to mode bits. We will do
 		 * so ourselves when necessary.
 		 */
 		sb->s_flags |= SB_RICHACL;
-	}
+	} else if (server->nfs_client->rpc_ops->version == 3)
+		sb->s_flags |= SB_POSIXACL;
 
  	nfs_initialise_sb(sb);
 }
