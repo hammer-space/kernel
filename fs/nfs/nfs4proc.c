@@ -89,7 +89,6 @@
 	| ATTR_MTIME_SET)
 
 struct nfs4_opendata;
-static int _nfs4_proc_open(struct nfs4_opendata *data);
 static int _nfs4_recover_proc_open(struct nfs4_opendata *data);
 static int nfs4_do_fsinfo(struct nfs_server *, struct nfs_fh *, struct nfs_fsinfo *);
 static void nfs_fixup_referral_attributes(struct nfs_fattr *fattr);
@@ -2328,7 +2327,8 @@ static const struct rpc_call_ops nfs4_open_ops = {
 	.rpc_release = nfs4_open_release,
 };
 
-static int nfs4_run_open_task(struct nfs4_opendata *data, int isrecover)
+static int nfs4_run_open_task(struct nfs4_opendata *data,
+			      struct nfs_open_context *ctx)
 {
 	struct inode *dir = d_inode(data->dir);
 	struct nfs_server *server = NFS_SERVER(dir);
@@ -2357,7 +2357,7 @@ static int nfs4_run_open_task(struct nfs4_opendata *data, int isrecover)
 	data->rpc_status = 0;
 	data->cancelled = false;
 	data->is_recover = false;
-	if (isrecover) {
+	if (!ctx) {
 		nfs4_set_sequence_privileged(&o_arg->seq_args);
 		data->is_recover = true;
 	}
@@ -2381,7 +2381,7 @@ static int _nfs4_recover_proc_open(struct nfs4_opendata *data)
 	struct nfs_openres *o_res = &data->o_res;
 	int status;
 
-	status = nfs4_run_open_task(data, 1);
+	status = nfs4_run_open_task(data, NULL);
 	if (status != 0 || !data->rpc_done)
 		return status;
 
@@ -2442,7 +2442,8 @@ static int nfs4_opendata_access(struct rpc_cred *cred,
 /*
  * Note: On error, nfs4_proc_open will free the struct nfs4_opendata
  */
-static int _nfs4_proc_open(struct nfs4_opendata *data)
+static int _nfs4_proc_open(struct nfs4_opendata *data,
+			   struct nfs_open_context *ctx)
 {
 	struct inode *dir = d_inode(data->dir);
 	struct nfs_server *server = NFS_SERVER(dir);
@@ -2450,7 +2451,7 @@ static int _nfs4_proc_open(struct nfs4_opendata *data)
 	struct nfs_openres *o_res = &data->o_res;
 	int status;
 
-	status = nfs4_run_open_task(data, 0);
+	status = nfs4_run_open_task(data, ctx);
 	if (!data->rpc_done)
 		return status;
 	if (status != 0) {
@@ -2788,7 +2789,7 @@ static int _nfs4_open_and_get_state(struct nfs4_opendata *opendata,
 
 	seq = raw_seqcount_begin(&sp->so_reclaim_seqcount);
 
-	ret = _nfs4_proc_open(opendata);
+	ret = _nfs4_proc_open(opendata, ctx);
 	if (ret != 0)
 		goto out;
 
