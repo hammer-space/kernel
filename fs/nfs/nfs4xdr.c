@@ -70,7 +70,13 @@
 /* Mapping from NFS error code to "errno" error code. */
 #define errno_NFSERR_IO		EIO
 
+struct compound_hdr;
 static int nfs4_stat_to_errno(int);
+static void encode_layoutget(struct xdr_stream *xdr,
+			     const struct nfs4_layoutget_args *args,
+			     struct compound_hdr *hdr);
+static int decode_layoutget(struct xdr_stream *xdr, struct rpc_rqst *req,
+			     struct nfs4_layoutget_res *res);
 
 /* NFSv4 COMPOUND tags are only wanted for debugging purposes */
 #ifdef DEBUG
@@ -478,14 +484,16 @@ static int nfs4_stat_to_errno(int);
 				encode_open_maxsz + \
 				encode_access_maxsz + \
 				encode_getfh_maxsz + \
-				encode_getattr_maxsz)
+				encode_getattr_maxsz + \
+				encode_layoutget_maxsz)
 #define NFS4_dec_open_sz        (compound_decode_hdr_maxsz + \
 				decode_sequence_maxsz + \
 				decode_putfh_maxsz + \
 				decode_open_maxsz + \
 				decode_access_maxsz + \
 				decode_getfh_maxsz + \
-				decode_getattr_maxsz)
+				decode_getattr_maxsz + \
+				decode_layoutget_maxsz)
 #define NFS4_enc_open_confirm_sz \
 				(compound_encode_hdr_maxsz + \
 				 encode_putfh_maxsz + \
@@ -499,13 +507,15 @@ static int nfs4_stat_to_errno(int);
 					encode_putfh_maxsz + \
 					encode_open_maxsz + \
 					encode_access_maxsz + \
-					encode_getattr_maxsz)
+					encode_getattr_maxsz + \
+					encode_layoutget_maxsz)
 #define NFS4_dec_open_noattr_sz	(compound_decode_hdr_maxsz + \
 					decode_sequence_maxsz + \
 					decode_putfh_maxsz + \
 					decode_open_maxsz + \
 					decode_access_maxsz + \
-					decode_getattr_maxsz)
+					decode_getattr_maxsz + \
+					decode_layoutget_maxsz)
 #define NFS4_enc_open_downgrade_sz \
 				(compound_encode_hdr_maxsz + \
 				 encode_sequence_maxsz + \
@@ -2098,7 +2108,16 @@ static void encode_free_stateid(struct xdr_stream *xdr,
 	encode_op_hdr(xdr, OP_FREE_STATEID, decode_free_stateid_maxsz, hdr);
 	encode_nfs4_stateid(xdr, &args->stateid);
 }
+
 #else
+
+static void
+encode_layoutget(struct xdr_stream *xdr,
+		      const struct nfs4_layoutget_args *args,
+		      struct compound_hdr *hdr)
+{
+}
+
 static inline void
 encode_layoutreturn(struct xdr_stream *xdr,
 		    const struct nfs4_layoutreturn_args *args,
@@ -2350,6 +2369,12 @@ static void nfs4_xdr_enc_open(struct rpc_rqst *req, struct xdr_stream *xdr,
 	if (args->access)
 		encode_access(xdr, args->access, &hdr);
 	encode_getfattr_open(xdr, args->bitmask, args->open_bitmap, &hdr);
+	if (args->lg_args) {
+		encode_layoutget(xdr, args->lg_args, &hdr);
+		xdr_inline_pages(&req->rq_rcv_buf, hdr.replen << 2,
+				 args->lg_args->layout.pages,
+				 0, args->lg_args->layout.pglen);
+	}
 	encode_nops(&hdr);
 }
 
@@ -2390,6 +2415,12 @@ static void nfs4_xdr_enc_open_noattr(struct rpc_rqst *req,
 	if (args->access)
 		encode_access(xdr, args->access, &hdr);
 	encode_getfattr_open(xdr, args->bitmask, args->open_bitmap, &hdr);
+	if (args->lg_args) {
+		encode_layoutget(xdr, args->lg_args, &hdr);
+		xdr_inline_pages(&req->rq_rcv_buf, hdr.replen << 2,
+				 args->lg_args->layout.pages,
+				 0, args->lg_args->layout.pglen);
+	}
 	encode_nops(&hdr);
 }
 
@@ -6489,7 +6520,15 @@ static int decode_free_stateid(struct xdr_stream *xdr,
 	res->status = decode_op_hdr(xdr, OP_FREE_STATEID);
 	return res->status;
 }
+
 #else
+
+static int decode_layoutget(struct xdr_stream *xdr, struct rpc_rqst *req,
+			    struct nfs4_layoutget_res *res)
+{
+	return 0;
+}
+
 static inline
 int decode_layoutreturn(struct xdr_stream *xdr,
 			       struct nfs4_layoutreturn_res *res)
@@ -6941,6 +6980,8 @@ static int nfs4_xdr_dec_open(struct rpc_rqst *rqstp, struct xdr_stream *xdr,
 	if (res->access_request)
 		decode_access(xdr, &res->access_supported, &res->access_result);
 	decode_getfattr_label(xdr, res->f_attr, res->f_label, res->server);
+	if (res->lg_res)
+		decode_layoutget(xdr, rqstp, res->lg_res);
 out:
 	return status;
 }
@@ -6993,6 +7034,8 @@ static int nfs4_xdr_dec_open_noattr(struct rpc_rqst *rqstp,
 	if (res->access_request)
 		decode_access(xdr, &res->access_supported, &res->access_result);
 	decode_getfattr(xdr, res->f_attr, res->server);
+	if (res->lg_res)
+		decode_layoutget(xdr, rqstp, res->lg_res);
 out:
 	return status;
 }

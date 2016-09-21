@@ -453,6 +453,7 @@ struct nfs_openargs {
 	enum open_claim_type4	claim;
 	enum createmode4	createmode;
 	const struct nfs4_label *label;
+	struct nfs4_layoutget_args *lg_args;
 	umode_t			umask;
 };
 
@@ -476,6 +477,7 @@ struct nfs_openres {
 	__u32			access_request;
 	__u32			access_supported;
 	__u32			access_result;
+	struct nfs4_layoutget_res *lg_res;
 };
 
 /*
