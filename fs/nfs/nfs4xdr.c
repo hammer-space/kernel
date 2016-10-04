@@ -6338,7 +6338,7 @@ static int decode_layoutget(struct xdr_stream *xdr, struct rpc_rqst *req,
 
 	status = decode_op_hdr(xdr, OP_LAYOUTGET);
 	if (status)
-		return status;
+		goto out;
 	p = xdr_inline_decode(xdr, 4);
 	if (unlikely(!p))
 		goto out_overflow;
@@ -6351,7 +6351,8 @@ static int decode_layoutget(struct xdr_stream *xdr, struct rpc_rqst *req,
 	if (!layout_count) {
 		dprintk("%s: server responded with empty layout array\n",
 			__func__);
-		return -EINVAL;
+		status = -EINVAL;
+		goto out;
 	}
 
 	p = xdr_inline_decode(xdr, 28);
@@ -6376,7 +6377,8 @@ static int decode_layoutget(struct xdr_stream *xdr, struct rpc_rqst *req,
 		dprintk("NFS: server cheating in layoutget reply: "
 				"layout len %u > recvd %u\n",
 				res->layoutp->len, recvd);
-		return -EINVAL;
+		status = -EINVAL;
+		goto out;
 	}
 
 	if (layout_count > 1) {
@@ -6389,10 +6391,13 @@ static int decode_layoutget(struct xdr_stream *xdr, struct rpc_rqst *req,
 			__func__, layout_count);
 	}
 
-	return 0;
+out:
+	res->status = status;
+	return status;
 out_overflow:
 	print_overflow_msg(__func__, xdr);
-	return -EIO;
+	status = -EIO;
+	goto out;
 }
 
 static int decode_layoutreturn(struct xdr_stream *xdr,
