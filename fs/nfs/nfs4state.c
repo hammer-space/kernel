@@ -76,6 +76,11 @@ const nfs4_stateid invalid_stateid = {
 	},
 	.type = NFS4_INVALID_STATEID_TYPE,
 };
+const nfs4_stateid current_stateid = {
+	{.seqid = cpu_to_be32(1),
+	 .other = { 0 } },
+	.type = NFS4_SPECIAL_STATEID_TYPE,
+};
 
 static DEFINE_MUTEX(nfs_clid_init_mutex);
 

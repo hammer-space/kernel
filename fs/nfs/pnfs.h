@@ -35,6 +35,8 @@
 #include <linux/nfs_page.h>
 #include <linux/workqueue.h>
 
+struct nfs4_opendata;
+
 enum {
 	NFS_LSEG_VALID = 0,	/* cleared when lseg is recalled/returned */
 	NFS_LSEG_ROC,		/* roc bit received from server */
@@ -389,6 +391,10 @@ void pnfs_layout_mark_request_commit(struct nfs_page *req,
 				     struct pnfs_layout_segment *lseg,
 				     struct nfs_commit_info *cinfo,
 				     u32 ds_commit_idx);
+void pnfs_lgopen_prepare(struct nfs4_opendata *data,
+			 struct nfs_open_context *ctx);
+void pnfs_parse_lgopen(struct inode *ino, struct nfs4_layoutget *lgp,
+		       struct nfs_open_context *ctx);
 
 static inline bool nfs_have_layout(struct inode *inode)
 {
@@ -827,6 +833,18 @@ static inline bool nfs4_refresh_layout_stateid(nfs4_stateid *dst,
 {
 	return false;
 }
+
+static inline void pnfs_lgopen_prepare(struct nfs4_opendata *data,
+				       struct nfs_open_context *ctx)
+{
+}
+
+static inline void pnfs_parse_lgopen(struct inode *ino,
+				     struct nfs4_layoutget *lgp,
+				     struct nfs_open_context *ctx)
+{
+}
+
 #endif /* CONFIG_NFS_V4_1 */
 
 #if IS_ENABLED(CONFIG_NFS_V4_2)

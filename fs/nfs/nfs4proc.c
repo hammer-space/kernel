@@ -89,6 +89,7 @@
 	| ATTR_MTIME_SET)
 
 struct nfs4_opendata;
+static void nfs4_layoutget_release(void *calldata);
 static int _nfs4_recover_proc_open(struct nfs4_opendata *data);
 static int nfs4_do_fsinfo(struct nfs_server *, struct nfs_fh *, struct nfs_fsinfo *);
 static void nfs_fixup_referral_attributes(struct nfs_fattr *fattr);
@@ -884,6 +885,10 @@ nfs4_sequence_process_interrupted(struct nfs_client *client,
 
 #else	/* !CONFIG_NFS_V4_1 */
 
+static void nfs4_layoutget_release(void *calldata)
+{
+}
+
 static int nfs4_sequence_process(struct rpc_task *task, struct nfs4_sequence_res *res)
 {
 	return nfs40_sequence_done(task, res);
@@ -1249,6 +1254,8 @@ static void nfs4_opendata_free(struct kref *kref)
 			struct nfs4_opendata, kref);
 	struct super_block *sb = p->dentry->d_sb;
 
+	if (p->lgp)
+		nfs4_layoutget_release(p->lgp);
 	nfs_free_seqid(p->o_arg.seqid);
 	nfs4_sequence_free_slot(&p->o_res.seq_res);
 	if (p->state != NULL)
@@ -2336,7 +2343,8 @@ static int nfs4_run_open_task(struct nfs4_opendata *data,
 	if (!ctx) {
 		nfs4_set_sequence_privileged(&o_arg->seq_args);
 		data->is_recover = true;
-	}
+	} else
+		pnfs_lgopen_prepare(data, ctx);
 	task = rpc_run_task(&task_setup_data);
 	if (IS_ERR(task))
 		return PTR_ERR(task);
@@ -2803,7 +2811,10 @@ static int _nfs4_open_and_get_state(struct nfs4_opendata *opendata,
 		nfs_inode_attach_open_context(ctx);
 		if (read_seqcount_retry(&sp->so_reclaim_seqcount, seq))
 			nfs4_schedule_stateid_recovery(server, state);
+		else
+			pnfs_parse_lgopen(state->inode, opendata->lgp, ctx);
 	}
+
 out:
 	return ret;
 }
@@ -9004,13 +9015,14 @@ static void nfs4_layoutget_release(void *calldata)
 {
 	struct nfs4_layoutget *lgp = calldata;
 	struct inode *inode = lgp->args.inode;
-	struct nfs_server *server = NFS_SERVER(inode);
-	size_t max_pages = max_response_pages(server);
+	size_t max_pages = lgp->args.layout.pglen / PAGE_SIZE;
 
 	dprintk("--> %s\n", __func__);
 	nfs4_sequence_free_slot(&lgp->res.seq_res);
 	nfs4_free_pages(lgp->args.layout.pages, max_pages);
-	pnfs_put_layout_hdr(NFS_I(inode)->layout);
+	if (inode)
+		pnfs_put_layout_hdr(NFS_I(inode)->layout);
+	put_rpccred(lgp->cred);
 	put_nfs_open_context(lgp->args.ctx);
 	kfree(calldata);
 	dprintk("<-- %s\n", __func__);
