@@ -5335,17 +5335,7 @@ static void nfs4_zap_acl_attr(struct inode *inode)
 	forget_cached_richacl(inode);
 }
 
-/*
- * The getxattr API returns the required buffer length when called with a
- * NULL buf. The NFSv4 acl tool then calls getxattr again after allocating
- * the required buf.  On a NULL buf, we send a page of data to the server
- * guessing that the ACL request can be serviced by a page. If so, we cache
- * up to the page of ACL data, and the 2nd call to getxattr is serviced by
- * the cache. If not so, we throw away the page, and cache the required
- * length. The next getxattr call will then produce another round trip to
- * the server, this time with the input buf of the required size.
- */
-static struct richacl *__nfs4_get_acl_uncached(struct inode *inode)
+static int __nfs4_get_acl_uncached(struct inode *inode, struct richacl **acl)
 {
 	struct nfs_server *server = NFS_SERVER(inode);
 	struct page *pages[DIV_ROUND_UP(NFS4ACL_SIZE_MAX, PAGE_SIZE)] = {};
@@ -5362,53 +5352,46 @@ static struct richacl *__nfs4_get_acl_uncached(struct inode *inode)
 		.rpc_argp = &args,
 		.rpc_resp = &res,
 	};
-	int err, i;
+	int status, i;
 
 	if (ARRAY_SIZE(pages) > 1) {
 		/* for decoding across pages */
 		res.acl_scratch = alloc_page(GFP_KERNEL);
-		err = -ENOMEM;
+		status = -ENOMEM;
 		if (!res.acl_scratch)
 			goto out_free;
 	}
 
-	dprintk("%s  args.acl_len %zu\n",
-		__func__, args.acl_len);
-	err = nfs4_call_sync(NFS_SERVER(inode)->client, NFS_SERVER(inode),
+	status = nfs4_call_sync(NFS_SERVER(inode)->client, NFS_SERVER(inode),
 			     &msg, &args.seq_args, &res.seq_res, 0);
-	if (err)
+	if (status)
 		goto out_free;
 
 	richacl_compute_max_masks(res.acl);
 	/* FIXME: Set inode->i_mode from res->mode?  */
 	set_cached_richacl(inode, res.acl);
-	err = 0;
+	*acl = res.acl;
 
 out_free:
-	if (err) {
-		richacl_put(res.acl);
-		res.acl = ERR_PTR(err);
-	}
 	for (i = 0; i < ARRAY_SIZE(pages) && pages[i]; i++)
 		__free_page(pages[i]);
 	if (res.acl_scratch)
 		__free_page(res.acl_scratch);
-	return res.acl;
+	return status;
 }
 
 static struct richacl *nfs4_get_acl_uncached(struct inode *inode)
 {
 	struct nfs4_exception exception = { };
-	struct richacl *acl;
+	struct richacl *acl = NULL;
+	int err;
 	do {
-		acl = __nfs4_get_acl_uncached(inode);
-		trace_nfs4_get_acl(inode, IS_ERR(acl) ? PTR_ERR(acl) : 0);
-		if (!IS_ERR(acl))
-			break;
-		acl = ERR_PTR(nfs4_handle_exception(NFS_SERVER(inode),
-			      PTR_ERR(acl), &exception));
+		err = __nfs4_get_acl_uncached(inode, &acl);
+		trace_nfs4_get_acl(inode, err);
+		err = nfs4_handle_exception(NFS_SERVER(inode), err,
+				&exception);
 	} while (exception.retry);
-	return acl;
+	return err ? ERR_PTR(err) : acl;
 }
 
 static struct richacl *nfs4_proc_get_acl(struct inode *inode)
