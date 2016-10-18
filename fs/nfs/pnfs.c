@@ -1678,7 +1678,7 @@ static bool pnfs_prepare_to_retry_layoutget(struct pnfs_layout_hdr *lo)
 				   TASK_UNINTERRUPTIBLE);
 }
 
-static void pnfs_clear_first_layoutget(struct pnfs_layout_hdr *lo)
+void pnfs_clear_first_layoutget(struct pnfs_layout_hdr *lo)
 {
 	unsigned long *bitlock = &lo->plh_flags;
 
@@ -2054,6 +2054,7 @@ void pnfs_parse_lgopen(struct inode *ino, struct nfs4_layoutget *lgp,
 	struct pnfs_layout_segment *lseg;
 	struct nfs_server *srv = NFS_SERVER(ino);
 	u32 iomode;
+	bool first = false;
 
 	if (!lgp)
 		return;
@@ -2077,6 +2078,7 @@ void pnfs_parse_lgopen(struct inode *ino, struct nfs4_layoutget *lgp,
 		if (!lo)
 			return;
 		lgp->args.inode = ino;
+		first = true;
 	} else
 		lo = NFS_I(lgp->args.inode)->layout;
 	pnfs_get_layout_hdr(lo);
@@ -2095,7 +2097,8 @@ void pnfs_parse_lgopen(struct inode *ino, struct nfs4_layoutget *lgp,
 		pnfs_put_lseg(lseg);
 	}
 out:
-	pnfs_clear_first_layoutget(lo);
+	if (first)
+		pnfs_clear_first_layoutget(lo);
 	pnfs_put_layout_hdr(lo);
 }
 
