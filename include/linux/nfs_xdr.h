@@ -276,8 +276,8 @@ struct nfs4_layoutget_args {
 };
 
 struct nfs4_layoutget_res {
-	int status;
 	struct nfs4_sequence_res seq_res;
+	int status;
 	__u32 return_on_close;
 	struct pnfs_layout_range range;
 	__u32 type;
