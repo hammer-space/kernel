@@ -231,7 +231,8 @@ nfsd_file_unhash_and_release_locked(struct nfsd_file *nf, struct list_head *disp
 	trace_nfsd_file_unhash_and_release_locked(nf);
 	if (!nfsd_file_unhash(nf))
 		return;
-	if (!atomic_dec_and_test(&nf->nf_ref))
+	/* keep final reference for nfsd_file_lru_dispose */
+	if (atomic_add_unless(&nf->nf_ref, -1, 1))
 		return;
 
 	list_add(&nf->nf_lru, dispose);
