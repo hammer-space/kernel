@@ -1253,8 +1253,11 @@ static void nfs4_lgopen_release(void *calldata)
 	struct nfs4_layoutget *lgp = calldata;
 	struct inode *inode = lgp->args.inode;
 
-	if (inode)
-		pnfs_clear_first_layoutget(NFS_I(inode)->layout);
+	if (inode) {
+		struct pnfs_layout_hdr *lo = NFS_I(inode)->layout;
+		atomic_dec(&lo->plh_outstanding);
+		pnfs_clear_first_layoutget(lo);
+	}
 	nfs4_layoutget_release(lgp);
 }
 
