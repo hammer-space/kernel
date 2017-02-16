@@ -21,7 +21,12 @@ enum rpc_auth_flavors {
 	RPC_AUTH_KRB   = 4,
 	RPC_AUTH_GSS   = 6,
 	RPC_AUTH_TLS   = 7,
-	RPC_AUTH_MAXFLAVOR = 8,
+	/*
+	 * AUTH_NAME will never be IETF approved as it doesn't take security
+	 * into account. Give it a number that will not conflict with anything
+	 */
+	RPC_AUTH_NAME  = 99,
+	RPC_AUTH_MAXFLAVOR = 100,
 	/* pseudoflavors: */
 	RPC_AUTH_GSS_KRB5  = 390003,
 	RPC_AUTH_GSS_KRB5I = 390004,
