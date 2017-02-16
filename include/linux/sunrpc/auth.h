@@ -63,6 +63,7 @@ struct rpc_cred {
 #define RPCAUTH_CRED_UPTODATE	1
 #define RPCAUTH_CRED_HASHED	2
 #define RPCAUTH_CRED_NEGATIVE	3
+#define RPCAUTH_CRED_INIT	4
 
 const struct cred *rpc_machine_cred(void);
 
