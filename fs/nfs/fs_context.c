@@ -243,6 +243,7 @@ enum {
 	Opt_sec_spkmi,
 	Opt_sec_spkmp,
 	Opt_sec_sys,
+	Opt_sec_name,
 	nr__Opt_sec
 };
 
@@ -259,6 +260,7 @@ static const struct constant_table nfs_secflavor_tokens[] = {
 	{ "spkm3i",	Opt_sec_spkmi },
 	{ "spkm3p",	Opt_sec_spkmp },
 	{ "sys",	Opt_sec_sys },
+	{ "name",	Opt_sec_name },
 	{}
 };
 
@@ -386,6 +388,9 @@ static int nfs_parse_security_flavors(struct fs_context *fc,
 			break;
 		case Opt_sec_sys:
 			pseudoflavor = RPC_AUTH_UNIX;
+			break;
+		case Opt_sec_name:
+			pseudoflavor = RPC_AUTH_NAME;
 			break;
 		case Opt_sec_krb5:
 			pseudoflavor = RPC_AUTH_GSS_KRB5;
