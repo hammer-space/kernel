@@ -757,7 +757,7 @@ struct nfs_renameres {
 };
 
 /* parsed sec= options */
-#define NFS_AUTH_INFO_MAX_FLAVORS 12 /* see fs/nfs/super.c */
+#define NFS_AUTH_INFO_MAX_FLAVORS 13 /* see fs/nfs/super.c */
 struct nfs_auth_info {
 	unsigned int            flavor_len;
 	rpc_authflavor_t        flavors[NFS_AUTH_INFO_MAX_FLAVORS];
