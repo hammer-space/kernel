@@ -78,3 +78,7 @@ config SUNRPC_XPRT_RDMA
 
 	  If unsure, or you know there is no RDMA capability on your
 	  hardware platform, say N.
+
+config SUNRPC_NAME
+	tristate "Support for AUTH_NAME"
+	depends on MULTIUSER

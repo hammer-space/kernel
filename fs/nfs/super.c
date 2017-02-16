@@ -209,7 +209,7 @@ static const match_table_t nfs_xprt_protocol_tokens = {
 };
 
 enum {
-	Opt_sec_none, Opt_sec_sys,
+	Opt_sec_none, Opt_sec_sys, Opt_sec_name,
 	Opt_sec_krb5, Opt_sec_krb5i, Opt_sec_krb5p,
 	Opt_sec_lkey, Opt_sec_lkeyi, Opt_sec_lkeyp,
 	Opt_sec_spkm, Opt_sec_spkmi, Opt_sec_spkmp,
@@ -221,6 +221,7 @@ static const match_table_t nfs_secflavor_tokens = {
 	{ Opt_sec_none, "none" },
 	{ Opt_sec_none, "null" },
 	{ Opt_sec_sys, "sys" },
+	{ Opt_sec_name, "name" },
 
 	{ Opt_sec_krb5, "krb5" },
 	{ Opt_sec_krb5i, "krb5i" },
@@ -508,6 +509,7 @@ static const char *nfs_pseudoflavour_to_name(rpc_authflavor_t flavour)
 		/* update NFS_AUTH_INFO_MAX_FLAVORS when this list changes! */
 		{ RPC_AUTH_NULL, "null" },
 		{ RPC_AUTH_UNIX, "sys" },
+		{ RPC_AUTH_NAME, "name" },
 		{ RPC_AUTH_GSS_KRB5, "krb5" },
 		{ RPC_AUTH_GSS_KRB5I, "krb5i" },
 		{ RPC_AUTH_GSS_KRB5P, "krb5p" },
@@ -1088,6 +1090,9 @@ static int nfs_parse_security_flavors(char *value,
 			break;
 		case Opt_sec_sys:
 			pseudoflavor = RPC_AUTH_UNIX;
+			break;
+		case Opt_sec_name:
+			pseudoflavor = RPC_AUTH_NAME;
 			break;
 		case Opt_sec_krb5:
 			pseudoflavor = RPC_AUTH_GSS_KRB5;

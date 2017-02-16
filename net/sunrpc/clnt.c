@@ -1754,7 +1754,7 @@ call_allocate(struct rpc_task *task)
 		return;
 	}
 
-	dprintk("RPC: %5u rpc_buffer allocation failed\n", task->tk_pid);
+	dprintk("RPC: %5u rpc_buffer allocation failed %lu %lu\n", task->tk_pid, req->rq_callsize, req->rq_rcvsize);
 
 	if (RPC_IS_ASYNC(task) || !fatal_signal_pending(current)) {
 		task->tk_action = call_allocate;
