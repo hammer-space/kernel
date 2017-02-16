@@ -874,6 +874,7 @@ rpcauth_uptodatecred(struct rpc_task *task)
 	struct rpc_cred *cred = task->tk_rqstp->rq_cred;
 
 	return cred == NULL ||
+		test_bit(RPCAUTH_CRED_INIT, &cred->cr_flags) != 0 ||
 		test_bit(RPCAUTH_CRED_UPTODATE, &cred->cr_flags) != 0;
 }
 
