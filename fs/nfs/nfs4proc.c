@@ -1806,47 +1806,38 @@ out_return_state:
 }
 
 static void
-nfs4_opendata_check_deleg(struct nfs4_opendata *data, struct nfs4_state *state)
+nfs4_process_delegation(struct inode *inode,
+		const struct cred *cred,
+		enum open_claim_type4 claim,
+		const struct nfs4_open_delegation *delegation)
 {
-	struct nfs_client *clp = NFS_SERVER(state->inode)->nfs_client;
-	struct nfs_delegation *delegation;
-	int delegation_flags = 0;
-
-	switch (data->o_res.delegation.open_delegation_type) {
+	switch (delegation->open_delegation_type) {
 	case NFS4_OPEN_DELEGATE_READ:
 	case NFS4_OPEN_DELEGATE_WRITE:
 		break;
 	default:
 		return;
-	};
-	rcu_read_lock();
-	delegation = rcu_dereference(NFS_I(state->inode)->delegation);
-	if (delegation)
-		delegation_flags = delegation->flags;
-	rcu_read_unlock();
-	switch (data->o_arg.claim) {
-	default:
-		break;
+	}
+	switch (claim) {
 	case NFS4_OPEN_CLAIM_DELEGATE_CUR:
 	case NFS4_OPEN_CLAIM_DELEG_CUR_FH:
 		pr_err_ratelimited("NFS: Broken NFSv4 server %s is "
 				   "returning a delegation for "
 				   "OPEN(CLAIM_DELEGATE_CUR)\n",
-				   clp->cl_hostname);
-		return;
+				   NFS_SERVER(inode)->nfs_client->cl_hostname);
+		break;
+	case NFS4_OPEN_CLAIM_PREVIOUS:
+		nfs_inode_reclaim_delegation(inode, cred,
+				delegation->type,
+				&delegation->stateid,
+				delegation->pagemod_limit);
+		break;
+	default:
+		nfs_inode_set_delegation(inode, cred,
+				delegation->type,
+				&delegation->stateid,
+				delegation->pagemod_limit);
 	}
-	if ((delegation_flags & 1UL<<NFS_DELEGATION_NEED_RECLAIM) == 0)
-		nfs_inode_set_delegation(state->inode,
-				data->owner->so_cred,
-				data->o_res.delegation.type,
-				&data->o_res.delegation.stateid,
-				data->o_res.delegation.pagemod_limit);
-	else
-		nfs_inode_reclaim_delegation(state->inode,
-				data->owner->so_cred,
-				data->o_res.delegation.type,
-				&data->o_res.delegation.stateid,
-				data->o_res.delegation.pagemod_limit);
 }
 
 /*
@@ -1871,7 +1862,10 @@ _nfs4_opendata_reclaim_to_nfs4_state(struct nfs4_opendata *data)
 	if (ret)
 		return ERR_PTR(ret);
 
-	nfs4_opendata_check_deleg(data, state);
+	nfs4_process_delegation(state->inode,
+				data->owner->so_cred,
+				data->o_arg.claim,
+				&data->o_res.delegation);
 update:
 	update_open_stateid(state, &data->o_res.stateid, NULL,
 			    data->o_arg.fmode);
@@ -1937,7 +1931,10 @@ _nfs4_opendata_to_nfs4_state(struct nfs4_opendata *data)
 	if (IS_ERR(state))
 		goto out;
 
-	nfs4_opendata_check_deleg(data, state);
+	nfs4_process_delegation(state->inode,
+				data->owner->so_cred,
+				data->o_arg.claim,
+				&data->o_res.delegation);
 	update_open_stateid(state, &data->o_res.stateid, NULL,
 			data->o_arg.fmode);
 out:
