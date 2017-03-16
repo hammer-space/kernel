@@ -324,7 +324,7 @@ inject_fault_dir(struct dentry *topdir)
 	return faultdir;
 }
 
-void __exit
+void
 sunrpc_debugfs_exit(void)
 {
 	debugfs_remove_recursive(topdir);

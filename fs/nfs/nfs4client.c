@@ -244,8 +244,6 @@ static void nfs4_shutdown_client(struct nfs_client *clp)
 		nfs4_kill_renewd(clp);
 	clp->cl_mvops->shutdown_client(clp);
 	nfs4_destroy_callback(clp);
-	if (__test_and_clear_bit(NFS_CS_IDMAP, &clp->cl_res_state))
-		nfs_idmap_delete(clp);
 
 	rpc_destroy_wait_queue(&clp->cl_rpcwaitq);
 	kfree(clp->cl_serverowner);
@@ -410,12 +408,6 @@ struct nfs_client *nfs4_init_client(struct nfs_client *clp,
 	}
 	strlcpy(clp->cl_ipaddr, ip_addr, sizeof(clp->cl_ipaddr));
 
-	error = nfs_idmap_new(clp);
-	if (error < 0) {
-		dprintk("%s: failed to create idmapper. Error = %d\n",
-			__func__, error);
-		goto error;
-	}
 	__set_bit(NFS_CS_IDMAP, &clp->cl_res_state);
 
 	error = nfs4_init_client_minor_version(clp);

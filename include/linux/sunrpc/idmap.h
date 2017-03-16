@@ -33,30 +33,49 @@
  *  NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef NFS_IDMAP_H
-#define NFS_IDMAP_H
+#ifndef SUNRPC_IDMAP_H
+#define SUNRPC_IDMAP_H
 
 #include <linux/uidgid.h>
-#include <uapi/linux/nfs_idmap.h>
-#include <linux/sunrpc/idmap.h>
 
 /* Forward declaration to make this header independent of others */
-struct nfs_client;
-struct nfs_server;
-struct nfs_fattr;
-struct nfs4_string;
+struct rpc_clnt;
 
-void nfs_fattr_init_names(struct nfs_fattr *fattr,
-		struct nfs4_string *owner_name,
-		struct nfs4_string *group_name);
-void nfs_fattr_free_names(struct nfs_fattr *);
-void nfs_fattr_map_and_free_names(struct nfs_server *, struct nfs_fattr *);
+#include <linux/types.h>
 
-int nfs_map_name_to_uid(const struct nfs_server *, const char *, size_t, kuid_t *);
-int nfs_map_group_to_gid(const struct nfs_server *, const char *, size_t, kgid_t *);
-int nfs_map_uid_to_name(const struct nfs_server *, kuid_t, char *, size_t);
-int nfs_map_gid_to_group(const struct nfs_server *, kgid_t, char *, size_t);
+/* XXX from bits/utmp.h  */
+#define IDMAP_NAMESZ  128
 
-int nfs_map_string_to_numeric(const char *name, size_t namelen, __u32 *res);
+#define IDMAP_TYPE_USER  0
+#define IDMAP_TYPE_GROUP 1
 
-#endif /* NFS_IDMAP_H */
+#define IDMAP_CONV_IDTONAME 0
+#define IDMAP_CONV_NAMETOID 1
+
+#define IDMAP_STATUS_INVALIDMSG 0x01
+#define IDMAP_STATUS_AGAIN      0x02
+#define IDMAP_STATUS_LOOKUPFAIL 0x04
+#define IDMAP_STATUS_SUCCESS    0x08
+
+struct sunrpc_idmap_msg {
+	__u8  im_type;
+	__u8  im_conv;
+	char  im_name[IDMAP_NAMESZ];
+	__u32 im_id;
+	__u8  im_status;
+};
+
+int sunrpc_idmap_init(void);
+void sunrpc_idmap_quit(void);
+int sunrpc_idmap_new(struct rpc_clnt *);
+void sunrpc_idmap_delete(struct rpc_clnt *);
+
+int sunrpc_idmap_name_to_uid(struct rpc_clnt *, const char *, size_t, kuid_t *);
+int sunrpc_idmap_group_to_gid(struct rpc_clnt *, const char *, size_t, kgid_t *);
+int sunrpc_idmap_uid_to_name(const struct rpc_clnt *, kuid_t, char *, size_t, bool);
+int sunrpc_idmap_gid_to_group(const struct rpc_clnt *, kgid_t, char *, size_t, bool);
+
+int sunrpc_idmap_string_to_numeric(const char *name, size_t namelen, __u32 *res);
+
+extern unsigned int nfs_idmap_cache_timeout;
+#endif /* SUNRPC_IDMAP_H */

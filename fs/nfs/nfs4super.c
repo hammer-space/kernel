@@ -331,18 +331,12 @@ static int __init init_nfs_v4(void)
 	if (err)
 		goto out;
 
-	err = nfs_idmap_init();
+	err = nfs4_register_sysctl();
 	if (err)
 		goto out1;
 
-	err = nfs4_register_sysctl();
-	if (err)
-		goto out2;
-
 	register_nfs_version(&nfs_v4);
 	return 0;
-out2:
-	nfs_idmap_quit();
 out1:
 	nfs_dns_resolver_destroy();
 out:
@@ -356,7 +350,6 @@ static void __exit exit_nfs_v4(void)
 
 	unregister_nfs_version(&nfs_v4);
 	nfs4_unregister_sysctl();
-	nfs_idmap_quit();
 	nfs_dns_resolver_destroy();
 }
 

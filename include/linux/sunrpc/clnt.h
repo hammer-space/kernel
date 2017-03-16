@@ -72,6 +72,11 @@ struct rpc_clnt {
 	struct dentry		*cl_debugfs;	/* debugfs directory */
 #endif
 	struct rpc_xprt_iter	cl_xpi;
+
+	unsigned long		cl_idmap_flags;
+#define RPC_CLNT_IDMAP_FLAGS_IDMAP	0	/* idmap started */
+#define RPC_CLNT_IDMAP_FLAGS_NOXUID	1	/* dont use xuid/xgid */
+	struct idmap		*cl_idmap;	/* idmap context */
 };
 
 /*

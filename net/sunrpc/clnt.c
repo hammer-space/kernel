@@ -38,6 +38,7 @@
 #include <linux/sunrpc/metrics.h>
 #include <linux/sunrpc/bc_xprt.h>
 #include <trace/events/sunrpc.h>
+#include <linux/sunrpc/idmap.h>
 
 #include "sunrpc.h"
 #include "netns.h"
@@ -424,6 +425,11 @@ static struct rpc_clnt * rpc_new_client(const struct rpc_create_args *args,
 
 	atomic_set(&clnt->cl_count, 1);
 
+	err = sunrpc_idmap_new(clnt);
+	dprintk("RPC: %s: sunrpc_idmap_new returns %d\n", __func__, err);
+	if (err)
+		goto out_no_idmap;
+
 	if (nodename == NULL)
 		nodename = utsname()->nodename;
 	/* save the nodename */
@@ -437,6 +443,8 @@ static struct rpc_clnt * rpc_new_client(const struct rpc_create_args *args,
 	return clnt;
 
 out_no_path:
+	sunrpc_idmap_delete(clnt);
+out_no_idmap:
 	rpc_free_iostats(clnt->cl_metrics);
 out_no_stats:
 	rpc_free_clid(clnt);
@@ -875,6 +883,7 @@ rpc_free_client(struct rpc_clnt *clnt)
 	rpc_clnt_debugfs_unregister(clnt);
 	rpc_clnt_remove_pipedir(clnt);
 	rpc_unregister_client(clnt);
+	sunrpc_idmap_delete(clnt);
 	rpc_free_iostats(clnt->cl_metrics);
 	clnt->cl_metrics = NULL;
 	xprt_put(rcu_dereference_raw(clnt->cl_xprt));

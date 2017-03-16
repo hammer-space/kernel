@@ -27,13 +27,6 @@ static struct ctl_table nfs4_cb_sysctls[] = {
 		.extra1 = (int *)&nfs_set_port_min,
 		.extra2 = (int *)&nfs_set_port_max,
 	},
-	{
-		.procname = "idmap_cache_timeout",
-		.data = &nfs_idmap_cache_timeout,
-		.maxlen = sizeof(int),
-		.mode = 0644,
-		.proc_handler = proc_dointvec,
-	},
 	{ }
 };
 

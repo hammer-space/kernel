@@ -1140,6 +1140,52 @@ DECLARE_EVENT_CLASS(svc_deferred_event,
 DEFINE_SVC_DEFERRED_EVENT(drop);
 DEFINE_SVC_DEFERRED_EVENT(revisit);
 
+DECLARE_EVENT_CLASS(sunrpc_idmap_event,
+		TP_PROTO(
+			const char *name,
+			int len,
+			u32 id,
+			int error
+		),
+
+		TP_ARGS(name, len, id, error),
+
+		TP_STRUCT__entry(
+			__field(int, error)
+			__field(u32, id)
+			__dynamic_array(char, name, len > 0 ? len + 1 : 1)
+		),
+
+		TP_fast_assign(
+			if (len < 0)
+				len = 0;
+			__entry->error = error < 0 ? error : 0;
+			__entry->id = id;
+			memcpy(__get_dynamic_array(name), name, len);
+			((char *)__get_dynamic_array(name))[len] = 0;
+		),
+
+		TP_printk(
+			"error=%d id=%u name=%s",
+			__entry->error,
+			__entry->id,
+			__get_str(name)
+		)
+);
+#define DEFINE_NFS4_IDMAP_EVENT(name) \
+	DEFINE_EVENT(sunrpc_idmap_event, name, \
+			TP_PROTO( \
+				const char *name, \
+				int len, \
+				u32 id, \
+				int error \
+			), \
+			TP_ARGS(name, len, id, error))
+DEFINE_NFS4_IDMAP_EVENT(sunrpc_map_name_to_uid);
+DEFINE_NFS4_IDMAP_EVENT(sunrpc_map_group_to_gid);
+DEFINE_NFS4_IDMAP_EVENT(sunrpc_map_uid_to_name);
+DEFINE_NFS4_IDMAP_EVENT(sunrpc_map_gid_to_group);
+
 #endif /* _TRACE_SUNRPC_H */
 
 #include <trace/define_trace.h>
