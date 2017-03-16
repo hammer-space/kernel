@@ -55,6 +55,8 @@
 #include <linux/workqueue.h>
 #include <asm/uaccess.h>
 #include <linux/hashtable.h>
+#include <linux/sunrpc/idmap.h>
+
 
 /*
  * type (size 4), len (size 4), version (size 4), proc (size 4),
@@ -227,12 +229,12 @@ name_create_new(struct rpc_auth_create_args *args, struct rpc_clnt *clnt)
 
 	if (!try_module_get(THIS_MODULE))
 		return ERR_PTR(err);
-	if (!(name_auth = kmalloc(sizeof(*name_auth), GFP_KERNEL)))
+	if (!(name_auth = kmalloc(sizeof(*name_auth), GFP_NOFS)))
 		goto out_dec;
 	INIT_HLIST_NODE(&name_auth->hash);
 	name_auth->target_name = NULL;
 	if (args->target_name) {
-		name_auth->target_name = kstrdup(args->target_name, GFP_KERNEL);
+		name_auth->target_name = kstrdup(args->target_name, GFP_NOFS);
 		if (name_auth->target_name == NULL)
 			goto err_free;
 	}
@@ -472,26 +474,54 @@ name_lookup_cred(struct rpc_auth *auth, struct auth_cred *acred, int flags)
 	return rpcauth_lookup_credcache(auth, acred, flags, GFP_NOFS);
 }
 
-static char *
-name_map_uid(kuid_t uid)
+static int
+name_map_uid(struct rpc_task *task, kuid_t uid, char **namep)
 {
+	char buf[AUTH_NAME_MAX_PRINCIPAL_LEN] = { 0, };
 	char *name;
-	long unsigned int id;
+	int ret;
 
-	if ((name = kzalloc(sizeof(char *) * 10, GFP_NOFS)) == NULL)
-		return NULL;
+	dprintk("RPC: %s map uid\n", __func__);
+	ret = sunrpc_idmap_uid_to_name(task->tk_client, uid, buf, sizeof(buf),
+					false);
+	if (ret < 0) {
+		dprintk("RPC: %s map uid FAIL %d\n", __func__, ret);
+		return ret;
+	}
 
-	id = (long unsigned int) uid.val;
+	dprintk("RPC: %s map uid to %s\n", __func__, buf);
 
-	snprintf(name, 10, "%lu", id);
+	name = kstrdup(buf, GFP_NOFS);
+	if (!name)
+		return -ENOMEM;
 
-	return name;
+	*namep = name;
+	return 0;
 }
 
-static char *
-name_map_gid(kgid_t gid)
+static int
+name_map_gid(struct rpc_task *task, kgid_t gid, char **groupp)
 {
-	return name_map_uid(*((kuid_t *)&gid));
+	char buf[AUTH_NAME_MAX_PRINCIPAL_LEN] = { 0, };
+	char *group;
+	int ret;
+
+	dprintk("RPC: %s map gid\n", __func__);
+	ret = sunrpc_idmap_gid_to_group(task->tk_client, gid, buf, sizeof(buf),
+					false);
+	if (ret < 0) {
+		dprintk("RPC: %s map gid FAIL %d\n", __func__, ret);
+		return ret;
+	}
+
+	dprintk("RPC: %s map gid to %s\n", __func__, buf);
+
+	group = kstrdup(buf, GFP_NOFS);
+	if (!group)
+		return -ENOMEM;
+
+	*groupp = group;
+	return 0;
 }
 
 static int
@@ -505,7 +535,7 @@ name_cred_from_acred(struct name_cred *cred, struct auth_cred *acred)
 			goto out_err;
 	}
 	if (acred->principal) {
-		cred->nc_acred.principal = kstrdup(acred->principal, GFP_KERNEL);
+		cred->nc_acred.principal = kstrdup(acred->principal, GFP_NOFS);
 		if (!cred->nc_acred.principal)
 			goto out_put_group_info;
 	}
@@ -527,9 +557,12 @@ name_cred_map_principals(struct name_cred *cred, struct rpc_task *task)
 {
 	struct auth_cred *acred = &cred->nc_acred;
 	struct group_info *gi = acred->group_info;
+	int ret;
 	size_t i;
 
 again:
+	ret = -ENOMEM;
+
 	/* check if already mapped */
 	if (test_bit(AUTH_NAME_CRED_FL_MAPPED, &cred->nc_flags))
 		return 0;
@@ -543,12 +576,12 @@ again:
 		goto again;
 	}
 
-	cred->nc_user_principal = name_map_uid(acred->uid);
-	if (!cred->nc_user_principal)
+	ret = name_map_uid(task, acred->uid, &cred->nc_user_principal);
+	if (ret)
 		goto out_wake;
 
-	cred->nc_group_principal = name_map_gid(acred->gid);
-	if (!cred->nc_group_principal)
+	ret = name_map_gid(task, acred->gid, &cred->nc_group_principal);
+	if (ret)
 		goto out_free_user;
 
 	cred->nc_other_principals = kzalloc(sizeof(char *) * gi->ngroups, GFP_NOFS);
@@ -556,8 +589,9 @@ again:
 		goto out_free_group;
 
 	for (i = 0; i < gi->ngroups; i++) {
-		cred->nc_other_principals[i] = name_map_gid(gi->gid[i]);
-		if (!cred->nc_other_principals[i])
+		ret = name_map_gid(task, gi->gid[i],
+					&cred->nc_other_principals[i]);
+		if (ret)
 			goto out_free_others;
 	}
 	cred->nc_other_principals_count = gi->ngroups;
@@ -582,8 +616,8 @@ out_wake:
 	smp_mb__after_atomic();
 	wake_up_bit(&cred->nc_flags, AUTH_NAME_CRED_FL_MAPPED);
 
-	dprintk("RPC: %s failed with ENOMEM\n", __func__);
-	return -ENOMEM;
+	dprintk("RPC: %s failed with %d\n", __func__, ret);
+	return ret;
 }
 
 static struct rpc_cred *

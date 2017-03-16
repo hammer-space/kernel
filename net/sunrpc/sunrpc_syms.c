@@ -21,8 +21,13 @@
 #include <linux/workqueue.h>
 #include <linux/sunrpc/rpc_pipe_fs.h>
 #include <linux/sunrpc/xprtsock.h>
+#include <linux/sunrpc/idmap.h>
 
 #include "netns.h"
+
+#if IS_ENABLED(CONFIG_SUNRPC_DEBUG)
+# define RPCDBG_FACILITY        RPCDBG_CALL
+#endif
 
 unsigned int sunrpc_net_id;
 EXPORT_SYMBOL_GPL(sunrpc_net_id);
@@ -107,8 +112,23 @@ init_sunrpc(void)
 #endif
 	svc_init_xprt_sock();	/* svc sock transport */
 	init_socket_xprt();	/* clnt sock transport */
+
+	dprintk("RPC: %s: sunrpc_idmap_init\n", __func__);
+	err = sunrpc_idmap_init();
+	dprintk("RPC: %s: sunrpc_idmap_init returns %d\n", __func__, err);
+	if (err)
+		goto out5;
+
 	return 0;
 
+out5:
+	unregister_rpc_pipefs();
+	sunrpc_debugfs_exit();
+	cleanup_socket_xprt();
+	svc_cleanup_xprt_sock();
+#if IS_ENABLED(CONFIG_SUNRPC_DEBUG)
+	rpc_unregister_sysctl();
+#endif
 out4:
 	unregister_pernet_subsys(&sunrpc_net_ops);
 out3:

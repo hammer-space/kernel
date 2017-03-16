@@ -21,9 +21,12 @@
 
 #define AUTH_NAME_VERSION		1
 
-/* max size of INIT payload: 256 principals / 1MB */
-#define AUTH_NAME_MAX_XDRLEN ((1024 + 4) * 256)
+#define AUTH_NAME_MAX_PRINCIPAL_LEN 1024
 
+#define AUTH_NAME_MAX_PRINCIPAL_COUNT 256
+
+/* max size of INIT payload: 256 principals at full size ~= 1MB */
+#define AUTH_NAME_MAX_XDRLEN ((AUTH_NAME_MAX_PRINCIPAL_LEN + 4) * 256)
 
 enum auth_name_proc {
 	AUTH_NAME_PROC_INIT = 0,
@@ -60,10 +63,10 @@ struct name_cred {
 	struct auth_cred	nc_acred;
 
 	/* principals, set when AUTH_NAME_CRED_FL_MAPPED */
-	const char		*nc_user_principal;
-	const char		*nc_group_principal;
+	char			*nc_user_principal;
+	char			*nc_group_principal;
 	size_t			nc_other_principals_count;
-	const char		**nc_other_principals;
+	char			**nc_other_principals;
 };
 
 #endif /* __KERNEL__ */
