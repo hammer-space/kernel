@@ -504,7 +504,7 @@ try_again:
 
 out_unlock:
 	fh_unlock(fhp);
-	if (!retry && nfsd_cached_files_handle_vfs_error(dentry, host_err)) {
+	if (nfsd_cached_files_handle_vfs_error(dentry, host_err) && !retry) {
 		retry = true;
 		goto try_again;
 	}
@@ -1054,8 +1054,8 @@ try_again:
 					count);
 		trace_read_io_done(rqstp, fhp, offset, *count, err);
 		nfsd_file_put(nf);
-		if (!retry &&
-		    nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err)) {
+		if (nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err) &&
+		    !retry) {
 			retry = true;
 			goto try_again;
 		}
@@ -1087,7 +1087,8 @@ try_again:
 					vlen, cnt, stable);
 		trace_write_io_done(rqstp, fhp, offset, *cnt, err);
 		nfsd_file_put(nf);
-		if (!retry && nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err)) {
+		if (nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err) &&
+		    !retry) {
 			retry = true;
 			goto try_again;
 		}
@@ -1132,7 +1133,8 @@ try_again:
 		int err2 = vfs_fsync_range(nf->nf_file, offset, end,
 				commit_is_datasync);
 
-		if (!retry && nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err)) {
+		if (nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err) &&
+		    !retry) {
 			nfsd_file_put(nf);
 			retry = true;
 			goto try_again;
@@ -1639,8 +1641,8 @@ out_dput:
 out_unlock:
 	fh_unlock(ffhp);
 	fh_drop_write(tfhp);
-	if (!retry &&
-	    nfsd_cached_files_handle_vfs_error(tfhp->fh_dentry, host_err)) {
+	if (nfsd_cached_files_handle_vfs_error(tfhp->fh_dentry, host_err) &&
+	    !retry) {
 		retry = true;
 		goto try_again;
 	}
