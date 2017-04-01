@@ -178,9 +178,12 @@ rpcproc_decode_null_payload_init_reply(struct rpc_rqst *rqstp,
 		set_bit(RPCAUTH_CRED_UPTODATE, &cred->cr_flags);
 		smp_mb__before_atomic();
 		clear_bit(RPCAUTH_CRED_NEW, &cred->cr_flags);
+	} else {
+		dprintk("RPC: %s got res %d on session init!", __func__,
+			status);
 	}
 
-	return 0;
+	return status;
 }
 
 static struct rpc_procinfo rpcproc_null_payload = {
