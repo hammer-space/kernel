@@ -34,39 +34,38 @@ enum auth_name_proc {
 	AUTH_NAME_PROC_DESTROY = 2
 };
 
-/* on-the-wire name cred: */
-struct auth_name_wire_cred {
-	u32			ac_v;		/* version */
-	u32			ac_proc;	/* control procedure */
-	u32			ac_session;	/* reference a session */
-};
-
 /* return from NULL PROC init sec context */
 struct auth_name_null_init_res {
 	u32			ar_status;
 	u32			ar_session;
 };
 
+struct name_session {
+	atomic_t		ns_count;
+	enum auth_name_proc	ns_proc;
+	u64			ns_verf;
+	u32			ns_session_id;
+	struct rcu_head		ns_rcu;
+};
+
 struct name_cred {
-	struct rpc_cred		nc_base;
+	struct rpc_cred			nc_base;
 
 	/* on the wire credential state */
-	enum auth_name_proc	nc_proc;
-	u64			nc_verf;
-	u32			nc_session;
+	struct name_session __rcu	*nc_session;
 
-	unsigned long		nc_flags;
+	unsigned long			nc_flags;
 #define AUTH_NAME_CRED_FL_MAPPED	0
 #define AUTH_NAME_CRED_FL_MAPPING	1
 
 	/* cached acred because mapping needs task context */
-	struct auth_cred	nc_acred;
+	struct auth_cred		nc_acred;
 
 	/* principals, set when AUTH_NAME_CRED_FL_MAPPED */
-	char			*nc_user_principal;
-	char			*nc_group_principal;
-	size_t			nc_other_principals_count;
-	char			**nc_other_principals;
+	char				*nc_user_principal;
+	char				*nc_group_principal;
+	size_t				nc_other_principals_count;
+	char				**nc_other_principals;
 };
 
 #endif /* __KERNEL__ */

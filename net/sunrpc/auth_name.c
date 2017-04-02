@@ -70,7 +70,7 @@
 static const struct rpc_authops authname_ops;
 
 static const struct rpc_credops name_credops;
-static const struct rpc_credops name_nullops;
+static const struct rpc_credops name_destroyops;
 
 #if IS_ENABLED(CONFIG_SUNRPC_DEBUG)
 # define RPCDBG_FACILITY	RPCDBG_AUTH
@@ -92,9 +92,106 @@ struct auth_name_payload_ctx {
 	struct page		**pages;
 	size_t			len;
 	struct name_cred	*name_cred;
+	struct name_session	*name_session;
 };
 
 static void name_put_auth(struct name_auth *name_auth);
+
+static struct name_session *
+name_session_alloc(void)
+{
+	struct name_session *name_session;
+
+	name_session = kzalloc(sizeof(*name_session), GFP_NOFS);
+	if (name_session != NULL) {
+		name_session->ns_proc = AUTH_NAME_PROC_INIT;
+		atomic_set(&name_session->ns_count, 1);
+	}
+	return name_session;
+}
+
+static inline struct name_session *
+name_session_get(struct name_session *name_session)
+{
+	if (name_session) {
+		dprintk("RPC: %s refcount %p (pre) %d\n", __func__,
+			name_session, atomic_read(&name_session->ns_count));
+		if (!atomic_inc_not_zero(&name_session->ns_count))
+			return NULL;
+	}
+
+	return name_session;
+}
+
+static void
+name_session_free_rcu(struct rcu_head *head)
+{
+	struct name_session *name_session = container_of(head,
+						struct name_session, ns_rcu);
+	kfree(name_session);
+}
+
+static void
+name_session_free(struct name_session *name_session)
+{
+	dprintk("RPC: %s session %p\n", __func__, name_session);
+	call_rcu(&name_session->ns_rcu, name_session_free_rcu);
+}
+
+static inline void
+name_session_put(struct name_session *name_session)
+{
+	if (!name_session)
+		return;
+	dprintk("RPC: %s refcount %p (pre) %d\n", __func__, name_session,
+		atomic_read(&name_session->ns_count));
+	if (atomic_dec_and_test(&name_session->ns_count))
+		name_session_free(name_session);
+}
+
+static struct name_session *
+name_cred_get_session(struct rpc_cred *cred)
+{
+	struct name_cred *name_cred = container_of(cred, struct name_cred,
+							nc_base);
+	struct name_session *name_session = NULL;
+
+	rcu_read_lock();
+	name_session = rcu_dereference(name_cred->nc_session);
+	name_session = name_session_get(name_session);
+	rcu_read_unlock();
+	return name_session;
+}
+
+static void
+name_cred_set_session(struct rpc_cred *cred, struct name_session *name_session)
+{
+	struct name_cred *name_cred = container_of(cred, struct name_cred,
+							nc_base);
+	struct name_session *old_session;
+
+	name_session = name_session_get(name_session);
+	old_session = name_cred_get_session(cred);
+
+	dprintk("RPC: %s old session %p, new session %p\n", __func__,
+		old_session, name_session);
+
+	rcu_assign_pointer(name_cred->nc_session, name_session);
+
+	/*
+	 * two puts of old_session - one for the name_cred_get_session, one
+	 * for the above name_session_get when it was the *new* session being
+	 * set
+	 */
+	name_session_put(old_session);
+	name_session_put(old_session);
+
+	if (name_session) {
+		set_bit(RPCAUTH_CRED_UPTODATE, &cred->cr_flags);
+		smp_mb__before_atomic();
+		clear_bit(RPCAUTH_CRED_NEW, &cred->cr_flags);
+	}
+}
 
 /*
  * NULL ping with data
@@ -152,7 +249,7 @@ rpcproc_decode_null_payload_init_reply(struct rpc_rqst *rqstp,
 	__be32 *p;
 	u32 status;
 	u64 verf;
-	u32 session;
+	u32 session_id;
 
 	p = xdr_inline_decode(xdr, 4);
 	if (p == NULL)
@@ -167,17 +264,16 @@ rpcproc_decode_null_payload_init_reply(struct rpc_rqst *rqstp,
 	p = xdr_inline_decode(xdr, 4);
 	if (p == NULL)
 		return -EIO;
-	session = ntohl(*p);
+	session_id = ntohl(*p);
 
-	dprintk("RPC: %s got res %u session %u", __func__, status, session);
+	dprintk("RPC: %s got res %u session_id %u", __func__, status, session_id);
 
 	if (!status) {
-		ctx->name_cred->nc_proc = AUTH_NAME_PROC_REFERENCE;
-		ctx->name_cred->nc_verf = verf;
-		ctx->name_cred->nc_session = session;
-		set_bit(RPCAUTH_CRED_UPTODATE, &cred->cr_flags);
-		smp_mb__before_atomic();
-		clear_bit(RPCAUTH_CRED_NEW, &cred->cr_flags);
+		ctx->name_session->ns_proc = AUTH_NAME_PROC_REFERENCE;
+		ctx->name_session->ns_session_id = session_id;
+		ctx->name_session->ns_verf = verf;
+
+		name_cred_set_session(cred, ctx->name_session);
 	} else {
 		dprintk("RPC: %s got res %d on session init!", __func__,
 			status);
@@ -212,11 +308,19 @@ static int rpc_ping_payload_init(struct rpc_clnt *clnt, struct rpc_cred *cred)
 
 	msg.rpc_cred = get_rpccred(cred);
 	ctx.name_cred = name_cred;
+	ctx.name_session = name_session_alloc();
+	if (!ctx.name_session) {
+		err = -ENOMEM;
+		goto out_err;
+	}
 	ctx.pages = pages;
-	ctx.len = auth_name_encode_init_args(name_cred, pages, AUTH_NAME_MAX_XDRLEN);
+	ctx.len = auth_name_encode_init_args(name_cred, pages,
+					AUTH_NAME_MAX_XDRLEN);
 	err = rpc_call_sync(clnt, &msg, RPC_TASK_SOFT | RPC_TASK_SOFTCONN);
 	for (i = 0; i < ARRAY_SIZE(pages) && pages[i]; i++)
 		put_page(pages[i]);
+	name_session_put(ctx.name_session);
+out_err:
 	put_rpccred(msg.rpc_cred);
 	return err;
 }
@@ -399,15 +503,13 @@ name_create(struct rpc_auth_create_args *args, struct rpc_clnt *clnt)
 static int
 name_destroying_context(struct rpc_cred *cred)
 {
-	struct name_cred *name_cred = container_of(cred, struct name_cred, nc_base);
 	struct name_auth *name_auth = container_of(cred->cr_auth, struct name_auth, rpc_auth);
 	struct rpc_task *task;
 
 	if (test_bit(RPCAUTH_CRED_UPTODATE, &cred->cr_flags) == 0)
 		return 0;
 
-	name_cred->nc_proc = AUTH_NAME_PROC_DESTROY;
-	cred->cr_ops = &name_nullops;
+	cred->cr_ops = &name_destroyops;
 
 	task = rpc_call_null(name_auth->client, cred, RPC_TASK_ASYNC|RPC_TASK_SOFT);
 	if (!IS_ERR(task))
@@ -419,9 +521,15 @@ name_destroying_context(struct rpc_cred *cred)
 static void
 name_free_cred(struct name_cred *name_cred)
 {
+	struct name_session *name_session;
 	size_t i;
 
 	dprintk("RPC:       %s cred=%p\n", __func__, name_cred);
+
+	rcu_read_lock();
+	name_session = rcu_dereference(name_cred->nc_session);
+	name_session_put(name_session);
+	rcu_read_unlock();
 
 	/* free cached acred */
 	if (name_cred->nc_acred.group_info)
@@ -528,37 +636,37 @@ name_map_gid(struct rpc_task *task, kgid_t gid, char **groupp)
 }
 
 static int
-name_cred_from_acred(struct name_cred *cred, struct auth_cred *acred)
+name_cred_from_acred(struct name_cred *name_cred, struct auth_cred *acred)
 {
-	cred->nc_acred.uid = acred->uid;
-	cred->nc_acred.gid = acred->gid;
+	name_cred->nc_acred.uid = acred->uid;
+	name_cred->nc_acred.gid = acred->gid;
 	if (acred->group_info) {
-		cred->nc_acred.group_info = get_group_info(acred->group_info);
-		if (!cred->nc_acred.group_info)
+		name_cred->nc_acred.group_info = get_group_info(acred->group_info);
+		if (!name_cred->nc_acred.group_info)
 			goto out_err;
 	}
 	if (acred->principal) {
-		cred->nc_acred.principal = kstrdup(acred->principal, GFP_NOFS);
-		if (!cred->nc_acred.principal)
+		name_cred->nc_acred.principal = kstrdup(acred->principal, GFP_NOFS);
+		if (!name_cred->nc_acred.principal)
 			goto out_put_group_info;
 	}
-	cred->nc_acred.ac_flags = acred->ac_flags;
-	cred->nc_acred.machine_cred = acred->machine_cred;
+	name_cred->nc_acred.ac_flags = acred->ac_flags;
+	name_cred->nc_acred.machine_cred = acred->machine_cred;
 
 	return 0;
 
 out_put_group_info:
-	if (cred->nc_acred.group_info)
-		put_group_info(cred->nc_acred.group_info);
+	if (name_cred->nc_acred.group_info)
+		put_group_info(name_cred->nc_acred.group_info);
 out_err:
 	dprintk("RPC: %s failed with ENOMEM\n", __func__);
 	return -ENOMEM;
 }
 
 static int
-name_cred_map_principals(struct name_cred *cred, struct rpc_task *task)
+name_cred_map_principals(struct name_cred *name_cred, struct rpc_task *task)
 {
-	struct auth_cred *acred = &cred->nc_acred;
+	struct auth_cred *acred = &name_cred->nc_acred;
 	struct group_info *gi = acred->group_info;
 	int ret;
 	size_t i;
@@ -567,57 +675,57 @@ again:
 	ret = -ENOMEM;
 
 	/* check if already mapped */
-	if (test_bit(AUTH_NAME_CRED_FL_MAPPED, &cred->nc_flags))
+	if (test_bit(AUTH_NAME_CRED_FL_MAPPED, &name_cred->nc_flags))
 		return 0;
 
 	/* try to be the one to map */
-	if (test_and_set_bit(AUTH_NAME_CRED_FL_MAPPING, &cred->nc_flags)) {
+	if (test_and_set_bit(AUTH_NAME_CRED_FL_MAPPING, &name_cred->nc_flags)) {
 		/* another context is mapping, wait until it's done */
 		dprintk("RPC: %s wait for mapping\n", __func__);
-		wait_on_bit(&cred->nc_flags, AUTH_NAME_CRED_FL_MAPPED,
+		wait_on_bit(&name_cred->nc_flags, AUTH_NAME_CRED_FL_MAPPED,
 				TASK_KILLABLE);
 		goto again;
 	}
 
-	ret = name_map_uid(task, acred->uid, &cred->nc_user_principal);
+	ret = name_map_uid(task, acred->uid, &name_cred->nc_user_principal);
 	if (ret)
 		goto out_wake;
 
-	ret = name_map_gid(task, acred->gid, &cred->nc_group_principal);
+	ret = name_map_gid(task, acred->gid, &name_cred->nc_group_principal);
 	if (ret)
 		goto out_free_user;
 
-	cred->nc_other_principals = kzalloc(sizeof(char *) * gi->ngroups, GFP_NOFS);
-	if (!cred->nc_other_principals)
+	name_cred->nc_other_principals = kzalloc(sizeof(char *) * gi->ngroups, GFP_NOFS);
+	if (!name_cred->nc_other_principals)
 		goto out_free_group;
 
 	for (i = 0; i < gi->ngroups; i++) {
 		ret = name_map_gid(task, gi->gid[i],
-					&cred->nc_other_principals[i]);
+					&name_cred->nc_other_principals[i]);
 		if (ret)
 			goto out_free_others;
 	}
-	cred->nc_other_principals_count = gi->ngroups;
+	name_cred->nc_other_principals_count = gi->ngroups;
 
 	/* success! */
-	set_bit(AUTH_NAME_CRED_FL_MAPPED, &cred->nc_flags);
+	set_bit(AUTH_NAME_CRED_FL_MAPPED, &name_cred->nc_flags);
 	smp_mb__after_atomic();
-	wake_up_bit(&cred->nc_flags, AUTH_NAME_CRED_FL_MAPPED);
+	wake_up_bit(&name_cred->nc_flags, AUTH_NAME_CRED_FL_MAPPED);
 
 	return 0;
 
 out_free_others:
-	for (i = 0; i < gi->ngroups && cred->nc_other_principals[i]; i++)
-		kfree(cred->nc_other_principals[i]);
-	kfree(cred->nc_other_principals);
+	for (i = 0; i < gi->ngroups && name_cred->nc_other_principals[i]; i++)
+		kfree(name_cred->nc_other_principals[i]);
+	kfree(name_cred->nc_other_principals);
 out_free_group:
-	kfree(cred->nc_group_principal);
+	kfree(name_cred->nc_group_principal);
 out_free_user:
-	kfree(cred->nc_user_principal);
+	kfree(name_cred->nc_user_principal);
 out_wake:
-	clear_bit(AUTH_NAME_CRED_FL_MAPPING, &cred->nc_flags);
+	clear_bit(AUTH_NAME_CRED_FL_MAPPING, &name_cred->nc_flags);
 	smp_mb__after_atomic();
-	wake_up_bit(&cred->nc_flags, AUTH_NAME_CRED_FL_MAPPED);
+	wake_up_bit(&name_cred->nc_flags, AUTH_NAME_CRED_FL_MAPPED);
 
 	dprintk("RPC: %s failed with %d\n", __func__, ret);
 	return ret;
@@ -627,32 +735,34 @@ static struct rpc_cred *
 name_create_cred(struct rpc_auth *auth, struct auth_cred *acred, int flags, gfp_t gfp)
 {
 	struct name_auth *name_auth = container_of(auth, struct name_auth, rpc_auth);
-	struct name_cred	*cred = NULL;
+	struct name_cred	*name_cred = NULL;
 	int err = -ENOMEM;
 
 	dprintk("RPC:       %s for uid %d, flavor %d\n",
 		__func__, from_kuid(&init_user_ns, acred->uid),
 		auth->au_flavor);
 
-	if (!(cred = kzalloc(sizeof(*cred), gfp)))
+	if (!(name_cred = kzalloc(sizeof(*name_cred), gfp)))
 		goto out_err;
 
-	rpcauth_init_cred(&cred->nc_base, acred, auth, &name_credops);
+	rpcauth_init_cred(&name_cred->nc_base, acred, auth, &name_credops);
 	/*
 	 * Note: in order to force a call to call_refresh(), we deliberately
 	 * fail to flag the credential as RPCAUTH_CRED_UPTODATE.
 	 */
-	cred->nc_base.cr_flags = 1UL << RPCAUTH_CRED_NEW;
+	name_cred->nc_base.cr_flags = 1UL << RPCAUTH_CRED_NEW;
 
-	err = name_cred_from_acred(cred, acred);
+	name_cred_set_session(&name_cred->nc_base, NULL);
+
+	err = name_cred_from_acred(name_cred, acred);
 	if (err)
 		goto out_free_cred;
 
 	kref_get(&name_auth->kref);
-	return &cred->nc_base;
+	return &name_cred->nc_base;
 
 out_free_cred:
-	kfree(cred);
+	kfree(name_cred);
 out_err:
 	dprintk("RPC:       %s failed with error %d\n", __func__, err);
 	return ERR_PTR(err);
@@ -678,23 +788,44 @@ name_marshal(struct rpc_task *task, __be32 *p)
 {
 	struct rpc_rqst *req = task->tk_rqstp;
 	struct rpc_cred *cred = req->rq_cred;
-	struct name_cred *name_cred = container_of(cred, struct name_cred,
-							nc_base);
+	struct name_session *name_session;
+
 	dprintk("RPC: %5u %s\n", task->tk_pid, __func__);
+
+	name_session = name_cred_get_session(cred);
+
 	*p++ = htonl(RPC_AUTH_NAME);
 	*p++ = htonl((u32) 20);
 	*p++ = htonl((u32) AUTH_NAME_VERSION);
-	*p++ = htonl((u32) name_cred->nc_proc);
-        p = xdr_encode_hyper(p, name_cred->nc_verf);
-	*p++ = htonl((u32) name_cred->nc_session);
 
-	/* verifier */
+	if (name_session) {
+		dprintk("RPC: %s proc %u verf %llu session_id %u\n",
+			__func__, name_session->ns_proc, name_session->ns_verf,
+			name_session->ns_session_id);
+
+		*p++ = htonl((u32) name_session->ns_proc);
+		p = xdr_encode_hyper(p, name_session->ns_verf);
+		*p++ = htonl((u32) name_session->ns_session_id);
+
+		name_session_put(name_session);
+	} else {
+		/* this should never happen */
+		if (task->tk_msg.rpc_proc->p_proc != 0) {
+			WARN_ON_ONCE(1);
+			return NULL;
+		}
+		dprintk("RPC: %s proc INIT verf 0 session_id 0\n", __func__);
+		*p++ = htonl((u32) AUTH_NAME_PROC_INIT);
+		p = xdr_encode_hyper(p, 0ULL);
+		*p++ = htonl((u32) 0);
+	}
+
+	/* verifier is always NULL */
 	*p++ = htonl(RPC_AUTH_NULL);
 	*p++ = htonl(0);
 
 	return p;
 }
-
 
 static __be32 *
 name_validate(struct rpc_task *task, __be32 *p)
@@ -730,6 +861,7 @@ static int name_renew_cred(struct rpc_task *task)
 	};
 	struct rpc_cred *new;
 
+	printk("RPC: %s\n", __func__);
 	new = name_lookup_cred(auth, &acred, RPCAUTH_LOOKUP_NEW);
 	if (IS_ERR(new))
 		return PTR_ERR(new);
@@ -746,6 +878,8 @@ name_refresh_init_session(struct rpc_task *task)
 							nc_base);
 	int ret = 0;
 
+	dprintk("RPC: %s\n", __func__);
+
 	ret = name_cred_map_principals(name_cred, task);
 	if (ret) {
 		dprintk("RPC: %s name_cred_map_principals failed: %d\n",
@@ -755,8 +889,7 @@ name_refresh_init_session(struct rpc_task *task)
 
 	if (!test_and_set_bit(RPCAUTH_CRED_INIT, &cred->cr_flags)) {
 		dprintk("RPC: %s do init\n", __func__);
-		name_cred->nc_proc = AUTH_NAME_PROC_INIT;
-		cred->cr_ops = &name_nullops;
+		name_cred_set_session(cred, NULL);
 		ret = rpc_ping_payload_init(task->tk_client, cred);
 		clear_bit(RPCAUTH_CRED_INIT, &cred->cr_flags);
 		smp_mb__after_atomic();
@@ -783,21 +916,26 @@ name_cred_refresh(struct rpc_task *task)
 
 	if (!test_bit(RPCAUTH_CRED_NEW, &cred->cr_flags) &&
 		!test_bit(RPCAUTH_CRED_UPTODATE, &cred->cr_flags)) {
+		dprintk("RPC: %s renewpath\n", __func__);
 		ret = name_renew_cred(task);
 		if (ret < 0)
 			goto out;
 		cred = task->tk_rqstp->rq_cred;
 	}
 
-	if (test_bit(RPCAUTH_CRED_NEW, &cred->cr_flags))
+	/* ALWAYS allow NULL calls through without trying to initialize */
+	if (test_bit(RPCAUTH_CRED_NEW, &cred->cr_flags) &&
+	    task->tk_msg.rpc_proc->p_proc != 0)
 		ret = name_refresh_init_session(task);
+	else
+		dprintk("RPC: %s no init\n", __func__);
 out:
 	return ret;
 }
 
 /* Dummy refresh routine: used only when init/destroying the context */
 static int
-name_refresh_null(struct rpc_task *task)
+name_cred_refresh_null(struct rpc_task *task)
 {
 	return 0;
 }
@@ -823,14 +961,14 @@ static const struct rpc_credops name_credops = {
 	.crrefresh		= name_cred_refresh,
 };
 
-static const struct rpc_credops name_nullops = {
+static const struct rpc_credops name_destroyops = {
 	.cr_name		= "AUTH_NAME",
 	.crdestroy		= name_destroy_nullcred,
 	.crbind			= rpcauth_generic_bind_cred,
 	.crmatch		= name_match,
 	.crmarshal		= name_marshal,
 	.crvalidate		= name_validate,
-	.crrefresh		= name_refresh_null,
+	.crrefresh		= name_cred_refresh_null,
 };
 
 /*
