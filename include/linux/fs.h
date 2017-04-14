@@ -2073,6 +2073,8 @@ struct inode_operations {
 	int (*fileattr_set)(struct user_namespace *mnt_userns,
 			    struct dentry *dentry, struct fileattr *fa);
 	int (*fileattr_get)(struct dentry *dentry, struct fileattr *fa);
+	int (*mkdir2) (struct user_namespace *, struct inode *, struct dentry *,
+		       umode_t, unsigned int);
 } ____cacheline_aligned;
 
 static inline ssize_t call_read_iter(struct file *file, struct kiocb *kio,
