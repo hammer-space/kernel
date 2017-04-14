@@ -2333,17 +2333,21 @@ EXPORT_SYMBOL_GPL(nfs_mknod);
 /*
  * See comments for nfs_proc_create regarding failed operations.
  */
-int nfs_mkdir(struct user_namespace *mnt_userns, struct inode *dir,
-	      struct dentry *dentry, umode_t mode)
+int nfs_mkdir2(struct user_namespace *mnt_userns, struct inode *dir,
+	       struct dentry *dentry, umode_t mode, unsigned int flags)
 {
-	struct iattr attr;
+	struct iattr attr = {
+		.ia_valid = 0,
+	};
 	int error;
 
 	dfprintk(VFS, "NFS: mkdir(%s/%lu), %pd\n",
 			dir->i_sb->s_id, dir->i_ino, dentry);
 
-	attr.ia_valid = ATTR_MODE;
-	attr.ia_mode = mode | S_IFDIR;
+	if (!(flags & MKDIR_NOMODE)) {
+		attr.ia_valid |= ATTR_MODE;
+		attr.ia_mode = mode | S_IFDIR;
+	}
 
 	trace_nfs_mkdir_enter(dir, dentry);
 	error = NFS_PROTO(dir)->mkdir(dir, dentry, &attr);
@@ -2354,6 +2358,13 @@ int nfs_mkdir(struct user_namespace *mnt_userns, struct inode *dir,
 out_err:
 	d_drop(dentry);
 	return error;
+}
+EXPORT_SYMBOL_GPL(nfs_mkdir2);
+
+int nfs_mkdir(struct user_namespace *mnt_userns, struct inode *dir,
+	      struct dentry *dentry, umode_t mode)
+{
+	return nfs_mkdir2(mnt_userns, dir, dentry, mode, 0);
 }
 EXPORT_SYMBOL_GPL(nfs_mkdir);
 
