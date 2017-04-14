@@ -3896,11 +3896,12 @@ SYSCALL_DEFINE3(mknod, const char __user *, filename, umode_t, mode, unsigned, d
 }
 
 /**
- * vfs_mkdir - create directory
+ * vfs_mkdir2 - create directory
  * @mnt_userns:	user namespace of the mount the inode was found from
  * @dir:	inode of @dentry
  * @dentry:	pointer to dentry of the base directory
  * @mode:	mode of the new directory
+ * @flags:	creation flags
  *
  * Create a directory.
  *
@@ -3910,8 +3911,8 @@ SYSCALL_DEFINE3(mknod, const char __user *, filename, umode_t, mode, unsigned, d
  * On non-idmapped mounts or if permission checking is to be performed on the
  * raw inode simply passs init_user_ns.
  */
-int vfs_mkdir(struct user_namespace *mnt_userns, struct inode *dir,
-	      struct dentry *dentry, umode_t mode)
+static int vfs_mkdir2(struct user_namespace *mnt_userns, struct inode *dir,
+		      struct dentry *dentry, umode_t mode, unsigned int flags)
 {
 	int error = may_create(mnt_userns, dir, dentry);
 	unsigned max_links = dir->i_sb->s_max_links;
@@ -3930,14 +3931,40 @@ int vfs_mkdir(struct user_namespace *mnt_userns, struct inode *dir,
 	if (max_links && dir->i_nlink >= max_links)
 		return -EMLINK;
 
-	error = dir->i_op->mkdir(mnt_userns, dir, dentry, mode);
+	if (dir->i_op->mkdir2)
+		error = dir->i_op->mkdir2(mnt_userns, dir, dentry, mode, flags);
+	else if (flags == 0)
+		error = dir->i_op->mkdir(mnt_userns, dir, dentry, mode);
+	else
+		error = -EOPNOTSUPP;
 	if (!error)
 		fsnotify_mkdir(dir, dentry);
 	return error;
 }
+
+/**
+ * vfs_mkdir - create directory
+ * @mnt_userns:	user namespace of the mount the inode was found from
+ * @dir:	inode of @dentry
+ * @dentry:	pointer to dentry of the base directory
+ * @mode:	mode of the new directory
+ *
+ * Create a directory.
+ *
+ * If the inode has been found through an idmapped mount the user namespace of
+ * the vfsmount must be passed through @mnt_userns. This function will then take
+ * care to map the inode according to @mnt_userns before checking permissions.
+ * On non-idmapped mounts or if permission checking is to be performed on the
+ * raw inode simply passs init_user_ns.
+ */
+int vfs_mkdir(struct user_namespace *mnt_userns, struct inode *dir,
+	      struct dentry *dentry, umode_t mode)
+{
+	return vfs_mkdir2(mnt_userns, dir, dentry, mode, 0);
+}
 EXPORT_SYMBOL(vfs_mkdir);
 
-int do_mkdirat(int dfd, struct filename *name, umode_t mode)
+int do_mkdirat(int dfd, struct filename *name, umode_t mode, unsigned int flags)
 {
 	struct dentry *dentry;
 	struct path path;
@@ -3956,8 +3983,8 @@ retry:
 	if (!error) {
 		struct user_namespace *mnt_userns;
 		mnt_userns = mnt_user_ns(path.mnt);
-		error = vfs_mkdir(mnt_userns, path.dentry->d_inode, dentry,
-				  mode);
+		error = vfs_mkdir2(mnt_userns, path.dentry->d_inode, dentry,
+				   mode, flags);
 	}
 	done_path_create(&path, dentry);
 	if (retry_estale(error, lookup_flags)) {
@@ -3971,12 +3998,17 @@ out_putname:
 
 SYSCALL_DEFINE3(mkdirat, int, dfd, const char __user *, pathname, umode_t, mode)
 {
-	return do_mkdirat(dfd, getname(pathname), mode);
+	return do_mkdirat(dfd, getname(pathname), mode, 0);
+}
+
+SYSCALL_DEFINE4(mkdirat2, int, dfd, const char __user *, pathname, umode_t, mode, unsigned int, flags)
+{
+	return do_mkdirat(dfd, getname(pathname), mode, flags);
 }
 
 SYSCALL_DEFINE2(mkdir, const char __user *, pathname, umode_t, mode)
 {
-	return do_mkdirat(AT_FDCWD, getname(pathname), mode);
+	return do_mkdirat(AT_FDCWD, getname(pathname), mode, 0);
 }
 
 /**
