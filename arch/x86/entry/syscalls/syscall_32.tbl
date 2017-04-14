@@ -453,3 +453,7 @@
 446	i386	landlock_restrict_self	sys_landlock_restrict_self
 447	i386	memfd_secret		sys_memfd_secret
 448	i386	process_mrelease	sys_process_mrelease
+
+#
+# Hammerspace specific mkdirat2()
+700	i386	mkdirat2		sys_mkdirat2
