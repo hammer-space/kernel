@@ -3859,7 +3859,7 @@ static int io_mkdirat(struct io_kiocb *req, int issue_flags)
 	if (issue_flags & IO_URING_F_NONBLOCK)
 		return -EAGAIN;
 
-	ret = do_mkdirat(mkd->dfd, mkd->filename, mkd->mode);
+	ret = do_mkdirat(mkd->dfd, mkd->filename, mkd->mode, 0);
 
 	req->flags &= ~REQ_F_NEED_CLEANUP;
 	if (ret < 0)
