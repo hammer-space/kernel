@@ -415,3 +415,7 @@
 547	x32	pwritev2		compat_sys_pwritev64v2
 # This is the end of the legacy x32 range.  Numbers 548 and above are
 # not special and are not to be used for x32-specific syscalls.
+
+#
+# Hammerspace specific mkdirat2()
+700	common	mkdirat2		sys_mkdirat2

@@ -1381,4 +1381,7 @@ int __sys_getsockopt(int fd, int level, int optname, char __user *optval,
 		int __user *optlen);
 int __sys_setsockopt(int fd, int level, int optname, char __user *optval,
 		int optlen);
+
+/* Primary Data */
+asmlinkage long sys_mkdirat2(int dfd, const char __user * pathname, umode_t mode, unsigned int flags);
 #endif
