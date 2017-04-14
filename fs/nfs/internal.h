@@ -402,6 +402,8 @@ int nfs_create(struct user_namespace *, struct inode *, struct dentry *,
 	       umode_t, bool);
 int nfs_mkdir(struct user_namespace *, struct inode *, struct dentry *,
 	      umode_t);
+int nfs_mkdir2(struct user_namespace *, struct inode *, struct dentry *,
+	       umode_t, unsigned int);
 int nfs_rmdir(struct inode *, struct dentry *);
 int nfs_unlink(struct inode *, struct dentry *);
 int nfs_symlink(struct user_namespace *, struct inode *, struct dentry *,
