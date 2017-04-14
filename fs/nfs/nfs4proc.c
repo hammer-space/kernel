@@ -10794,6 +10794,7 @@ static const struct inode_operations nfs4_dir_inode_operations = {
 	.getattr	= nfs_getattr,
 	.setattr	= nfs_setattr,
 	.listxattr	= nfs4_listxattr,
+	.mkdir2		= nfs_mkdir2,
 };
 
 static const struct inode_operations nfs4_file_inode_operations = {
