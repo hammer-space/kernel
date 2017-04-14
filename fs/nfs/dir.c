@@ -2059,7 +2059,7 @@ int nfs_atomic_open(struct inode *dir, struct dentry *dentry,
 	if (dentry->d_name.len > NFS_SERVER(dir)->namelen)
 		return -ENAMETOOLONG;
 
-	if (open_flags & O_CREAT) {
+	if ((open_flags & O_CREAT) && !(open_flags & O_NOMODE)) {
 		struct nfs_server *server = NFS_SERVER(dir);
 
 		if (!(server->attr_bitmask[2] & FATTR4_WORD2_MODE_UMASK))
