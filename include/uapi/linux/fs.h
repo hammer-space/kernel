@@ -51,6 +51,8 @@
 #define RENAME_EXCHANGE		(1 << 1)	/* Exchange source and dest */
 #define RENAME_WHITEOUT		(1 << 2)	/* Whiteout source */
 
+#define MKDIR_NOMODE		(1 << 0)	/* Don't clobber the inherited ACL */
+
 struct file_clone_range {
 	__s64 src_fd;
 	__u64 src_offset;
