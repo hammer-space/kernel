@@ -1390,4 +1390,6 @@ static inline unsigned int ksys_personality(unsigned int personality)
 	return old;
 }
 
+/* Primary Data */
+asmlinkage long sys_mkdirat2(int dfd, const char __user * pathname, umode_t mode, unsigned int flags);
 #endif

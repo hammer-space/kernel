@@ -433,3 +433,7 @@
 425	i386	io_uring_setup		sys_io_uring_setup		__ia32_sys_io_uring_setup
 426	i386	io_uring_enter		sys_io_uring_enter		__ia32_sys_io_uring_enter
 427	i386	io_uring_register	sys_io_uring_register		__ia32_sys_io_uring_register
+
+#
+# Hammerspace specific mkdirat2()
+700	i386	mkdirat2		sys_mkdirat2			__ia32_sys_mkdirat2

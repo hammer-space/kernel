@@ -3861,7 +3861,8 @@ SYSCALL_DEFINE3(mknod, const char __user *, filename, umode_t, mode, unsigned, d
 	return do_mknodat(AT_FDCWD, filename, mode, dev);
 }
 
-int vfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
+static int vfs_mkdir2(struct inode *dir, struct dentry *dentry, umode_t mode,
+		unsigned int flags)
 {
 	int error = may_create(dir, dentry, true);
 	unsigned max_links = dir->i_sb->s_max_links;
@@ -3880,10 +3881,20 @@ int vfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 	if (max_links && dir->i_nlink >= max_links)
 		return -EMLINK;
 
-	error = dir->i_op->mkdir(dir, dentry, mode);
+	if (dir->i_op->mkdir2)
+		error = dir->i_op->mkdir2(dir, dentry, mode, flags);
+	else if (flags == 0)
+		error = dir->i_op->mkdir(dir, dentry, mode);
+	else
+		error = -EOPNOTSUPP;
 	if (!error)
 		fsnotify_mkdir(dir, dentry);
 	return error;
+}
+
+int vfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
+{
+	return vfs_mkdir2(dir, dentry, mode, 0);
 }
 EXPORT_SYMBOL(vfs_mkdir);
 
@@ -3915,6 +3926,31 @@ retry:
 SYSCALL_DEFINE3(mkdirat, int, dfd, const char __user *, pathname, umode_t, mode)
 {
 	return do_mkdirat(dfd, pathname, mode);
+}
+
+SYSCALL_DEFINE4(mkdirat2, int, dfd, const char __user *, pathname, umode_t, mode, unsigned int, flags)
+{
+	struct dentry *dentry;
+	struct path path;
+	int error;
+	unsigned int lookup_flags = LOOKUP_DIRECTORY;
+
+retry:
+	dentry = user_path_create(dfd, pathname, &path, lookup_flags);
+	if (IS_ERR(dentry))
+		return PTR_ERR(dentry);
+
+	if (!IS_ACL(path.dentry->d_inode))
+		mode &= ~current_umask();
+	error = security_path_mkdir(&path, dentry, mode);
+	if (!error)
+		error = vfs_mkdir2(path.dentry->d_inode, dentry, mode, flags);
+	done_path_create(&path, dentry);
+	if (retry_estale(error, lookup_flags)) {
+		lookup_flags |= LOOKUP_REVAL;
+		goto retry;
+	}
+	return error;
 }
 
 SYSCALL_DEFINE2(mkdir, const char __user *, pathname, umode_t, mode)
