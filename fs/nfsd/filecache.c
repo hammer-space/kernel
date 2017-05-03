@@ -95,8 +95,10 @@ nfsd_file_mark_get(struct nfsd_file_mark *nfm)
 static void
 nfsd_file_mark_put(struct nfsd_file_mark *nfm)
 {
-	if (atomic_dec_and_test(&nfm->nfm_ref))
+	if (atomic_dec_and_test(&nfm->nfm_ref)) {
 		fsnotify_destroy_mark(&nfm->nfm_mark, nfsd_file_fsnotify_group);
+		fsnotify_put_mark(&nfm->nfm_mark);
+	}
 }
 
 static struct nfsd_file_mark *
