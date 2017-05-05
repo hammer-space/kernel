@@ -128,33 +128,61 @@ nfs4_file_flush(struct file *file, fl_owner_t id)
 	return vfs_fsync(file, 0);
 }
 
-static long nfs4_ioctl_file_dates_flags(struct file *dst_file, void __user *argp)
+static long nfs4_ioctl_file_statx_get(struct file *dst_file,
+		struct nfs_ioctl_nfs4_statx __user *uarg)
 {
-	int ret = 0;
-	struct nfs_inode *nfsi;
-	struct nfs_ioctl_file_dates_flags_args args;
-	struct inode *dst_inode = file_inode(dst_file);
-	struct nfs_server *server = NFS_SERVER(dst_inode);
+	struct nfs_ioctl_nfs4_statx args = {
+		.fa_valid = { 0 },
+	};
+	struct inode *inode = file_inode(dst_file);
+	struct nfs_server *server = NFS_SERVER(inode);
+	struct nfs_inode *nfsi = NFS_I(inode);
+	int ret;
 
-	ret = nfs_revalidate_inode(server, dst_inode);
+	ret = nfs_revalidate_inode(server, inode);
 	if (ret != 0)
 		return ret;
 
-	nfsi = NFS_I(dst_inode);
-	args.hidden = nfsi->hidden;
-	args.system = nfsi->system;
-	args.archive = nfsi->archive;
+	if (nfs_server_capable(inode, NFS_CAP_TIME_BACKUP)) {
+		args.fa_valid[0] |= NFS_FA_VALID_TIME_BACKUP;
+		if (copy_to_user(&uarg->fa_time_backup, &nfsi->timebackup,
+					sizeof(uarg->fa_time_backup)))
+			ret = EFAULT;
+	}
 
-	args.timebackup_seconds = nfsi->timebackup.tv_sec;
-	args.timebackup_nseconds = nfsi->timebackup.tv_nsec;
+	if (nfs_server_capable(inode, NFS_CAP_TIME_CREATE)) {
+		args.fa_valid[0] |= NFS_FA_VALID_TIME_BACKUP;
+		if (copy_to_user(&uarg->fa_time_create, &nfsi->timecreate,
+					sizeof(uarg->fa_time_create)))
+			ret = -EFAULT;
+	}
 
-	args.timecreate_seconds = nfsi->timecreate.tv_sec;
-	args.timecreate_nseconds = nfsi->timecreate.tv_nsec;
+	if (nfs_server_capable(inode, NFS_CAP_ARCHIVE)) {
+		args.fa_valid[0] |= NFS_FA_VALID_ARCHIVE;
+		if (nfsi->archive)
+			args.fa_flags |= NFS_FA_FLAG_ARCHIVE;
+	}
+	if (nfs_server_capable(inode, NFS_CAP_HIDDEN)) {
+		args.fa_valid[0] |= NFS_FA_VALID_HIDDEN;
+		if (nfsi->hidden)
+			args.fa_flags |= NFS_FA_FLAG_HIDDEN;
+	}
+	if (nfs_server_capable(inode, NFS_CAP_SYSTEM)) {
+		args.fa_valid[0] |= NFS_FA_VALID_SYSTEM;
+		if (nfsi->system)
+			args.fa_flags |= NFS_FA_FLAG_SYSTEM;
+	}
 
-	if (copy_to_user(argp, &args, sizeof(args)))
-		return -EFAULT;
+	if ((args.fa_valid[0] & (NFS_FA_VALID_ARCHIVE |
+				NFS_FA_VALID_HIDDEN |
+				NFS_FA_VALID_SYSTEM)) &&
+	    put_user(args.fa_flags, &uarg->fa_flags))
+		ret = -EFAULT;
 
-	return 0;
+	if (copy_to_user(uarg->fa_valid, args.fa_valid, sizeof(uarg->fa_valid)))
+		ret = -EFAULT;
+
+	return ret;
 }
 
 #ifdef CONFIG_NFS_V4_2
@@ -272,13 +300,13 @@ out:
 	return ret < 0 ? ret : count;
 }
 
-long nfs4_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+static long nfs4_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	void __user *argp = (void __user *)arg;
 
 	switch (cmd) {
-	case NFS_IOC_FILE_DATES_FLAGS:
-		return nfs4_ioctl_file_dates_flags(file, argp);
+	case NFS_IOC_FILE_STATX_GET:
+		return nfs4_ioctl_file_statx_get(file, argp);
 	}
 
 	return -ENOTTY;

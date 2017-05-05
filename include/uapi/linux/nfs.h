@@ -36,16 +36,33 @@
 #define NFS_PIPE_DIRNAME "nfs"
 
 /* NFS ioctls */
-#define NFS_IOC_FILE_DATES_FLAGS	_IOR('N', 10, struct nfs_ioctl_file_dates_flags_args *)
+#define NFS_IOC_FILE_STATX_GET	_IOR('N', 2, struct nfs_ioctl_nfs4_statx)
 
-struct nfs_ioctl_file_dates_flags_args {
-	bool hidden;
-	bool system;
-	bool archive;
-	__u64 timebackup_seconds;
-	__u32 timebackup_nseconds;
-	__u64 timecreate_seconds;
-	__u32 timecreate_nseconds;
+#define NFS_FA_VALID_TIME_CREATE			0x0001UL
+#define NFS_FA_VALID_TIME_BACKUP			0x0002UL
+#define NFS_FA_VALID_ARCHIVE				0x0004UL
+#define NFS_FA_VALID_HIDDEN				0x0008UL
+#define NFS_FA_VALID_SYSTEM				0x0010UL
+
+#define NFS_FA_VALID_ALL_ATTR_0 ( NFS_FA_VALID_TIME_CREATE | \
+		NFS_FA_VALID_TIME_BACKUP | \
+		NFS_FA_VALID_ARCHIVE | \
+		NFS_FA_VALID_HIDDEN | \
+		NFS_FA_VALID_SYSTEM )
+
+#define NFS_FA_FLAG_ARCHIVE				(1UL << 0)
+#define NFS_FA_FLAG_HIDDEN				(1UL << 1)
+#define NFS_FA_FLAG_SYSTEM				(1UL << 2)
+struct nfs_ioctl_nfs4_statx {
+	__u64		fa_valid[2];		/* Attributes set */
+
+	struct timespec fa_time_backup;		/* Backup time */
+	struct timespec fa_time_create;		/* Birth time */
+
+	/* Flag attributes */
+	__u64 fa_flags;
+
+	__u64 fa_padding[14];
 };
 
 /*
