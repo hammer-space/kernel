@@ -808,6 +808,7 @@ struct nfs_setattrargs {
 	const struct nfs_server *	server; /* Needed for name mapping */
 	const u32 *			bitmask;
 	const struct nfs4_label		*label;
+	const struct nfs_ioctl_nfs4_statx	*statx;
 };
 
 struct nfs_setaclargs {
