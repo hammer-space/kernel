@@ -161,7 +161,13 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		args.fa_valid[0] |= NFS_FA_VALID_ARCHIVE;
 		if (nfsi->archive)
 			args.fa_flags |= NFS_FA_FLAG_ARCHIVE;
+	} else if (nfs_server_capable(inode, NFS_CAP_TIME_BACKUP)) {
+		struct timespec ts = timespec64_to_timespec(inode->i_mtime);
+		args.fa_valid[0] |= NFS_FA_VALID_ARCHIVE;
+		if (timespec_compare(&nfsi->timebackup, &ts) >= 0)
+			args.fa_flags |= NFS_FA_FLAG_ARCHIVE;
 	}
+
 	if (nfs_server_capable(inode, NFS_CAP_HIDDEN)) {
 		args.fa_valid[0] |= NFS_FA_VALID_HIDDEN;
 		if (nfsi->hidden)
