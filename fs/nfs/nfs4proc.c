@@ -7716,6 +7716,56 @@ static int _nfs41_proc_get_locations(struct inode *inode,
 
 #endif	/* CONFIG_NFS_V4_1 */
 
+static int _nfs4_set_nfs4_statx(struct inode *inode,
+		struct nfs_ioctl_nfs4_statx *statx,
+		struct nfs_fattr *fattr)
+{
+
+	struct iattr sattr = {0};
+	struct nfs_server *server = NFS_SERVER(inode);
+	struct nfs_setattrargs arg = {
+		.fh             = NFS_FH(inode),
+		.iap            = &sattr,
+		.server		= server,
+		.bitmask	= server->attr_bitmask,
+		.statx		= statx,
+	};
+	struct nfs_setattrres res = {
+		.fattr		= fattr,
+		.server		= server,
+	};
+	struct rpc_message msg = {
+		.rpc_proc       = &nfs4_procedures[NFSPROC4_CLNT_SETATTR],
+		.rpc_argp       = &arg,
+		.rpc_resp       = &res,
+	};
+	int status;
+
+	nfs4_stateid_copy(&arg.stateid, &zero_stateid);
+
+	status = nfs4_call_sync(server->client, server, &msg, &arg.seq_args, &res.seq_res, 1);
+	if (status)
+		dprintk("%s failed: %d\n", __func__, status);
+
+	return status;
+}
+
+int nfs4_set_nfs4_statx(struct inode *inode,
+		struct nfs_ioctl_nfs4_statx *statx,
+		struct nfs_fattr *fattr)
+{
+	struct nfs4_exception exception = { };
+	struct nfs_server *server = NFS_SERVER(inode);
+	int err;
+
+	do {
+		err = nfs4_handle_exception(server,
+				_nfs4_set_nfs4_statx(inode, statx, fattr),
+				&exception);
+	} while (exception.retry);
+	return err;
+}
+
 /**
  * nfs4_proc_get_locations - discover locations for a migrated FSID
  * @inode: inode on FSID that is migrating

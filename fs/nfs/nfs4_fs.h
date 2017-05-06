@@ -310,6 +310,9 @@ extern int nfs4_set_rw_stateid(nfs4_stateid *stateid,
 		const struct nfs_open_context *ctx,
 		const struct nfs_lock_context *l_ctx,
 		fmode_t fmode);
+extern int nfs4_set_nfs4_statx(struct inode *inode,
+		struct nfs_ioctl_nfs4_statx *statx,
+		struct nfs_fattr *fattr);
 
 #if defined(CONFIG_NFS_V4_1)
 extern int nfs41_sequence_done(struct rpc_task *, struct nfs4_sequence_res *);

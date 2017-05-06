@@ -37,6 +37,7 @@
 
 /* NFS ioctls */
 #define NFS_IOC_FILE_STATX_GET	_IOR('N', 2, struct nfs_ioctl_nfs4_statx)
+#define NFS_IOC_FILE_STATX_SET	_IOW('N', 3, struct nfs_ioctl_nfs4_statx)
 
 #define NFS_FA_VALID_TIME_CREATE			0x0001UL
 #define NFS_FA_VALID_TIME_BACKUP			0x0002UL

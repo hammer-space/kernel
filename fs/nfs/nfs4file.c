@@ -191,6 +191,53 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	return ret;
 }
 
+static long nfs4_ioctl_file_statx_set(struct file *dst_file,
+		struct nfs_ioctl_nfs4_statx __user *uarg)
+{
+	struct inode *inode = file_inode(dst_file);
+	struct nfs_ioctl_nfs4_statx args = {
+		.fa_valid = { 0 },
+	};
+	struct nfs_fattr *fattr = nfs_alloc_fattr();
+	int ret;
+
+	if (fattr == NULL)
+		return -ENOMEM;
+	if (get_user(args.fa_valid[0], &uarg->fa_valid[0]))
+		return -EFAULT;
+	args.fa_valid[0] &= NFS_FA_VALID_ALL_ATTR_0;
+
+	if ((args.fa_valid[0] & (NFS_FA_VALID_ARCHIVE |
+					NFS_FA_VALID_HIDDEN |
+					NFS_FA_VALID_SYSTEM)) &&
+	    get_user(args.fa_flags, &uarg->fa_flags))
+		return -EFAULT;
+
+	if ((args.fa_valid[0] & NFS_FA_VALID_TIME_CREATE) &&
+	    copy_from_user(&args.fa_time_create, &uarg->fa_time_create,
+					sizeof(args.fa_time_create)))
+		return -EFAULT;
+
+	if (args.fa_valid[0] & NFS_FA_VALID_TIME_BACKUP) {
+		if (copy_from_user(&args.fa_time_backup, &uarg->fa_time_backup,
+					sizeof(args.fa_time_backup)))
+			return -EFAULT;
+		if (!(args.fa_valid[0] & NFS_FA_VALID_ARCHIVE)) {
+			args.fa_valid[0] |= NFS_FA_VALID_ARCHIVE;
+			args.fa_flags |= NFS_FA_FLAG_ARCHIVE;
+		}
+	} else if (args.fa_valid[0] & NFS_FA_VALID_ARCHIVE) {
+		args.fa_time_backup = current_kernel_time();
+		args.fa_valid[0] |= NFS_FA_VALID_TIME_BACKUP;
+	}
+
+	ret = nfs4_set_nfs4_statx(inode, &args, fattr);
+	if (ret == 0)
+		nfs_post_op_update_inode(inode, fattr);
+
+	return ret;
+}
+
 #ifdef CONFIG_NFS_V4_2
 static ssize_t nfs4_copy_file_range(struct file *file_in, loff_t pos_in,
 				    struct file *file_out, loff_t pos_out,
@@ -313,6 +360,8 @@ static long nfs4_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case NFS_IOC_FILE_STATX_GET:
 		return nfs4_ioctl_file_statx_get(file, argp);
+	case NFS_IOC_FILE_STATX_SET:
+		return nfs4_ioctl_file_statx_set(file, argp);
 	}
 
 	return -ENOTTY;
