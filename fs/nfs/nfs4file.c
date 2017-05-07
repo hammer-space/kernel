@@ -356,15 +356,21 @@ out:
 static long nfs4_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	void __user *argp = (void __user *)arg;
+	long ret;
 
 	switch (cmd) {
 	case NFS_IOC_FILE_STATX_GET:
-		return nfs4_ioctl_file_statx_get(file, argp);
+		ret = nfs4_ioctl_file_statx_get(file, argp);
+		break;
 	case NFS_IOC_FILE_STATX_SET:
-		return nfs4_ioctl_file_statx_set(file, argp);
+		ret = nfs4_ioctl_file_statx_set(file, argp);
+		break;
+	default:
+		ret = -ENOIOCTLCMD;
 	}
 
-	return -ENOTTY;
+	dprintk("%s: file=%pD2, cmd=%u, ret=%ld\n", __func__, file, cmd, ret);
+	return ret;
 }
 
 #endif /* CONFIG_NFS_V4_2 */
