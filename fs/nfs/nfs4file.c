@@ -381,7 +381,6 @@ const struct file_operations nfs4_file_operations = {
 	.llseek		= nfs4_file_llseek,
 	.fallocate	= nfs42_fallocate,
 	.unlocked_ioctl	= nfs4_ioctl,
-	.compat_ioctl	= nfs4_ioctl,
 	.clone_file_range = nfs42_clone_file_range,
 #else
 	.llseek		= nfs_file_llseek,
