@@ -469,7 +469,10 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 			inode->i_data.a_ops = &nfs_file_aops;
 		} else if (S_ISDIR(inode->i_mode)) {
 			inode->i_op = NFS_SB(sb)->nfs_client->rpc_ops->dir_inode_ops;
-			inode->i_fop = &nfs_dir_operations;
+			if (NFS_SB(sb)->nfs_client->rpc_ops->dir_ops)
+				inode->i_fop = NFS_SB(sb)->nfs_client->rpc_ops->dir_ops;
+			else
+				inode->i_fop = &nfs_dir_operations;
 			inode->i_data.a_ops = &nfs_dir_aops;
 			/* Deal with crossing mountpoints */
 			if (fattr->valid & NFS_ATTR_FATTR_MOUNTPOINT ||

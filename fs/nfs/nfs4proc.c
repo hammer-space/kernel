@@ -10113,6 +10113,7 @@ const struct nfs_rpc_ops nfs_v4_clientops = {
 	.dir_inode_ops	= &nfs4_dir_inode_operations,
 	.file_inode_ops	= &nfs4_file_inode_operations,
 	.file_ops	= &nfs4_file_operations,
+	.dir_ops	= &nfs4_dir_operations,
 	.getroot	= nfs4_proc_get_root,
 	.submount	= nfs4_submount,
 	.try_mount	= nfs4_try_mount,

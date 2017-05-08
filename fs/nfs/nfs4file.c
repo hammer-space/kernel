@@ -311,3 +311,13 @@ const struct file_operations nfs4_file_operations = {
 	.llseek		= nfs_file_llseek,
 #endif
 };
+
+const struct file_operations nfs4_dir_operations = {
+	.llseek		= nfs_llseek_dir,
+	.read		= generic_read_dir,
+	.iterate	= nfs_readdir,
+	.open		= nfs_opendir,
+	.release	= nfs_closedir,
+	.fsync		= nfs_fsync_dir,
+	.unlocked_ioctl = nfs4_ioctl,
+};
