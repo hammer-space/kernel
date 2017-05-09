@@ -672,8 +672,6 @@ name_cred_map_principals(struct name_cred *name_cred, struct rpc_task *task)
 	size_t i;
 
 again:
-	ret = -ENOMEM;
-
 	/* check if already mapped */
 	if (test_bit(AUTH_NAME_CRED_FL_MAPPED, &name_cred->nc_flags))
 		return 0;
@@ -682,10 +680,15 @@ again:
 	if (test_and_set_bit(AUTH_NAME_CRED_FL_MAPPING, &name_cred->nc_flags)) {
 		/* another context is mapping, wait until it's done */
 		dprintk("RPC: %s wait for mapping\n", __func__);
-		wait_on_bit(&name_cred->nc_flags, AUTH_NAME_CRED_FL_MAPPED,
+		wait_on_bit(&name_cred->nc_flags, AUTH_NAME_CRED_FL_MAPPING,
 				TASK_KILLABLE);
 		goto again;
 	}
+
+	/* Did we race? */
+	ret = 0;
+	if (test_bit(AUTH_NAME_CRED_FL_MAPPED, &name_cred->nc_flags))
+		goto out_unlock;
 
 	ret = name_map_uid(task, acred->uid, &name_cred->nc_user_principal);
 	if (ret)
@@ -709,10 +712,12 @@ again:
 
 	/* success! */
 	set_bit(AUTH_NAME_CRED_FL_MAPPED, &name_cred->nc_flags);
+out_unlock:
+	clear_bit(AUTH_NAME_CRED_FL_MAPPING, &name_cred->nc_flags);
 	smp_mb__after_atomic();
-	wake_up_bit(&name_cred->nc_flags, AUTH_NAME_CRED_FL_MAPPED);
+	wake_up_bit(&name_cred->nc_flags, AUTH_NAME_CRED_FL_MAPPING);
 
-	return 0;
+	return ret;
 
 out_free_others:
 	for (i = 0; i < gi->ngroups && name_cred->nc_other_principals[i]; i++)
@@ -723,12 +728,8 @@ out_free_group:
 out_free_user:
 	kfree(name_cred->nc_user_principal);
 out_wake:
-	clear_bit(AUTH_NAME_CRED_FL_MAPPING, &name_cred->nc_flags);
-	smp_mb__after_atomic();
-	wake_up_bit(&name_cred->nc_flags, AUTH_NAME_CRED_FL_MAPPED);
-
 	dprintk("RPC: %s failed with %d\n", __func__, ret);
-	return ret;
+	goto out_unlock;
 }
 
 static struct rpc_cred *
