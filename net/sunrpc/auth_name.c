@@ -188,8 +188,7 @@ name_cred_set_session(struct rpc_cred *cred, struct name_session *name_session)
 
 	if (name_session) {
 		set_bit(RPCAUTH_CRED_UPTODATE, &cred->cr_flags);
-		smp_mb__before_atomic();
-		clear_bit(RPCAUTH_CRED_NEW, &cred->cr_flags);
+		smp_mb__after_atomic();
 	}
 }
 
@@ -889,9 +888,12 @@ name_refresh_init_session(struct rpc_task *task)
 	}
 
 	if (!test_and_set_bit(RPCAUTH_CRED_INIT, &cred->cr_flags)) {
-		dprintk("RPC: %s do init\n", __func__);
-		name_cred_set_session(cred, NULL);
-		ret = rpc_ping_payload_init(task->tk_client, cred);
+		if (test_bit(RPCAUTH_CRED_NEW, &cred->cr_flags)) {
+			dprintk("RPC: %s do init\n", __func__);
+			name_cred_set_session(cred, NULL);
+			ret = rpc_ping_payload_init(task->tk_client, cred);
+			clear_bit(RPCAUTH_CRED_NEW, &cred->cr_flags);
+		}
 		clear_bit(RPCAUTH_CRED_INIT, &cred->cr_flags);
 		smp_mb__after_atomic();
 		wake_up_bit(&cred->cr_flags, RPCAUTH_CRED_INIT);
