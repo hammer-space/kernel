@@ -222,13 +222,17 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 		if (copy_from_user(&args.fa_time_backup, &uarg->fa_time_backup,
 					sizeof(args.fa_time_backup)))
 			return -EFAULT;
-		if (!(args.fa_valid[0] & NFS_FA_VALID_ARCHIVE)) {
-			args.fa_valid[0] |= NFS_FA_VALID_ARCHIVE;
-			args.fa_flags |= NFS_FA_FLAG_ARCHIVE;
-		}
-	} else if (args.fa_valid[0] & NFS_FA_VALID_ARCHIVE) {
-		args.fa_time_backup = current_kernel_time();
+	} else if ((args.fa_valid[0] & NFS_FA_VALID_ARCHIVE) &&
+			!nfs_server_capable(inode, NFS_CAP_ARCHIVE)) {
+		nfs_revalidate_inode(NFS_SERVER(inode), inode);
 		args.fa_valid[0] |= NFS_FA_VALID_TIME_BACKUP;
+		if (args.fa_flags & NFS_FA_FLAG_ARCHIVE) {
+			args.fa_time_backup.tv_sec = inode->i_mtime.tv_sec;
+			args.fa_time_backup.tv_nsec = inode->i_mtime.tv_nsec;
+		} else if (args.fa_valid[0] & NFS_FA_VALID_TIME_CREATE)
+			args.fa_time_backup = args.fa_time_create;
+		else
+			args.fa_time_backup = NFS_I(inode)->timecreate;
 	}
 
 	ret = nfs4_set_nfs4_statx(inode, &args, fattr);
