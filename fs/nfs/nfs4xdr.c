@@ -4194,16 +4194,16 @@ static int decode_attr_hidden(struct xdr_stream *xdr, uint32_t *bitmap, uint32_t
 	int status = 0;
 	__be32 *p;
 
-	*res = 0;
 	if (unlikely(bitmap[0] & (FATTR4_WORD0_HIDDEN - 1U)))
 		return -EIO;
 	if (likely(bitmap[0] & FATTR4_WORD0_HIDDEN)) {
 		p = xdr_inline_decode(xdr, 4);
 		if (unlikely(!p))
 			return -EIO;
-		if (be32_to_cpup(p)) {
+		if (be32_to_cpup(p))
 			*res |= NFS_HSA_HIDDEN;
-		}
+		else
+			*res &= ~NFS_HSA_HIDDEN;
 		bitmap[0] &= ~FATTR4_WORD0_HIDDEN;
 		status = NFS_ATTR_FATTR_HIDDEN;
 	}
@@ -4216,16 +4216,16 @@ static int decode_attr_system(struct xdr_stream *xdr, uint32_t *bitmap, uint32_t
 	int status = 0;
 	__be32 *p;
 
-	*res = 0;
 	if (unlikely(bitmap[1] & (FATTR4_WORD1_SYSTEM - 1U)))
 		return -EIO;
 	if (likely(bitmap[1] & FATTR4_WORD1_SYSTEM)) {
 		p = xdr_inline_decode(xdr, 4);
 		if (unlikely(!p))
 			return -EIO;
-		if (be32_to_cpup(p)) {
+		if (be32_to_cpup(p))
 			*res |= NFS_HSA_SYSTEM;
-		}
+		else
+			*res &= ~NFS_HSA_SYSTEM;
 		bitmap[1] &= ~FATTR4_WORD1_SYSTEM;
 		status = NFS_ATTR_FATTR_SYSTEM;
 	}
@@ -4256,16 +4256,16 @@ static int decode_attr_archive(struct xdr_stream *xdr, uint32_t *bitmap, uint32_
 	int status = 0;
 	__be32 *p;
 
-	*res = 0;
 	if (unlikely(bitmap[0] & (FATTR4_WORD0_ARCHIVE - 1U)))
 		return -EIO;
 	if (likely(bitmap[0] & FATTR4_WORD0_ARCHIVE)) {
 		p = xdr_inline_decode(xdr, 4);
 		if (unlikely(!p))
 			return -EIO;
-		if (be32_to_cpup(p)) {
+		if (be32_to_cpup(p))
 			*res |= NFS_HSA_ARCHIVE;
-		}
+		else
+			*res &= ~NFS_HSA_ARCHIVE;
 		bitmap[0] &= ~FATTR4_WORD0_ARCHIVE;
 		status = NFS_ATTR_FATTR_ARCHIVE;
 	}
@@ -4747,6 +4747,7 @@ static int decode_getfattr_attrs(struct xdr_stream *xdr, uint32_t *bitmap,
 	if (status < 0)
 		goto xdr_error;
 
+	fattr->hsa_flags = 0;
 	status = decode_attr_archive(xdr, bitmap, &fattr->hsa_flags);
 	if (status < 0)
 		goto xdr_error;
