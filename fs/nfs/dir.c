@@ -1720,14 +1720,16 @@ EXPORT_SYMBOL_GPL(nfs_mknod);
  */
 int nfs_mkdir2(struct inode *dir, struct dentry *dentry, umode_t mode, unsigned int flags)
 {
-	struct iattr attr;
+	struct iattr attr = {
+		.ia_valid = 0,
+	};
 	int error;
 
 	dfprintk(VFS, "NFS: mkdir(%s/%lu), %pd\n",
 			dir->i_sb->s_id, dir->i_ino, dentry);
 
 	if (!(flags & MKDIR_NOMODE)) {
-		attr.ia_valid = ATTR_MODE;
+		attr.ia_valid |= ATTR_MODE;
 		attr.ia_mode = mode | S_IFDIR;
 	}
 
