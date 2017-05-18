@@ -679,8 +679,10 @@ again:
 	if (test_and_set_bit(AUTH_NAME_CRED_FL_MAPPING, &name_cred->nc_flags)) {
 		/* another context is mapping, wait until it's done */
 		dprintk("RPC: %s wait for mapping\n", __func__);
-		wait_on_bit(&name_cred->nc_flags, AUTH_NAME_CRED_FL_MAPPING,
-				TASK_KILLABLE);
+		if (wait_on_bit(&name_cred->nc_flags, AUTH_NAME_CRED_FL_MAPPING,
+				TASK_KILLABLE))
+			return -EINTR;
+
 		goto again;
 	}
 
@@ -897,13 +899,15 @@ name_refresh_init_session(struct rpc_task *task)
 		clear_bit(RPCAUTH_CRED_INIT, &cred->cr_flags);
 		smp_mb__after_atomic();
 		wake_up_bit(&cred->cr_flags, RPCAUTH_CRED_INIT);
-		dprintk("RPC: %s done with init\n", __func__);
 	} else {
 		dprintk("RPC: %s wait for init\n", __func__);
 		/* FIXME: use a waitq instead! */
-		wait_on_bit(&cred->cr_flags, RPCAUTH_CRED_INIT,
-				TASK_UNINTERRUPTIBLE);
+		if (wait_on_bit(&cred->cr_flags, RPCAUTH_CRED_INIT, TASK_KILLABLE))
+			ret = -EINTR;
+
 	}
+
+	dprintk("RPC: %s done with ret = %d\n", __func__, ret);
 
 	return ret;
 }
