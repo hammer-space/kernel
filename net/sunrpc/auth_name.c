@@ -667,8 +667,11 @@ name_cred_map_principals(struct name_cred *name_cred, struct rpc_task *task)
 {
 	struct auth_cred *acred = &name_cred->nc_acred;
 	struct group_info *gi = acred->group_info;
+	int ngroups;
 	int ret;
 	size_t i;
+
+	ngroups = (!gi) ? 0 : gi->ngroups;
 
 again:
 	/* check if already mapped */
@@ -699,17 +702,22 @@ again:
 	if (ret)
 		goto out_free_user;
 
-	name_cred->nc_other_principals = kzalloc(sizeof(char *) * gi->ngroups, GFP_NOFS);
-	if (!name_cred->nc_other_principals)
-		goto out_free_group;
+	if (ngroups) {
+		name_cred->nc_other_principals = kcalloc(sizeof(char *), ngroups, GFP_NOFS);
+		if (!name_cred->nc_other_principals)
+			goto out_free_group;
 
-	for (i = 0; i < gi->ngroups; i++) {
-		ret = name_map_gid(task, gi->gid[i],
-					&name_cred->nc_other_principals[i]);
-		if (ret)
-			goto out_free_others;
+		for (i = 0; i < ngroups; i++) {
+			ret = name_map_gid(task, gi->gid[i],
+						&name_cred->nc_other_principals[i]);
+			if (ret)
+				goto out_free_others;
+		}
+		name_cred->nc_other_principals_count = ngroups;
+	} else {
+		name_cred->nc_other_principals = NULL;
+		name_cred->nc_other_principals_count = 0;
 	}
-	name_cred->nc_other_principals_count = gi->ngroups;
 
 	/* success! */
 	set_bit(AUTH_NAME_CRED_FL_MAPPED, &name_cred->nc_flags);
