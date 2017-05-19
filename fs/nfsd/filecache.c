@@ -177,7 +177,7 @@ nfsd_file_alloc(struct inode *inode, unsigned int may, unsigned int hashval)
 }
 
 static void
-nfsd_file_put_final(struct nfsd_file *nf)
+nfsd_file_free(struct nfsd_file *nf)
 {
 	trace_nfsd_file_put_final(nf);
 	if (nf->nf_mark)
@@ -188,7 +188,7 @@ nfsd_file_put_final(struct nfsd_file *nf)
 }
 
 static bool
-nfsd_file_put_final_delayed(struct nfsd_file *nf)
+nfsd_file_free_delayed(struct nfsd_file *nf)
 {
 	bool flush = false;
 
@@ -249,7 +249,7 @@ nfsd_file_put_noref(struct nfsd_file *nf)
 	count = atomic_dec_return(&nf->nf_ref);
 	if (!count) {
 		WARN_ON(test_bit(NFSD_FILE_HASHED, &nf->nf_flags));
-		nfsd_file_put_final(nf);
+		nfsd_file_free(nf);
 	}
 	return count;
 }
@@ -278,7 +278,7 @@ nfsd_file_dispose_list(struct list_head *dispose)
 	while(!list_empty(dispose)) {
 		nf = list_first_entry(dispose, struct nfsd_file, nf_lru);
 		list_del(&nf->nf_lru);
-		nfsd_file_put_final(nf);
+		nfsd_file_put_noref(nf);
 	}
 }
 
@@ -291,7 +291,9 @@ nfsd_file_dispose_list_sync(struct list_head *dispose)
 	while(!list_empty(dispose)) {
 		nf = list_first_entry(dispose, struct nfsd_file, nf_lru);
 		list_del(&nf->nf_lru);
-		if (nfsd_file_put_final_delayed(nf))
+		if (!atomic_dec_and_test(&nf->nf_ref))
+			continue;
+		if (nfsd_file_free_delayed(nf))
 			flush = true;
 	}
 	if (flush)
