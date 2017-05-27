@@ -151,7 +151,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	}
 
 	if (nfs_server_capable(inode, NFS_CAP_TIME_CREATE)) {
-		args.fa_valid[0] |= NFS_FA_VALID_TIME_BACKUP;
+		args.fa_valid[0] |= NFS_FA_VALID_TIME_CREATE;
 		if (copy_to_user(&uarg->fa_time_create, &nfsi->timecreate,
 					sizeof(uarg->fa_time_create)))
 			ret = -EFAULT;
