@@ -702,7 +702,7 @@ nfsd_file_acquire(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		  unsigned int may_flags, struct nfsd_file **pnf)
 {
 	__be32	status;
-	struct nfsd_file *nf, *new = NULL;
+	struct nfsd_file *nf, *new;
 	struct inode *inode;
 	unsigned int hashval;
 
@@ -721,35 +721,19 @@ retry:
 	if (nf)
 		goto wait_for_construction;
 
+	new = nfsd_file_alloc(inode, may_flags, hashval);
 	if (!new) {
-		new = nfsd_file_alloc(inode, may_flags, hashval);
-		if (!new) {
-			trace_nfsd_file_acquire(rqstp, hashval, inode, may_flags,
-						NULL, nfserr_jukebox);
-			return nfserr_jukebox;
-		}
+		trace_nfsd_file_acquire(rqstp, hashval, inode, may_flags,
+					NULL, nfserr_jukebox);
+		return nfserr_jukebox;
 	}
 
 	spin_lock(&nfsd_file_hashtbl[hashval].nfb_lock);
 	nf = nfsd_file_find_locked(inode, may_flags, hashval);
-	if (likely(nf == NULL)) {
-		/* Take reference for the hashtable */
-		atomic_inc(&new->nf_ref);
-		__set_bit(NFSD_FILE_HASHED, &new->nf_flags);
-		__set_bit(NFSD_FILE_PENDING, &new->nf_flags);
-		list_lru_add(&nfsd_file_lru, &new->nf_lru);
-		hlist_add_head_rcu(&new->nf_node,
-				&nfsd_file_hashtbl[hashval].nfb_head);
-		++nfsd_file_hashtbl[hashval].nfb_count;
-		nfsd_file_hashtbl[hashval].nfb_maxcount = max(nfsd_file_hashtbl[hashval].nfb_maxcount,
-				nfsd_file_hashtbl[hashval].nfb_count);
-		spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
-		atomic_long_inc(&nfsd_filecache_count);
-		nf = new;
-		new = NULL;
+	if (nf == NULL)
 		goto open_file;
-	}
 	spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
+	nfsd_file_slab_free(&new->nf_rcu);
 
 wait_for_construction:
 	wait_on_bit(&nf->nf_flags, NFSD_FILE_PENDING, TASK_UNINTERRUPTIBLE);
@@ -785,21 +769,28 @@ out:
 		nf = NULL;
 	}
 
-	if (new)
-		nfsd_file_put(new);
-
 	trace_nfsd_file_acquire(rqstp, hashval, inode, may_flags, nf, status);
 	return status;
 open_file:
-	if (!nf->nf_mark) {
-		nf->nf_mark = nfsd_file_mark_find_or_create(nf, inode);
-		if (!nf->nf_mark)
-			status = nfserr_jukebox;
-	}
+	nf = new;
+	/* Take reference for the hashtable */
+	atomic_inc(&nf->nf_ref);
+	__set_bit(NFSD_FILE_HASHED, &nf->nf_flags);
+	__set_bit(NFSD_FILE_PENDING, &nf->nf_flags);
+	list_lru_add(&nfsd_file_lru, &nf->nf_lru);
+	hlist_add_head_rcu(&nf->nf_node, &nfsd_file_hashtbl[hashval].nfb_head);
+	++nfsd_file_hashtbl[hashval].nfb_count;
+	nfsd_file_hashtbl[hashval].nfb_maxcount = max(nfsd_file_hashtbl[hashval].nfb_maxcount,
+			nfsd_file_hashtbl[hashval].nfb_count);
+	spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
+	atomic_long_inc(&nfsd_filecache_count);
 
-	if (status == nfs_ok)
-		status = nfsd_open_verified(rqstp, fhp, S_IFREG, may_flags,
-						&nf->nf_file);
+	nf->nf_mark = nfsd_file_mark_find_or_create(nf, inode);
+	if (nf->nf_mark)
+		status = nfsd_open_verified(rqstp, fhp, S_IFREG,
+				may_flags, &nf->nf_file);
+	else
+		status = nfserr_jukebox;
 	/*
 	 * If construction failed, or we raced with a call to unlink()
 	 * then unhash.
