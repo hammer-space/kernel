@@ -718,10 +718,8 @@ retry:
 	rcu_read_lock();
 	nf = nfsd_file_find_locked(inode, may_flags, hashval);
 	rcu_read_unlock();
-	if (nf) {
-		this_cpu_inc(nfsd_file_cache_hits);
+	if (nf)
 		goto wait_for_construction;
-	}
 
 	if (!new) {
 		new = nfsd_file_alloc(inode, may_flags, hashval);
@@ -751,7 +749,6 @@ retry:
 		new = NULL;
 		goto open_file;
 	}
-	this_cpu_inc(nfsd_file_cache_hits);
 	spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
 
 wait_for_construction:
@@ -762,6 +759,8 @@ wait_for_construction:
 		nfsd_file_put_noref(nf);
 		goto retry;
 	}
+
+	this_cpu_inc(nfsd_file_cache_hits);
 
 	if (!(may_flags & NFSD_MAY_NOT_BREAK_LEASE)) {
 		bool write = (may_flags & NFSD_MAY_WRITE);
