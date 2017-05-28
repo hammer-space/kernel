@@ -758,33 +758,9 @@ wait_for_construction:
 	wait_on_bit(&nf->nf_flags, NFSD_FILE_PENDING, TASK_UNINTERRUPTIBLE);
 
 	/* Did construction of this file fail? */
-	if (!nf->nf_file) {
-		/*
-		 * We can only take over construction for this nfsd_file if the
-		 * MAY flags are equal. Otherwise, we put the reference and try
-		 * again.
-		 */
-		if ((may_flags & NFSD_FILE_MAY_MASK) != nf->nf_may) {
-			nfsd_file_put(nf);
-			goto retry;
-		}
-
-		/* try to take over construction for this file */
-		if (test_and_set_bit(NFSD_FILE_PENDING, &nf->nf_flags))
-			goto wait_for_construction;
-
-		/* sync up the BREAK_* flags with our may_flags */
-		if (may_flags & NFSD_MAY_NOT_BREAK_LEASE) {
-			if (may_flags & NFSD_MAY_WRITE)
-				set_bit(NFSD_FILE_BREAK_WRITE, &nf->nf_flags);
-			if (may_flags & NFSD_MAY_READ)
-				set_bit(NFSD_FILE_BREAK_READ, &nf->nf_flags);
-		} else {
-			clear_bit(NFSD_FILE_BREAK_WRITE, &nf->nf_flags);
-			clear_bit(NFSD_FILE_BREAK_READ, &nf->nf_flags);
-		}
-
-		goto open_file;
+	if (!test_bit(NFSD_FILE_HASHED, &nf->nf_flags)) {
+		nfsd_file_put_noref(nf);
+		goto retry;
 	}
 
 	if (!(may_flags & NFSD_MAY_NOT_BREAK_LEASE)) {
@@ -825,6 +801,13 @@ open_file:
 	if (status == nfs_ok)
 		status = nfsd_open_verified(rqstp, fhp, S_IFREG, may_flags,
 						&nf->nf_file);
+	/* If construction failed, then unhash. */
+	if (status != nfs_ok) {
+		spin_lock(&nfsd_file_hashtbl[hashval].nfb_lock);
+		nfsd_file_unhash(nf);
+		spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
+		nfsd_file_put_noref(nf);
+	}
 	clear_bit_unlock(NFSD_FILE_PENDING, &nf->nf_flags);
 	smp_mb__after_atomic();
 	wake_up_bit(&nf->nf_flags, NFSD_FILE_PENDING);
