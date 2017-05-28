@@ -257,8 +257,10 @@ nfsd_file_put_noref(struct nfsd_file *nf)
 void
 nfsd_file_put(struct nfsd_file *nf)
 {
+	bool is_hashed = test_bit(NFSD_FILE_HASHED, &nf->nf_flags) != 0;
+
 	set_bit(NFSD_FILE_REFERENCED, &nf->nf_flags);
-	if (nfsd_file_put_noref(nf) == 1)
+	if (nfsd_file_put_noref(nf) == 1 && is_hashed)
 		nfsd_file_schedule_laundrette();
 }
 
