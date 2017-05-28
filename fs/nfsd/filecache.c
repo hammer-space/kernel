@@ -797,12 +797,15 @@ open_file:
 		if (!nf->nf_mark)
 			status = nfserr_jukebox;
 	}
-	/* FIXME: should we abort opening if the link count goes to 0? */
+
 	if (status == nfs_ok)
 		status = nfsd_open_verified(rqstp, fhp, S_IFREG, may_flags,
 						&nf->nf_file);
-	/* If construction failed, then unhash. */
-	if (status != nfs_ok) {
+	/*
+	 * If construction failed, or we raced with a call to unlink()
+	 * then unhash.
+	 */
+	if (status != nfs_ok || inode->i_nlink == 0) {
 		spin_lock(&nfsd_file_hashtbl[hashval].nfb_lock);
 		nfsd_file_unhash(nf);
 		spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
