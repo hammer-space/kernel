@@ -837,6 +837,7 @@ found_pool:
 			set_bit(RQ_VICTIM, &rqstp->rq_flags);
 			list_del_rcu(&rqstp->rq_all);
 			get_task_struct(task);
+			break;
 		}
 	}
 	spin_unlock_bh(&pool->sp_lock);
