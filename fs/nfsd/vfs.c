@@ -71,6 +71,10 @@ nfsd_cross_mnt(struct svc_rqst *rqstp, struct dentry **dpp,
 
 	err = vfs_path_lookup(dentry, exp->ex_path.mnt,
 			"/", LOOKUP_DOWN|LOOKUP_AUTOMOUNT, &path);
+	/* Is this a NFS junction? If so, retry without revalidating */
+	if (err == -ENOTDIR)
+		err = vfs_path_lookup(dentry, exp->ex_path.mnt,
+			"", LOOKUP_DOWN|LOOKUP_AUTOMOUNT, &path);
 	if (err < 0)
 		goto out;
 	if (path.mnt == exp->ex_path.mnt && path.dentry == dentry &&
