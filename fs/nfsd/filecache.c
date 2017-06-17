@@ -443,10 +443,14 @@ nfsd_file_delayed_close(struct work_struct *work)
 	LIST_HEAD(head);
 
 	list_lru_walk(&nfsd_file_lru, nfsd_file_lru_cb, &head, LONG_MAX);
-	nfsd_file_lru_dispose(&head);
 
 	if (test_and_clear_bit(NFSD_FILE_LRU_RESCAN, &nfsd_file_lru_flags))
 		nfsd_file_schedule_laundrette();
+
+	if (!list_empty(&head)) {
+		nfsd_file_lru_dispose(&head);
+		fput_global_flush();
+	}
 }
 
 static int
