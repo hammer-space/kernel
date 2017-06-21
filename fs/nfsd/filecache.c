@@ -176,27 +176,19 @@ nfsd_file_alloc(struct inode *inode, unsigned int may, unsigned int hashval)
 	return nf;
 }
 
-static void
-nfsd_file_free(struct nfsd_file *nf)
-{
-	trace_nfsd_file_put_final(nf);
-	if (nf->nf_mark)
-		nfsd_file_mark_put(nf->nf_mark);
-	if (nf->nf_file)
-		fput(nf->nf_file);
-	call_rcu(&nf->nf_rcu, nfsd_file_slab_free);
-}
-
 static bool
-nfsd_file_free_delayed(struct nfsd_file *nf)
+nfsd_file_free(struct nfsd_file *nf)
 {
 	bool flush = false;
 
 	trace_nfsd_file_put_final(nf);
 	if (nf->nf_mark)
 		nfsd_file_mark_put(nf->nf_mark);
-	if (nf->nf_file)
+	if (nf->nf_file) {
+		get_file(nf->nf_file);
+		filp_close(nf->nf_file, NULL);
 		flush = fput_global(nf->nf_file);
+	}
 	call_rcu(&nf->nf_rcu, nfsd_file_slab_free);
 	return flush;
 }
@@ -295,7 +287,7 @@ nfsd_file_dispose_list_sync(struct list_head *dispose)
 		list_del(&nf->nf_lru);
 		if (!atomic_dec_and_test(&nf->nf_ref))
 			continue;
-		if (nfsd_file_free_delayed(nf))
+		if (nfsd_file_free(nf))
 			flush = true;
 	}
 	if (flush)
