@@ -27,7 +27,8 @@
 #define NFSD_LAUNDRETTE_DELAY		     (2 * HZ)
 
 #define NFSD_FILE_LRU_RESCAN		     (0)
-#define NFSD_FILE_LRU_THRESHOLD		     (4096)
+#define NFSD_FILE_LRU_THRESHOLD		     (4096UL)
+#define NFSD_FILE_LRU_LIMIT		     (NFSD_FILE_LRU_THRESHOLD << 2)
 
 /* We only care about NFSD_MAY_READ/WRITE for this cache */
 #define NFSD_FILE_MAY_MASK	(NFSD_MAY_READ|NFSD_MAY_WRITE)
@@ -50,20 +51,31 @@ static struct fsnotify_group		*nfsd_file_fsnotify_group;
 static atomic_long_t			nfsd_filecache_count;
 static struct delayed_work		nfsd_filecache_laundrette;
 
+enum nfsd_file_laundrette_ctl {
+	NFSD_FILE_LAUNDRETTE_NOFLUSH = 0,
+	NFSD_FILE_LAUNDRETTE_MAY_FLUSH
+};
+
 static void
-nfsd_file_schedule_laundrette(void)
+nfsd_file_schedule_laundrette(enum nfsd_file_laundrette_ctl ctl)
 {
 	long count = atomic_long_read(&nfsd_filecache_count);
-	unsigned long timeout = NFSD_LAUNDRETTE_DELAY;
 
 	if (count == 0)
 		return;
 
 	/* Be more aggressive about scanning if over the threshold */
 	if (count > NFSD_FILE_LRU_THRESHOLD)
-		timeout = 0;
+		mod_delayed_work(system_wq, &nfsd_filecache_laundrette, 0);
+	else
+		schedule_delayed_work(&nfsd_filecache_laundrette, NFSD_LAUNDRETTE_DELAY);
 
-	schedule_delayed_work(&nfsd_filecache_laundrette, timeout);
+	if (ctl == NFSD_FILE_LAUNDRETTE_NOFLUSH)
+		return;
+
+	/* ...and don't delay flushing if we're out of control */
+	if (count >= NFSD_FILE_LRU_LIMIT)
+		flush_delayed_work(&nfsd_filecache_laundrette);
 }
 
 static void
@@ -253,7 +265,7 @@ nfsd_file_put(struct nfsd_file *nf)
 
 	set_bit(NFSD_FILE_REFERENCED, &nf->nf_flags);
 	if (nfsd_file_put_noref(nf) == 1 && is_hashed)
-		nfsd_file_schedule_laundrette();
+		nfsd_file_schedule_laundrette(NFSD_FILE_LAUNDRETTE_MAY_FLUSH);
 }
 
 struct nfsd_file *
@@ -437,7 +449,7 @@ nfsd_file_delayed_close(struct work_struct *work)
 	list_lru_walk(&nfsd_file_lru, nfsd_file_lru_cb, &head, LONG_MAX);
 
 	if (test_and_clear_bit(NFSD_FILE_LRU_RESCAN, &nfsd_file_lru_flags))
-		nfsd_file_schedule_laundrette();
+		nfsd_file_schedule_laundrette(NFSD_FILE_LAUNDRETTE_NOFLUSH);
 
 	if (!list_empty(&head)) {
 		nfsd_file_lru_dispose(&head);
