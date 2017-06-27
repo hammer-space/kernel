@@ -806,10 +806,12 @@ open_file:
 	 * then unhash.
 	 */
 	if (status != nfs_ok || inode->i_nlink == 0) {
+		bool do_free;
 		spin_lock(&nfsd_file_hashtbl[hashval].nfb_lock);
-		nfsd_file_unhash(nf);
+		do_free = nfsd_file_unhash(nf);
 		spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
-		nfsd_file_put_noref(nf);
+		if (do_free)
+			nfsd_file_put_noref(nf);
 	}
 	clear_bit_unlock(NFSD_FILE_PENDING, &nf->nf_flags);
 	smp_mb__after_atomic();
