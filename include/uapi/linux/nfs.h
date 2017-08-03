@@ -55,6 +55,8 @@
 #define NFS_FA_FLAG_HIDDEN				(1UL << 1)
 #define NFS_FA_FLAG_SYSTEM				(1UL << 2)
 struct nfs_ioctl_nfs4_statx {
+	__s64		real_fd;		/* real FD to use,
+						   -1 means use current file */
 	__u64		fa_valid[2];		/* Attributes set */
 
 	struct timespec fa_time_backup;		/* Backup time */
