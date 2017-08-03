@@ -132,12 +132,27 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		struct nfs_ioctl_nfs4_statx __user *uarg)
 {
 	struct nfs_ioctl_nfs4_statx args = {
+		.real_fd = -1,
 		.fa_valid = { 0 },
 	};
 	struct inode *inode = file_inode(dst_file);
 	struct nfs_server *server = NFS_SERVER(inode);
 	struct nfs_inode *nfsi = NFS_I(inode);
-	int ret;
+	int ret = -EFAULT;
+	/*
+	 * We get the first u64 word from the uarg as it tells us whether
+	 * to use the passed in struct file or use that fd to find the
+	 * struct file.
+	 */
+	if (get_user(args.real_fd, &uarg->real_fd))
+		return -EFAULT;
+
+	if (args.real_fd >= 0) {
+		dst_file = fget_raw(args.real_fd);
+		if (!dst_file)
+			return -EBADF;
+		inode = file_inode(dst_file);
+	}
 
 	ret = nfs_revalidate_inode(server, inode);
 	if (ret != 0)
@@ -147,14 +162,14 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		args.fa_valid[0] |= NFS_FA_VALID_TIME_BACKUP;
 		if (copy_to_user(&uarg->fa_time_backup, &nfsi->timebackup,
 					sizeof(uarg->fa_time_backup)))
-			ret = EFAULT;
+			goto out;
 	}
 
 	if (nfs_server_capable(inode, NFS_CAP_TIME_CREATE)) {
 		args.fa_valid[0] |= NFS_FA_VALID_TIME_CREATE;
 		if (copy_to_user(&uarg->fa_time_create, &nfsi->timecreate,
 					sizeof(uarg->fa_time_create)))
-			ret = -EFAULT;
+			goto out;
 	}
 
 	if (nfs_server_capable(inode, NFS_CAP_ARCHIVE)) {
@@ -183,11 +198,14 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 				NFS_FA_VALID_HIDDEN |
 				NFS_FA_VALID_SYSTEM)) &&
 	    put_user(args.fa_flags, &uarg->fa_flags))
-		ret = -EFAULT;
+		goto out;
 
 	if (copy_to_user(uarg->fa_valid, args.fa_valid, sizeof(uarg->fa_valid)))
-		ret = -EFAULT;
+		goto out;
 
+out:
+	if (args.real_fd >= 0)
+		fput(dst_file);
 	return ret;
 }
 
@@ -196,32 +214,53 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 {
 	struct inode *inode = file_inode(dst_file);
 	struct nfs_ioctl_nfs4_statx args = {
+		.real_fd = -1,
 		.fa_valid = { 0 },
 	};
 	struct nfs_fattr *fattr = nfs_alloc_fattr();
-	int ret;
+	/*
+	 * If you need a different error code below, you need to set it
+	 */
+	int ret = -EFAULT;
 
-	if (fattr == NULL)
-		return -ENOMEM;
-	if (get_user(args.fa_valid[0], &uarg->fa_valid[0]))
+	/*
+	 * We get the first u64 word from the uarg as it tells us whether
+	 * to use the passed in struct file or use that fd to find the
+	 * struct file.
+	 */
+	if (get_user(args.real_fd, &uarg->real_fd))
 		return -EFAULT;
+
+	if (args.real_fd >= 0) {
+		dst_file = fget_raw(args.real_fd);
+		if (!dst_file)
+			return -EBADF;
+		inode = file_inode(dst_file);
+	}
+
+	if (fattr == NULL) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	if (get_user(args.fa_valid[0], &uarg->fa_valid[0]))
+		goto out;
 	args.fa_valid[0] &= NFS_FA_VALID_ALL_ATTR_0;
 
 	if ((args.fa_valid[0] & (NFS_FA_VALID_ARCHIVE |
 					NFS_FA_VALID_HIDDEN |
 					NFS_FA_VALID_SYSTEM)) &&
 	    get_user(args.fa_flags, &uarg->fa_flags))
-		return -EFAULT;
+		goto out;
 
 	if ((args.fa_valid[0] & NFS_FA_VALID_TIME_CREATE) &&
 	    copy_from_user(&args.fa_time_create, &uarg->fa_time_create,
 					sizeof(args.fa_time_create)))
-		return -EFAULT;
+		goto out;
 
 	if (args.fa_valid[0] & NFS_FA_VALID_TIME_BACKUP) {
 		if (copy_from_user(&args.fa_time_backup, &uarg->fa_time_backup,
 					sizeof(args.fa_time_backup)))
-			return -EFAULT;
+			goto out;
 	} else if ((args.fa_valid[0] & NFS_FA_VALID_ARCHIVE) &&
 			!nfs_server_capable(inode, NFS_CAP_ARCHIVE)) {
 		nfs_revalidate_inode(NFS_SERVER(inode), inode);
@@ -239,6 +278,9 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 	if (ret == 0)
 		nfs_post_op_update_inode(inode, fattr);
 
+out:
+	if (args.real_fd >= 0)
+		fput(dst_file);
 	return ret;
 }
 
