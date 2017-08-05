@@ -122,27 +122,38 @@ xfs_dir3_leaf_check_int(
 	 * Should factor in the size of the bests table as well.
 	 * We can deduce a value for that from di_size.
 	 */
-	if (hdr->count > ops->leaf_max_ents(geo))
+	if (hdr->count > ops->leaf_max_ents(geo)) {
+		xfs_warn(mp, "count (%d) above max (%d)\n",
+			hdr->count, ops->leaf_max_ents(geo));
 		return __this_address;
+	}
 
 	/* Leaves and bests don't overlap in leaf format. */
 	if ((hdr->magic == XFS_DIR2_LEAF1_MAGIC ||
 	     hdr->magic == XFS_DIR3_LEAF1_MAGIC) &&
-	    (char *)&ents[hdr->count] > (char *)xfs_dir2_leaf_bests_p(ltp))
+	    (char *)&ents[hdr->count] > (char *)xfs_dir2_leaf_bests_p(ltp)) {
+		xfs_warn(mp, "ents overlappings bests\n");
 		return __this_address;
+	}
 
 	/* Check hash value order, count stale entries.  */
 	for (i = stale = 0; i < hdr->count; i++) {
 		if (i + 1 < hdr->count) {
 			if (be32_to_cpu(ents[i].hashval) >
-					be32_to_cpu(ents[i + 1].hashval))
+					be32_to_cpu(ents[i + 1].hashval)) {
+				xfs_warn(mp, "broken hash order\n");
 				return __this_address;
+			}
+
 		}
 		if (ents[i].address == cpu_to_be32(XFS_DIR2_NULL_DATAPTR))
 			stale++;
 	}
-	if (hdr->stale != stale)
+	if (hdr->stale != stale) {
+		xfs_warn(mp, "incorrect stalte count (%d, expected %d)\n",
+			hdr->stale, stale);
 		return __this_address;
+	}
 	return NULL;
 }
 
@@ -168,12 +179,21 @@ xfs_dir3_leaf_verify(
 		magic3 = (magic == XFS_DIR2_LEAF1_MAGIC) ? XFS_DIR3_LEAF1_MAGIC
 							 : XFS_DIR3_LEAFN_MAGIC;
 
-		if (leaf3->info.hdr.magic != cpu_to_be16(magic3))
+		if (leaf3->info.hdr.magic != cpu_to_be16(magic3)) {
+			xfs_warn(mp, "incorrect magic number (0x%hx, expected 0x%hx)\n",
+					leaf3->info.hdr.magic, magic3);
 			return __this_address;
-		if (!uuid_equal(&leaf3->info.uuid, &mp->m_sb.sb_meta_uuid))
+		}
+		if (!uuid_equal(&leaf3->info.uuid, &mp->m_sb.sb_meta_uuid)) {
+			xfs_warn(mp, "incorrect uuid, (%pUb, expected %pUb)\n",
+				&leaf3->info.uuid, &mp->m_sb.sb_meta_uuid);
 			return __this_address;
-		if (be64_to_cpu(leaf3->info.blkno) != bp->b_bn)
+		}
+		if (be64_to_cpu(leaf3->info.blkno) != bp->b_bn) {
+			xfs_warn(mp, "incorrect blkno, (%lld, expected %lld)\n",
+				be64_to_cpu(leaf3->info.blkno), bp->b_bn);
 			return __this_address;
+		}
 		if (!xfs_log_check_lsn(mp, be64_to_cpu(leaf3->info.lsn)))
 			return __this_address;
 	} else {
