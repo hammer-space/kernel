@@ -618,9 +618,9 @@ void svc_wake_up(struct svc_serv *serv)
 		/* skip any that aren't queued */
 		if (test_bit(RQ_BUSY, &rqstp->rq_flags))
 			continue;
-		rcu_read_unlock();
 		wake_up_process(rqstp->rq_task);
 		trace_svc_wake_up(rqstp->rq_task->pid);
+		rcu_read_unlock();
 		return;
 	}
 	rcu_read_unlock();
