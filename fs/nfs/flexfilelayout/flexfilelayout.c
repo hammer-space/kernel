@@ -1287,10 +1287,10 @@ static int ff_layout_read_done_cb(struct rpc_task *task,
 			goto out_eagain;
 		ff_layout_read_record_layoutstats_done(task, hdr);
 		pnfs_read_resend_pnfs(hdr);
-		return task->tk_status;
+		return task->tk_status ? : -EAGAIN;
 	case -NFS4ERR_RESET_TO_MDS:
 		ff_layout_reset_read(hdr);
-		return task->tk_status;
+		return task->tk_status ? : -EAGAIN;
 	case -EAGAIN:
 		goto out_eagain;
 	}
@@ -1476,10 +1476,10 @@ static int ff_layout_write_done_cb(struct rpc_task *task,
 	switch (err) {
 	case -NFS4ERR_RESET_TO_PNFS:
 		ff_layout_reset_write(hdr, true);
-		return task->tk_status;
+		return task->tk_status ? : -EAGAIN;
 	case -NFS4ERR_RESET_TO_MDS:
 		ff_layout_reset_write(hdr, false);
-		return task->tk_status;
+		return task->tk_status ? : -EAGAIN;
 	case -EAGAIN:
 		return -EAGAIN;
 	}
