@@ -1353,10 +1353,10 @@ static int ff_layout_read_done_cb(struct rpc_task *task,
 					&new_idx))
 			goto out_layouterror;
 		set_bit(NFS_IOHDR_RESEND_PNFS, &hdr->flags);
-		return task->tk_status;
+		return task->tk_status ? : -EAGAIN;
 	case -NFS4ERR_RESET_TO_MDS:
 		set_bit(NFS_IOHDR_RESEND_MDS, &hdr->flags);
-		return task->tk_status;
+		return task->tk_status ? : -EAGAIN;
 	case -EAGAIN:
 		goto out_eagain;
 	}
@@ -1546,10 +1546,10 @@ static int ff_layout_write_done_cb(struct rpc_task *task,
 	switch (err) {
 	case -NFS4ERR_RESET_TO_PNFS:
 		set_bit(NFS_IOHDR_RESEND_PNFS, &hdr->flags);
-		return task->tk_status;
+		return task->tk_status ? : -EAGAIN;
 	case -NFS4ERR_RESET_TO_MDS:
 		set_bit(NFS_IOHDR_RESEND_MDS, &hdr->flags);
-		return task->tk_status;
+		return task->tk_status ? : -EAGAIN;
 	case -EAGAIN:
 		return -EAGAIN;
 	}
