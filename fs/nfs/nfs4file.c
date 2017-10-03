@@ -152,6 +152,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		if (!dst_file)
 			return -EBADF;
 		inode = file_inode(dst_file);
+		nfsi = NFS_I(inode);
 	}
 
 	ret = nfs_revalidate_inode(server, inode);
