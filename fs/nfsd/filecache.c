@@ -27,6 +27,7 @@
 #define NFSD_LAUNDRETTE_DELAY		     (2 * HZ)
 
 #define NFSD_FILE_LRU_RESCAN		     (0)
+#define NFSD_FILE_SHUTDOWN		     (1)
 #define NFSD_FILE_LRU_THRESHOLD		     (4096UL)
 #define NFSD_FILE_LRU_LIMIT		     (NFSD_FILE_LRU_THRESHOLD << 2)
 
@@ -61,7 +62,7 @@ nfsd_file_schedule_laundrette(enum nfsd_file_laundrette_ctl ctl)
 {
 	long count = atomic_long_read(&nfsd_filecache_count);
 
-	if (count == 0)
+	if (count == 0 || test_bit(NFSD_FILE_SHUTDOWN, &nfsd_file_lru_flags))
 		return;
 
 	/* Be more aggressive about scanning if over the threshold */
@@ -229,19 +230,23 @@ nfsd_file_unhash(struct nfsd_file *nf)
 	return false;
 }
 
-static void
+/*
+ * Return true if the file was unhashed.
+ */
+static bool
 nfsd_file_unhash_and_release_locked(struct nfsd_file *nf, struct list_head *dispose)
 {
 	lockdep_assert_held(&nfsd_file_hashtbl[nf->nf_hashval].nfb_lock);
 
 	trace_nfsd_file_unhash_and_release_locked(nf);
 	if (!nfsd_file_unhash(nf))
-		return;
+		return false;
 	/* keep final reference for nfsd_file_lru_dispose */
 	if (atomic_add_unless(&nf->nf_ref, -1, 1))
-		return;
+		return true;
 
 	list_add(&nf->nf_lru, dispose);
+	return true;
 }
 
 static int
@@ -306,6 +311,9 @@ nfsd_file_dispose_list_sync(struct list_head *dispose)
 		fput_global_flush();
 }
 
+/*
+ * Note this can deadlock with nfsd_file_cache_purge.
+ */
 static enum lru_status
 nfsd_file_lru_cb(struct list_head *item, struct list_lru_one *lru,
 		 spinlock_t *lock, void *arg)
@@ -440,6 +448,8 @@ nfsd_file_close_inode(struct inode *inode)
  *
  * Walk the LRU list and close any entries that have not been used since
  * the last scan.
+ *
+ * Note this can deadlock with nfsd_file_cache_purge.
  */
 static void
 nfsd_file_delayed_close(struct work_struct *work)
@@ -514,6 +524,8 @@ nfsd_file_cache_init(void)
 {
 	int		ret = -ENOMEM;
 	unsigned int	i;
+
+	clear_bit(NFSD_FILE_SHUTDOWN, &nfsd_file_lru_flags);
 
 	if (nfsd_file_hashtbl)
 		return 0;
@@ -592,12 +604,16 @@ out_err:
 	goto out;
 }
 
+/*
+ * Note this can deadlock with nfsd_file_lru_cb.
+ */
 void
 nfsd_file_cache_purge(void)
 {
 	unsigned int		i;
 	struct nfsd_file	*nf;
 	LIST_HEAD(dispose);
+	bool del;
 
 	if (!nfsd_file_hashtbl)
 		return;
@@ -607,7 +623,13 @@ nfsd_file_cache_purge(void)
 		while(!hlist_empty(&nfsd_file_hashtbl[i].nfb_head)) {
 			nf = hlist_entry(nfsd_file_hashtbl[i].nfb_head.first,
 					 struct nfsd_file, nf_node);
-			nfsd_file_unhash_and_release_locked(nf, &dispose);
+			del = nfsd_file_unhash_and_release_locked(nf, &dispose);
+
+			/*
+			 * Deadlock detected! Something marked this entry as
+			 * unhased, but hasn't removed it from the hash list.
+			 */
+			WARN_ON_ONCE(!del);
 		}
 		spin_unlock(&nfsd_file_hashtbl[i].nfb_lock);
 		nfsd_file_dispose_list(&dispose);
@@ -619,11 +641,17 @@ nfsd_file_cache_shutdown(void)
 {
 	LIST_HEAD(dispose);
 
+	set_bit(NFSD_FILE_SHUTDOWN, &nfsd_file_lru_flags);
+
 	srcu_notifier_chain_unregister(&lease_notifier_chain,
 				&nfsd_file_lease_notifier);
 	unregister_shrinker(&nfsd_file_shrinker);
-	nfsd_file_cache_purge();
+	/*
+	 * make sure all callers of nfsd_file_lru_cb are done before
+	 * calling nfsd_file_cache_purge
+	 */
 	cancel_delayed_work_sync(&nfsd_filecache_laundrette);
+	nfsd_file_cache_purge();
 	list_lru_destroy(&nfsd_file_lru);
 	rcu_barrier();
 	fsnotify_put_group(nfsd_file_fsnotify_group);
