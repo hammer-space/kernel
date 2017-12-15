@@ -44,12 +44,22 @@
 #define NFS_FA_VALID_ARCHIVE				0x0004UL
 #define NFS_FA_VALID_HIDDEN				0x0008UL
 #define NFS_FA_VALID_SYSTEM				0x0010UL
+#define NFS_FA_VALID_OWNER				0x0020UL
+#define NFS_FA_VALID_OWNER_GROUP			0x0040UL
+#define NFS_FA_VALID_ATIME				0x0080UL
+#define NFS_FA_VALID_MTIME				0x0100UL
+#define NFS_FA_VALID_CTIME				0x0200UL
 
 #define NFS_FA_VALID_ALL_ATTR_0 ( NFS_FA_VALID_TIME_CREATE | \
 		NFS_FA_VALID_TIME_BACKUP | \
 		NFS_FA_VALID_ARCHIVE | \
 		NFS_FA_VALID_HIDDEN | \
-		NFS_FA_VALID_SYSTEM )
+		NFS_FA_VALID_SYSTEM | \
+		NFS_FA_VALID_OWNER | \
+		NFS_FA_VALID_OWNER_GROUP | \
+		NFS_FA_VALID_ATIME | \
+		NFS_FA_VALID_MTIME | \
+		NFS_FA_VALID_CTIME )
 
 #define NFS_FA_FLAG_ARCHIVE				(1UL << 0)
 #define NFS_FA_FLAG_HIDDEN				(1UL << 1)
@@ -61,11 +71,14 @@ struct nfs_ioctl_nfs4_statx {
 
 	struct timespec fa_time_backup;		/* Backup time */
 	struct timespec fa_time_create;		/* Birth time */
-
 	/* Flag attributes */
 	__u64 fa_flags;
-
-	__u64 fa_padding[14];
+	struct timespec fa_atime;		/* Access time */
+	struct timespec fa_mtime;		/* Modify time */
+	struct timespec fa_ctime;		/* Change time */
+	uid_t fa_owner_uid;			/* Owner User ID */
+	gid_t fa_group_gid;			/* Primary Group ID */
+	__u64 fa_padding[10];
 };
 
 /*
