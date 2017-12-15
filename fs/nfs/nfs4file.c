@@ -159,6 +159,18 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	if (ret != 0)
 		return ret;
 
+	if (nfs_server_capable(inode, NFS_CAP_OWNER)) {
+		args.fa_valid[0] |= NFS_FA_VALID_OWNER;
+		if (copy_to_user(&uarg->fa_owner_uid, &inode->i_uid, sizeof(uid_t)))
+			goto out;
+	}
+
+	if (nfs_server_capable(inode, NFS_CAP_OWNER_GROUP)) {
+		args.fa_valid[0] |= NFS_FA_VALID_OWNER_GROUP;
+		if (copy_to_user(&uarg->fa_group_gid, &inode->i_gid, sizeof(gid_t)))
+			goto out;
+	}
+
 	if (nfs_server_capable(inode, NFS_CAP_TIME_BACKUP)) {
 		args.fa_valid[0] |= NFS_FA_VALID_TIME_BACKUP;
 		if (copy_to_user(&uarg->fa_time_backup, &nfsi->timebackup,
@@ -170,6 +182,30 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		args.fa_valid[0] |= NFS_FA_VALID_TIME_CREATE;
 		if (copy_to_user(&uarg->fa_time_create, &nfsi->timecreate,
 					sizeof(uarg->fa_time_create)))
+			goto out;
+	}
+
+	/* atime, mtime, and ctime are all stored in the regular inode,
+	 * not the nfs inode.
+	 */
+	if (nfs_server_capable(inode, NFS_CAP_ATIME)) {
+		args.fa_valid[0] |= NFS_FA_VALID_ATIME;
+		if (copy_to_user(&uarg->fa_atime, &inode->i_atime,
+					sizeof(uarg->fa_atime)))
+			goto out;
+	}
+
+	if (nfs_server_capable(inode, NFS_CAP_MTIME)) {
+		args.fa_valid[0] |= NFS_FA_VALID_MTIME;
+		if (copy_to_user(&uarg->fa_mtime, &inode->i_mtime,
+					sizeof(uarg->fa_mtime)))
+                        goto out;
+	}
+
+	if (nfs_server_capable(inode, NFS_CAP_CTIME)) {
+		args.fa_valid[0] |= NFS_FA_VALID_CTIME;
+		if (copy_to_user(&uarg->fa_ctime, &inode->i_ctime,
+				sizeof(uarg->fa_ctime)))
 			goto out;
 	}
 
@@ -247,6 +283,16 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 		goto out;
 	args.fa_valid[0] &= NFS_FA_VALID_ALL_ATTR_0;
 
+	if ((args.fa_valid[0] & NFS_FA_VALID_OWNER) &&
+	    copy_from_user(&args.fa_owner_uid, &uarg->fa_owner_uid,
+					sizeof(args.fa_owner_uid)))
+		goto out;
+
+	if ((args.fa_valid[0] & NFS_FA_VALID_OWNER_GROUP) &&
+	    copy_from_user(&args.fa_group_gid, &uarg->fa_group_gid,
+					sizeof(args.fa_group_gid)))
+		goto out;
+
 	if ((args.fa_valid[0] & (NFS_FA_VALID_ARCHIVE |
 					NFS_FA_VALID_HIDDEN |
 					NFS_FA_VALID_SYSTEM)) &&
@@ -256,6 +302,16 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 	if ((args.fa_valid[0] & NFS_FA_VALID_TIME_CREATE) &&
 	    copy_from_user(&args.fa_time_create, &uarg->fa_time_create,
 					sizeof(args.fa_time_create)))
+		goto out;
+
+	if ((args.fa_valid[0] & NFS_FA_VALID_ATIME) &&
+	    copy_from_user(&args.fa_atime, &uarg->fa_atime,
+					sizeof(args.fa_atime)))
+		goto out;
+
+	if ((args.fa_valid[0] & NFS_FA_VALID_MTIME) &&
+	    copy_from_user(&args.fa_mtime, &uarg->fa_mtime,
+					sizeof(args.fa_mtime)))
 		goto out;
 
 	if (args.fa_valid[0] & NFS_FA_VALID_TIME_BACKUP) {

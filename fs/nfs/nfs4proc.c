@@ -7741,6 +7741,32 @@ static int _nfs4_set_nfs4_statx(struct inode *inode,
 	};
 	int status;
 
+	/* Use the iattr structure to set atime and mtime since handling already
+	 * exists for them using the iattr struct in the encode_attrs()
+	 * (xdr encoding) routine.
+	 */
+	if (statx && (statx->fa_valid[0] & NFS_FA_VALID_MTIME)) {
+		sattr.ia_valid |= ATTR_MTIME_SET;
+		sattr.ia_mtime.tv_sec = statx->fa_mtime.tv_sec;
+		sattr.ia_mtime.tv_nsec = statx->fa_mtime.tv_nsec;
+	}
+
+	if (statx && (statx->fa_valid[0] & NFS_FA_VALID_ATIME)) {
+		sattr.ia_valid |= ATTR_ATIME_SET;
+		sattr.ia_atime.tv_sec = statx->fa_atime.tv_sec;
+		sattr.ia_atime.tv_nsec = statx->fa_atime.tv_nsec;
+	}
+
+	if (statx && (statx->fa_valid[0] & NFS_FA_VALID_OWNER)) {
+		sattr.ia_valid |= ATTR_UID;
+		sattr.ia_uid.val = statx->fa_owner_uid;
+	}
+
+	if (statx && (statx->fa_valid[0] & NFS_FA_VALID_OWNER_GROUP)) {
+		sattr.ia_valid |= ATTR_GID;
+		sattr.ia_gid.val = statx->fa_group_gid;
+	}
+
 	nfs4_stateid_copy(&arg.stateid, &zero_stateid);
 
 	status = nfs4_call_sync(server->client, server, &msg, &arg.seq_args, &res.seq_res, 1);
