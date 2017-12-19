@@ -604,34 +604,24 @@ out_err:
 	goto out;
 }
 
-/*
- * Note this can deadlock with nfsd_file_lru_cb.
- */
 void
 nfsd_file_cache_purge(void)
 {
 	unsigned int		i;
 	struct nfsd_file	*nf;
+	struct hlist_node	*next;
 	LIST_HEAD(dispose);
-	bool del;
 
 	if (!nfsd_file_hashtbl)
 		return;
 
 	for (i = 0; i < NFSD_FILE_HASH_SIZE; i++) {
-		spin_lock(&nfsd_file_hashtbl[i].nfb_lock);
-		while(!hlist_empty(&nfsd_file_hashtbl[i].nfb_head)) {
-			nf = hlist_entry(nfsd_file_hashtbl[i].nfb_head.first,
-					 struct nfsd_file, nf_node);
-			del = nfsd_file_unhash_and_release_locked(nf, &dispose);
+		struct nfsd_fcache_bucket *nfb = &nfsd_file_hashtbl[i];
 
-			/*
-			 * Deadlock detected! Something marked this entry as
-			 * unhased, but hasn't removed it from the hash list.
-			 */
-			WARN_ON_ONCE(!del);
-		}
-		spin_unlock(&nfsd_file_hashtbl[i].nfb_lock);
+		spin_lock(&nfb->nfb_lock);
+		hlist_for_each_entry_safe(nf, next, &nfb->nfb_head, nf_node)
+			nfsd_file_unhash_and_release_locked(nf, &dispose);
+		spin_unlock(&nfb->nfb_lock);
 		nfsd_file_dispose_list(&dispose);
 	}
 }
