@@ -329,6 +329,8 @@ enum open_delegation_type4 {
 	NFS4_OPEN_DELEGATE_READ = 1,
 	NFS4_OPEN_DELEGATE_WRITE = 2,
 	NFS4_OPEN_DELEGATE_NONE_EXT = 3, /* 4.1 */
+	NFS4_OPEN_DELEGATE_READ_ATTRS_DELEG = 4,
+	NFS4_OPEN_DELEGATE_WRITE_ATTRS_DELEG = 5,
 };
 
 enum why_no_delegation4 { /* new to v4.1 */
@@ -431,6 +433,8 @@ enum change_attr_type4 {
 #define FATTR4_WORD2_MODE_UMASK		(1UL << 17)
 #define FATTR4_WORD2_XATTR_SUPPORT	(1UL << 18)
 #define FATTR4_WORD2_OFFLINE		(1UL << 19)
+#define FATTR4_WORD2_TIME_DELEG_ACCESS	(1UL << 20)
+#define FATTR4_WORD2_TIME_DELEG_MODIFY	(1UL << 21)
 
 /* MDS threshold bitmap bits */
 #define THRESHOLD_RD                    (1UL << 0)
