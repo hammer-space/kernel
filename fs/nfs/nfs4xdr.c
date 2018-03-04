@@ -109,6 +109,7 @@ static int decode_layoutget(struct xdr_stream *xdr, struct rpc_rqst *req,
 				((3+NFS4_FHSIZE) >> 2))
 #define nfs4_fattr_bitmap_maxsz 4
 #define encode_getattr_maxsz    (op_encode_hdr_maxsz + nfs4_fattr_bitmap_maxsz)
+#define nfstime4_maxsz		(3)
 #define nfs4_name_maxsz		(1 + ((3 + NFS4_MAXNAMLEN) >> 2))
 #define nfs4_path_maxsz		(1 + ((3 + NFS4_MAXPATHLEN) >> 2))
 #define nfs4_owner_maxsz	(1 + XDR_QUADLEN(IDMAP_NAMESZ))
@@ -123,7 +124,8 @@ static int decode_layoutget(struct xdr_stream *xdr, struct rpc_rqst *req,
 #define decode_mdsthreshold_maxsz (1 + 1 + nfs4_fattr_bitmap_maxsz + 1 + 8)
 /* This is based on getfattr, which uses the most attributes: */
 #define nfs4_fattr_value_maxsz	(1 + (1 + 2 + 2 + 4 + 2 + 1 + 1 + 2 + 2 + \
-				3 + 3 + 3 + nfs4_owner_maxsz + \
+				3*nfstime4_maxsz + \
+				nfs4_owner_maxsz + \
 				nfs4_group_maxsz + nfs4_label_maxsz + \
 				 decode_mdsthreshold_maxsz))
 #define nfs4_fattr_maxsz	(nfs4_fattr_bitmap_maxsz + \
@@ -134,7 +136,11 @@ static int decode_layoutget(struct xdr_stream *xdr, struct rpc_rqst *req,
 				nfs4_owner_maxsz + \
 				nfs4_group_maxsz + \
 				nfs4_label_maxsz + \
-				4 + 4)
+				1 + nfstime4_maxsz + \
+				1 + nfstime4_maxsz + \
+				nfstime4_maxsz + \
+				nfstime4_maxsz + \
+				3)
 #define encode_savefh_maxsz     (op_encode_hdr_maxsz)
 #define decode_savefh_maxsz     (op_decode_hdr_maxsz)
 #define encode_restorefh_maxsz  (op_encode_hdr_maxsz)
@@ -1055,6 +1061,14 @@ static void encode_nfs4_verifier(struct xdr_stream *xdr, const nfs4_verifier *ve
 	encode_opaque_fixed(xdr, verf->data, NFS4_VERIFIER_SIZE);
 }
 
+static __be32 *
+xdr_encode_nfstime4(__be32 *p, const struct timespec *t)
+{
+	p = xdr_encode_hyper(p, (__s64)t->tv_sec);
+	*p++ = cpu_to_be32(t->tv_nsec);
+	return p;
+}
+
 static void encode_attrs(struct xdr_stream *xdr, const struct iattr *iap,
 				const struct nfs4_label *label,
 				const umode_t *umask,
@@ -1115,7 +1129,7 @@ static void encode_attrs(struct xdr_stream *xdr, const struct iattr *iap,
 	if (attrmask[1] & FATTR4_WORD1_TIME_ACCESS_SET) {
 		if (iap->ia_valid & ATTR_ATIME_SET) {
 			bmval[1] |= FATTR4_WORD1_TIME_ACCESS_SET;
-			len += 16;
+			len += 4 + (nfstime4_maxsz << 2);
 		} else if (iap->ia_valid & ATTR_ATIME) {
 			bmval[1] |= FATTR4_WORD1_TIME_ACCESS_SET;
 			len += 4;
@@ -1124,7 +1138,7 @@ static void encode_attrs(struct xdr_stream *xdr, const struct iattr *iap,
 	if (attrmask[1] & FATTR4_WORD1_TIME_MODIFY_SET) {
 		if (iap->ia_valid & ATTR_MTIME_SET) {
 			bmval[1] |= FATTR4_WORD1_TIME_MODIFY_SET;
-			len += 16;
+			len += 4 + (nfstime4_maxsz << 2);
 		} else if (iap->ia_valid & ATTR_MTIME) {
 			bmval[1] |= FATTR4_WORD1_TIME_MODIFY_SET;
 			len += 4;
@@ -1134,12 +1148,12 @@ static void encode_attrs(struct xdr_stream *xdr, const struct iattr *iap,
 	if (statx && (statx->fa_valid[0] & NFS_FA_VALID_TIME_BACKUP) &&
 	    (attrmask[1] & FATTR4_WORD1_TIME_BACKUP)) {
 		bmval[1] |= FATTR4_WORD1_TIME_BACKUP;
-		len += 12;
+		len += (nfstime4_maxsz << 2);
 	}
 	if (statx && (statx->fa_valid[0] & NFS_FA_VALID_TIME_CREATE) &&
 	    (attrmask[1] & FATTR4_WORD1_TIME_CREATE)) {
 		bmval[1] |= FATTR4_WORD1_TIME_CREATE;
-		len += 12;
+		len += (nfstime4_maxsz << 2);
 	}
 
 	if (statx && (statx->fa_valid[0] & NFS_FA_VALID_ARCHIVE) &&
@@ -1187,24 +1201,18 @@ static void encode_attrs(struct xdr_stream *xdr, const struct iattr *iap,
 	if (bmval[1] & FATTR4_WORD1_TIME_ACCESS_SET) {
 		if (iap->ia_valid & ATTR_ATIME_SET) {
 			*p++ = cpu_to_be32(NFS4_SET_TO_CLIENT_TIME);
-			p = xdr_encode_hyper(p, (s64)iap->ia_atime.tv_sec);
-			*p++ = cpu_to_be32(iap->ia_atime.tv_nsec);
+			p = xdr_encode_nfstime4(p, &iap->ia_atime);
 		} else
 			*p++ = cpu_to_be32(NFS4_SET_TO_SERVER_TIME);
 	}
-	if (bmval[1] & FATTR4_WORD1_TIME_BACKUP) {
-		p = xdr_encode_hyper(p, (s64)statx->fa_time_backup.tv_sec);
-		*p++ = cpu_to_be32(statx->fa_time_backup.tv_nsec);
-	}
-	if (bmval[1] & FATTR4_WORD1_TIME_CREATE) {
-		p = xdr_encode_hyper(p, (s64)statx->fa_time_create.tv_sec);
-		*p++ = cpu_to_be32(statx->fa_time_create.tv_nsec);
-	}
+	if (bmval[1] & FATTR4_WORD1_TIME_BACKUP)
+		p = xdr_encode_nfstime4(p, &statx->fa_time_backup);
+	if (bmval[1] & FATTR4_WORD1_TIME_CREATE)
+		p = xdr_encode_nfstime4(p, &statx->fa_time_create);
 	if (bmval[1] & FATTR4_WORD1_TIME_MODIFY_SET) {
 		if (iap->ia_valid & ATTR_MTIME_SET) {
 			*p++ = cpu_to_be32(NFS4_SET_TO_CLIENT_TIME);
-			p = xdr_encode_hyper(p, (s64)iap->ia_mtime.tv_sec);
-			*p++ = cpu_to_be32(iap->ia_mtime.tv_nsec);
+			p = xdr_encode_nfstime4(p, &iap->ia_mtime);
 		} else
 			*p++ = cpu_to_be32(NFS4_SET_TO_SERVER_TIME);
 	}
@@ -4232,19 +4240,25 @@ out_overflow:
 	return -EIO;
 }
 
+static __be32 *
+xdr_decode_nfstime4(__be32 *p, struct timespec *t)
+{
+	__u64 sec;
+
+	p = xdr_decode_hyper(p, &sec);
+	t-> tv_sec = (time_t)sec;
+	t->tv_nsec = be32_to_cpup(p++);
+	return p;
+}
+
 static int decode_attr_time(struct xdr_stream *xdr, struct timespec *time)
 {
 	__be32 *p;
-	uint64_t sec;
-	uint32_t nsec;
 
-	p = xdr_inline_decode(xdr, 12);
+	p = xdr_inline_decode(xdr, nfstime4_maxsz << 2);
 	if (unlikely(!p))
 		goto out_overflow;
-	p = xdr_decode_hyper(p, &sec);
-	nsec = be32_to_cpup(p);
-	time->tv_sec = (time_t)sec;
-	time->tv_nsec = (long)nsec;
+	xdr_decode_nfstime4(p, time);
 	return 0;
 out_overflow:
 	print_overflow_msg(__func__, xdr);
