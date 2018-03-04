@@ -217,6 +217,11 @@ static int decode_layoutget(struct xdr_stream *xdr, struct rpc_rqst *req,
 				 encode_attrs_maxsz)
 #define decode_setattr_maxsz	(op_decode_hdr_maxsz + \
 				 nfs4_fattr_bitmap_maxsz)
+#define encode_delegattr_maxsz	(op_encode_hdr_maxsz + \
+				 encode_stateid_maxsz + \
+				nfs4_fattr_bitmap_maxsz + \
+				2*nfstime4_maxsz)
+#define decode_delegattr_maxsz	(decode_setattr_maxsz)
 #define encode_read_maxsz	(op_encode_hdr_maxsz + \
 				 encode_stateid_maxsz + 3)
 #define decode_read_maxsz	(op_decode_hdr_maxsz + 2 + 1)
@@ -750,12 +755,14 @@ static int decode_layoutget(struct xdr_stream *xdr, struct rpc_rqst *req,
 				encode_sequence_maxsz + \
 				encode_putfh_maxsz + \
 				encode_layoutreturn_maxsz + \
+				encode_delegattr_maxsz + \
 				encode_delegreturn_maxsz + \
 				encode_getattr_maxsz)
 #define NFS4_dec_delegreturn_sz (compound_decode_hdr_maxsz + \
 				decode_sequence_maxsz + \
 				decode_putfh_maxsz + \
 				decode_layoutreturn_maxsz + \
+				decode_delegattr_maxsz + \
 				decode_delegreturn_maxsz + \
 				decode_getattr_maxsz)
 #define NFS4_enc_getacl_sz	(compound_encode_hdr_maxsz + \
@@ -1758,6 +1765,33 @@ static void encode_setattr(struct xdr_stream *xdr, const struct nfs_setattrargs 
 	encode_nfs4_stateid(xdr, &arg->stateid);
 	encode_attrs(xdr, arg->iap, arg->label, NULL, arg->statx,
 			server, server->attr_bitmask);
+}
+
+static void encode_delegattr(struct xdr_stream *xdr,
+		const nfs4_stateid *stateid,
+		const struct nfs4_delegattr *attr,
+		struct compound_hdr *hdr)
+{
+	uint32_t bitmap[3] = { 0 };
+	uint32_t len = 0;
+	__be32 *p;
+
+	encode_op_hdr(xdr, OP_SETATTR, encode_delegattr_maxsz, hdr);
+	encode_nfs4_stateid(xdr, stateid);
+	if (attr->atime_set) {
+		bitmap[2] |= FATTR4_WORD2_TIME_DELEG_ACCESS;
+		len += (nfstime4_maxsz << 2);
+	}
+	if (attr->mtime_set) {
+		bitmap[2] |= FATTR4_WORD2_TIME_DELEG_MODIFY;
+		len += (nfstime4_maxsz << 2);
+	}
+	xdr_encode_bitmap4(xdr, bitmap, ARRAY_SIZE(bitmap));
+	xdr_stream_encode_opaque_inline(xdr, (void **)&p, len);
+	if (bitmap[2] & FATTR4_WORD2_TIME_DELEG_ACCESS)
+		p = xdr_encode_nfstime4(p, &attr->atime);
+	if (bitmap[2] & FATTR4_WORD2_TIME_DELEG_MODIFY)
+		p = xdr_encode_nfstime4(p, &attr->mtime);
 }
 
 static void encode_setclientid(struct xdr_stream *xdr, const struct nfs4_setclientid *setclientid, struct compound_hdr *hdr)
@@ -2845,6 +2879,8 @@ static void nfs4_xdr_enc_delegreturn(struct rpc_rqst *req,
 	encode_putfh(xdr, args->fhandle, &hdr);
 	if (args->lr_args)
 		encode_layoutreturn(xdr, args->lr_args, &hdr);
+	if (args->sattr_args)
+		encode_delegattr(xdr, args->stateid, args->sattr_args, &hdr);
 	if (args->bitmask)
 		encode_getfattr(xdr, args->bitmask, &hdr);
 	encode_delegreturn(xdr, args->stateid, &hdr);
@@ -5734,6 +5770,11 @@ static int decode_setattr(struct xdr_stream *xdr)
 	return -EIO;
 }
 
+static int decode_delegattr(struct xdr_stream *xdr)
+{
+	return decode_setattr(xdr);
+}
+
 static int decode_setclientid(struct xdr_stream *xdr, struct nfs4_setclientid_res *res)
 {
 	__be32 *p;
@@ -7317,6 +7358,12 @@ static int nfs4_xdr_dec_delegreturn(struct rpc_rqst *rqstp,
 	if (res->lr_res) {
 		status = decode_layoutreturn(xdr, res->lr_res);
 		res->lr_ret = status;
+		if (status)
+			goto out;
+	}
+	if (res->sattr_res) {
+		status = decode_delegattr(xdr);
+		res->sattr_ret = status;
 		if (status)
 			goto out;
 	}
