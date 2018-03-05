@@ -3639,6 +3639,7 @@ static int _nfs4_server_capabilities(struct nfs_server *server, struct nfs_fh *f
 				NFS_CAP_OWNER_GROUP|NFS_CAP_ATIME|
 				NFS_CAP_CTIME|NFS_CAP_MTIME|
 				NFS_CAP_SECURITY_LABEL);
+		server->fattr_valid = NFS_ATTR_FATTR_V4;
 		if (res.attr_bitmask[0] & FATTR4_WORD0_ACL) {
 			if (res.acl_bitmask & ACL4_SUPPORT_ALLOW_ACL)
 				server->caps |= NFS_CAP_ALLOW_ACLS;
@@ -3649,35 +3650,37 @@ static int _nfs4_server_capabilities(struct nfs_server *server, struct nfs_fh *f
 			server->caps |= NFS_CAP_HARDLINKS;
 		if (res.has_symlinks != 0)
 			server->caps |= NFS_CAP_SYMLINKS;
-		if (res.attr_bitmask[0] & FATTR4_WORD0_FILEID)
-			server->caps |= NFS_CAP_FILEID;
-		if (res.attr_bitmask[0] & FATTR4_WORD0_HIDDEN)
-			server->caps |= NFS_CAP_HIDDEN;
-		if (res.attr_bitmask[0] & FATTR4_WORD0_ARCHIVE)
-			server->caps |= NFS_CAP_ARCHIVE;
-		if (res.attr_bitmask[1] & FATTR4_WORD1_MODE)
-			server->caps |= NFS_CAP_MODE;
-		if (res.attr_bitmask[1] & FATTR4_WORD1_NUMLINKS)
-			server->caps |= NFS_CAP_NLINK;
-		if (res.attr_bitmask[1] & FATTR4_WORD1_OWNER)
-			server->caps |= NFS_CAP_OWNER;
-		if (res.attr_bitmask[1] & FATTR4_WORD1_OWNER_GROUP)
-			server->caps |= NFS_CAP_OWNER_GROUP;
-		if (res.attr_bitmask[1] & FATTR4_WORD1_TIME_ACCESS)
-			server->caps |= NFS_CAP_ATIME;
-		if (res.attr_bitmask[1] & FATTR4_WORD1_TIME_METADATA)
-			server->caps |= NFS_CAP_CTIME;
-		if (res.attr_bitmask[1] & FATTR4_WORD1_TIME_MODIFY)
-			server->caps |= NFS_CAP_MTIME;
-		if (res.attr_bitmask[1] & FATTR4_WORD1_TIME_CREATE)
-			server->caps |= NFS_CAP_TIME_CREATE;
-		if (res.attr_bitmask[1] & FATTR4_WORD1_SYSTEM)
-			server->caps |= NFS_CAP_SYSTEM;
-		if (res.attr_bitmask[1] & FATTR4_WORD1_TIME_BACKUP)
-			server->caps |= NFS_CAP_TIME_BACKUP;
+		if (!(res.attr_bitmask[0] & FATTR4_WORD0_FILEID))
+			server->fattr_valid &= ~NFS_ATTR_FATTR_FILEID;
+		if (!(res.attr_bitmask[0] & FATTR4_WORD0_HIDDEN))
+			server->fattr_valid &= ~NFS_ATTR_FATTR_HIDDEN;
+		if (!(res.attr_bitmask[0] & FATTR4_WORD0_ARCHIVE))
+			server->fattr_valid &= ~NFS_ATTR_FATTR_ARCHIVE;
+		if (!(res.attr_bitmask[1] & FATTR4_WORD1_MODE))
+			server->fattr_valid &= ~NFS_ATTR_FATTR_MODE;
+		if (!(res.attr_bitmask[1] & FATTR4_WORD1_NUMLINKS))
+			server->fattr_valid &= ~NFS_ATTR_FATTR_NLINK;
+		if (!(res.attr_bitmask[1] & FATTR4_WORD1_OWNER))
+			server->fattr_valid &= ~(NFS_ATTR_FATTR_OWNER |
+				NFS_ATTR_FATTR_OWNER_NAME);
+		if (!(res.attr_bitmask[1] & FATTR4_WORD1_OWNER_GROUP))
+			server->fattr_valid &= ~(NFS_ATTR_FATTR_GROUP |
+				NFS_ATTR_FATTR_GROUP_NAME);
+		if (!(res.attr_bitmask[1] & FATTR4_WORD1_TIME_ACCESS))
+			server->fattr_valid &= ~NFS_ATTR_FATTR_ATIME;
+		if (!(res.attr_bitmask[1] & FATTR4_WORD1_TIME_METADATA))
+			server->fattr_valid &= ~NFS_ATTR_FATTR_CTIME;
+		if (!(res.attr_bitmask[1] & FATTR4_WORD1_TIME_MODIFY))
+			server->fattr_valid &= ~NFS_ATTR_FATTR_MTIME;
+		if (!(res.attr_bitmask[1] & FATTR4_WORD1_TIME_CREATE))
+			server->fattr_valid &= ~NFS_ATTR_FATTR_TIME_CREATE;
+		if (!(res.attr_bitmask[1] & FATTR4_WORD1_SYSTEM))
+			server->fattr_valid &= ~NFS_ATTR_FATTR_SYSTEM;
+		if (!(res.attr_bitmask[1] & FATTR4_WORD1_TIME_BACKUP))
+			server->fattr_valid &= ~NFS_ATTR_FATTR_TIME_BACKUP;
 #ifdef CONFIG_NFS_V4_SECURITY_LABEL
-		if (res.attr_bitmask[2] & FATTR4_WORD2_SECURITY_LABEL)
-			server->caps |= NFS_CAP_SECURITY_LABEL;
+		if (!(res.attr_bitmask[2] & FATTR4_WORD2_SECURITY_LABEL))
+			server->fattr_valid &= ~NFS_ATTR_FATTR_V4_SECURITY_LABEL;
 #endif
 		memcpy(server->attr_bitmask_nl, res.attr_bitmask,
 				sizeof(server->attr_bitmask));

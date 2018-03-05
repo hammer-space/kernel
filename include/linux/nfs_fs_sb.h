@@ -169,6 +169,8 @@ struct nfs_server {
 	dev_t			s_dev;		/* superblock dev numbers */
 	struct nfs_auth_info	auth_info;	/* parsed auth flavors */
 
+	__u64			fattr_valid;	/* Valid attributes */
+
 #ifdef CONFIG_NFS_FSCACHE
 	struct nfs_fscache_key	*fscache_key;	/* unique key for superblock */
 	struct fscache_cookie	*fscache;	/* superblock cookie */

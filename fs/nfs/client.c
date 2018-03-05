@@ -692,6 +692,17 @@ static int nfs_init_server(struct nfs_server *server,
 		NFS_CAP_MODE|NFS_CAP_NLINK|NFS_CAP_OWNER|NFS_CAP_OWNER_GROUP|
 		NFS_CAP_ATIME|NFS_CAP_CTIME|NFS_CAP_MTIME;
 
+	switch (clp->rpc_ops->version) {
+	case 2:
+		server->fattr_valid = NFS_ATTR_FATTR_V2;
+		break;
+	case 3:
+		server->fattr_valid = NFS_ATTR_FATTR_V3;
+		break;
+	default:
+		server->fattr_valid = NFS_ATTR_FATTR_V4;
+	}
+
 	if (data->rsize)
 		server->rsize = nfs_block_size(data->rsize, NULL);
 	if (data->wsize)
