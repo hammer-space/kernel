@@ -49,6 +49,7 @@
 #define NFS_FA_VALID_ATIME				0x0080UL
 #define NFS_FA_VALID_MTIME				0x0100UL
 #define NFS_FA_VALID_CTIME				0x0200UL
+#define NFS_FA_VALID_OFFLINE				0x0400UL
 
 #define NFS_FA_VALID_ALL_ATTR_0 ( NFS_FA_VALID_TIME_CREATE | \
 		NFS_FA_VALID_TIME_BACKUP | \
@@ -59,11 +60,13 @@
 		NFS_FA_VALID_OWNER_GROUP | \
 		NFS_FA_VALID_ATIME | \
 		NFS_FA_VALID_MTIME | \
-		NFS_FA_VALID_CTIME )
+		NFS_FA_VALID_CTIME | \
+		NFS_FA_VALID_OFFLINE)
 
 #define NFS_FA_FLAG_ARCHIVE				(1UL << 0)
 #define NFS_FA_FLAG_HIDDEN				(1UL << 1)
 #define NFS_FA_FLAG_SYSTEM				(1UL << 2)
+#define NFS_FA_FLAG_OFFLINE				(1UL << 3)
 struct nfs_ioctl_nfs4_statx {
 	__s64		real_fd;		/* real FD to use,
 						   -1 means use current file */
