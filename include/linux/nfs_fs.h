@@ -133,7 +133,8 @@ struct nfs_inode {
 	struct timespec		timebackup;
 	unsigned int		archive : 1,
 				hidden : 1,
-				system : 1;
+				system : 1,
+				offline : 1;
 	/*
 	 * read_cache_jiffies is when we started read-caching this inode.
 	 * attrtimeo is for how long the cached information is assumed

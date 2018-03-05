@@ -216,6 +216,7 @@ const u32 nfs4_fattr_bitmap[3] = {
 #ifdef CONFIG_NFS_V4_SECURITY_LABEL
 	FATTR4_WORD2_SECURITY_LABEL
 #endif
+	| FATTR4_WORD2_OFFLINE
 };
 
 static const u32 nfs4_pnfs_open_bitmap[3] = {
@@ -242,6 +243,7 @@ static const u32 nfs4_pnfs_open_bitmap[3] = {
 #ifdef CONFIG_NFS_V4_SECURITY_LABEL
 	| FATTR4_WORD2_SECURITY_LABEL
 #endif
+	| FATTR4_WORD2_OFFLINE
 };
 
 static const u32 nfs4_open_noattr_bitmap[3] = {
@@ -3679,6 +3681,8 @@ static int _nfs4_server_capabilities(struct nfs_server *server, struct nfs_fh *f
 		if (!(res.attr_bitmask[2] & FATTR4_WORD2_SECURITY_LABEL))
 			server->fattr_valid &= ~NFS_ATTR_FATTR_V4_SECURITY_LABEL;
 #endif
+		if (!(res.attr_bitmask[2] & FATTR4_WORD2_OFFLINE))
+			server->fattr_valid |= NFS_ATTR_FATTR_OFFLINE;
 		memcpy(server->attr_bitmask_nl, res.attr_bitmask,
 				sizeof(server->attr_bitmask));
 		server->attr_bitmask_nl[2] &= ~FATTR4_WORD2_SECURITY_LABEL;

@@ -499,6 +499,7 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 		nfsi->hidden = 0;
 		nfsi->system = 0;
 		nfsi->archive = 0;
+		nfsi->offline = 0;
 		inode_set_iversion_raw(inode, 0);
 		inode->i_size = 0;
 		clear_nlink(inode);

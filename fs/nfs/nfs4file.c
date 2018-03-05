@@ -232,9 +232,16 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 			args.fa_flags |= NFS_FA_FLAG_SYSTEM;
 	}
 
+	if (fattr_supported & NFS_ATTR_FATTR_OFFLINE) {
+		args.fa_valid[0] |= NFS_FA_VALID_OFFLINE;
+		if (nfsi->offline)
+			args.fa_flags |= NFS_FA_FLAG_OFFLINE;
+	}
+
 	if ((args.fa_valid[0] & (NFS_FA_VALID_ARCHIVE |
 				NFS_FA_VALID_HIDDEN |
-				NFS_FA_VALID_SYSTEM)) &&
+				NFS_FA_VALID_SYSTEM |
+				NFS_FA_VALID_OFFLINE)) &&
 	    put_user(args.fa_flags, &uarg->fa_flags))
 		goto out;
 
