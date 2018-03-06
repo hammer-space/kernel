@@ -1318,7 +1318,7 @@ static int nfs_can_extend_write(struct file *file, struct page *page,
 		return 0;
 	if (!nfs_write_pageuptodate(page, inode, pagelen))
 		return 0;
-	if (NFS_PROTO(inode)->have_delegation(inode, FMODE_WRITE))
+	if (nfs_have_write_delegation(inode))
 		return 1;
 	if (!flctx || (list_empty_careful(&flctx->flc_flock) &&
 		       list_empty_careful(&flctx->flc_posix)))
