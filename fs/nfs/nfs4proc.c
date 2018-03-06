@@ -1848,6 +1848,8 @@ nfs4_process_delegation(struct inode *inode,
 	switch (delegation->open_delegation_type) {
 	case NFS4_OPEN_DELEGATE_READ:
 	case NFS4_OPEN_DELEGATE_WRITE:
+	case NFS4_OPEN_DELEGATE_READ_ATTRS_DELEG:
+	case NFS4_OPEN_DELEGATE_WRITE_ATTRS_DELEG:
 		break;
 	default:
 		return;
@@ -1864,13 +1866,15 @@ nfs4_process_delegation(struct inode *inode,
 		nfs_inode_reclaim_delegation(inode, cred,
 				delegation->type,
 				&delegation->stateid,
-				delegation->pagemod_limit);
+				delegation->pagemod_limit,
+				delegation->open_delegation_type);
 		break;
 	default:
 		nfs_inode_set_delegation(inode, cred,
 				delegation->type,
 				&delegation->stateid,
-				delegation->pagemod_limit);
+				delegation->pagemod_limit,
+				delegation->open_delegation_type);
 	}
 }
 

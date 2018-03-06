@@ -5349,9 +5349,11 @@ static int decode_rw_delegation(struct xdr_stream *xdr,
 
 	switch (res->open_delegation_type) {
 	case NFS4_OPEN_DELEGATE_READ:
+	case NFS4_OPEN_DELEGATE_READ_ATTRS_DELEG:
 		res->type = FMODE_READ;
 		break;
 	case NFS4_OPEN_DELEGATE_WRITE:
+	case NFS4_OPEN_DELEGATE_WRITE_ATTRS_DELEG:
 		res->type = FMODE_WRITE|FMODE_READ;
 		if (decode_space_limit(xdr, &res->pagemod_limit) < 0)
 				return -EIO;

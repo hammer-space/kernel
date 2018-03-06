@@ -178,12 +178,14 @@ again:
  * @type: delegation type
  * @stateid: delegation stateid
  * @pagemod_limit: write delegation "space_limit"
+ * @deleg_type: raw delegation type
  *
  */
 void nfs_inode_reclaim_delegation(struct inode *inode, const struct cred *cred,
 				  fmode_t type,
 				  const nfs4_stateid *stateid,
-				  unsigned long pagemod_limit)
+				  unsigned long pagemod_limit,
+				  u32 deleg_type)
 {
 	struct nfs_delegation *delegation;
 	const struct cred *oldcred = NULL;
@@ -210,7 +212,8 @@ void nfs_inode_reclaim_delegation(struct inode *inode, const struct cred *cred,
 		spin_unlock(&delegation->lock);
 	}
 	rcu_read_unlock();
-	nfs_inode_set_delegation(inode, cred, type, stateid, pagemod_limit);
+	nfs_inode_set_delegation(inode, cred, type, stateid,
+			pagemod_limit, deleg_type);
 }
 
 static int nfs_do_return_delegation(struct inode *inode, struct nfs_delegation *delegation, bool issync)
@@ -343,13 +346,15 @@ nfs_update_inplace_delegation(struct nfs_delegation *delegation,
  * @type: delegation type
  * @stateid: delegation stateid
  * @pagemod_limit: write delegation "space_limit"
+ * @deleg_type: raw delegation type
  *
  * Returns zero on success, or a negative errno value.
  */
 int nfs_inode_set_delegation(struct inode *inode, const struct cred *cred,
 				  fmode_t type,
 				  const nfs4_stateid *stateid,
-				  unsigned long pagemod_limit)
+				  unsigned long pagemod_limit,
+				  u32 deleg_type)
 {
 	struct nfs_server *server = NFS_SERVER(inode);
 	struct nfs_client *clp = server->nfs_client;
@@ -368,6 +373,12 @@ int nfs_inode_set_delegation(struct inode *inode, const struct cred *cred,
 	delegation->cred = get_cred(cred);
 	delegation->inode = inode;
 	delegation->flags = 1<<NFS_DELEGATION_REFERENCED;
+
+	switch (deleg_type) {
+	case NFS4_OPEN_DELEGATE_READ_ATTRS_DELEG:
+	case NFS4_OPEN_DELEGATE_WRITE_ATTRS_DELEG:
+		delegation->flags |= BIT(NFS_DELEGATION_DELEGTIME);
+	}
 	spin_lock_init(&delegation->lock);
 
 	spin_lock(&clp->cl_lock);

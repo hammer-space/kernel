@@ -41,9 +41,11 @@ enum {
 #define NFS_DELEGATION_FLAG_TIME	BIT(1)
 
 int nfs_inode_set_delegation(struct inode *inode, const struct cred *cred,
-		fmode_t type, const nfs4_stateid *stateid, unsigned long pagemod_limit);
+		fmode_t type, const nfs4_stateid *stateid, unsigned long pagemod_limit,
+		u32 deleg_type);
 void nfs_inode_reclaim_delegation(struct inode *inode, const struct cred *cred,
-		fmode_t type, const nfs4_stateid *stateid, unsigned long pagemod_limit);
+		fmode_t type, const nfs4_stateid *stateid, unsigned long pagemod_limit,
+		u32 deleg_type);
 int nfs4_inode_return_delegation(struct inode *inode);
 int nfs_async_inode_return_delegation(struct inode *inode, const nfs4_stateid *stateid);
 void nfs_inode_return_delegation_noreclaim(struct inode *inode);
