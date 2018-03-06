@@ -192,7 +192,7 @@ static bool nfs_check_cache_invalid_not_delegated(struct inode *inode, unsigned 
 
 bool nfs_check_cache_invalid(struct inode *inode, unsigned long flags)
 {
-	if (NFS_PROTO(inode)->have_delegation(inode, FMODE_READ))
+	if (nfs_have_read_or_write_delegation(inode))
 		return nfs_check_cache_invalid_delegated(inode, flags);
 
 	return nfs_check_cache_invalid_not_delegated(inode, flags);
@@ -921,7 +921,7 @@ void nfs_close_context(struct nfs_open_context *ctx, int is_sync)
 	if (!is_sync)
 		return;
 	inode = d_inode(ctx->dentry);
-	if (NFS_PROTO(inode)->have_delegation(inode, FMODE_READ))
+	if (nfs_have_read_or_write_delegation(inode))
 		return;
 	nfsi = NFS_I(inode);
 	if (inode->i_mapping->nrpages == 0)
@@ -2055,7 +2055,7 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode)
 				|| S_ISLNK(inode->i_mode)))
 		invalid &= ~NFS_INO_INVALID_DATA;
-	if (!NFS_PROTO(inode)->have_delegation(inode, FMODE_READ) ||
+	if (!nfs_have_read_or_write_delegation(inode) ||
 			(save_cache_validity & NFS_INO_REVAL_FORCED))
 		nfs_set_cache_invalid(inode, invalid);
 

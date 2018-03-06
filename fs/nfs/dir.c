@@ -1102,7 +1102,7 @@ static int nfs_lookup_revalidate(struct dentry *dentry, unsigned int flags)
 		goto out_bad;
 	}
 
-	if (NFS_PROTO(dir)->have_delegation(inode, FMODE_READ))
+	if (nfs_have_read_or_write_delegation(inode))
 		goto out_set_verifier;
 
 	/* Force a full look up iff the parent directory has changed */
