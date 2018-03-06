@@ -298,7 +298,7 @@ static void nfs4_bitmap_copy_adjust(__u32 *dst, const __u32 *src,
 	unsigned long cache_validity;
 
 	memcpy(dst, src, NFS4_BITMASK_SZ*sizeof(*dst));
-	if (!inode || !nfs4_have_delegation(inode, FMODE_READ))
+	if (!inode || !nfs_have_read_or_write_delegation(inode))
 		return;
 
 	cache_validity = READ_ONCE(NFS_I(inode)->cache_validity);
@@ -2815,7 +2815,7 @@ static int nfs41_check_open_stateid(struct nfs4_state *state)
 
 	if (test_bit(NFS_OPEN_STATE, &state->flags) == 0) {
 		if (test_bit(NFS_DELEGATED_STATE, &state->flags) == 0)  {
-			if (nfs4_have_delegation(state->inode, state->state))
+			if (nfs4_have_delegation(state->inode, state->state, 0))
 				return NFS_OK;
 			return -NFS4ERR_OPENMODE;
 		}
@@ -4236,7 +4236,7 @@ static int _nfs4_proc_access(struct inode *inode, struct nfs_access_entry *entry
 	};
 	int status = 0;
 
-	if (!nfs4_have_delegation(inode, FMODE_READ)) {
+	if (!nfs4_have_delegation(inode, FMODE_READ, 0)) {
 		res.fattr = nfs_alloc_fattr();
 		if (res.fattr == NULL)
 			return -ENOMEM;
