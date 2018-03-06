@@ -6009,7 +6009,10 @@ static const struct rpc_call_ops nfs4_delegreturn_ops = {
 	.rpc_release = nfs4_delegreturn_release,
 };
 
-static int _nfs4_proc_delegreturn(struct inode *inode, struct rpc_cred *cred, const nfs4_stateid *stateid, int issync)
+static int _nfs4_proc_delegreturn(struct inode *inode, struct rpc_cred *cred,
+		const nfs4_stateid *stateid,
+		struct nfs_delegation *delegation,
+		bool issync)
 {
 	struct nfs4_delegreturndata *data;
 	struct nfs_server *server = NFS_SERVER(inode);
@@ -6059,6 +6062,20 @@ static int _nfs4_proc_delegreturn(struct inode *inode, struct rpc_cred *cred, co
 		data->lr.roc = false;
 	}
 
+	if (delegation &&
+	    test_bit(NFS_DELEGATION_DELEGTIME, &delegation->flags)) {
+		if (delegation->type & FMODE_READ) {
+			data->sattr.atime = inode->i_atime;
+			data->sattr.atime_set = true;
+		}
+		if (delegation->type & FMODE_WRITE) {
+			data->sattr.mtime = inode->i_mtime;
+			data->sattr.mtime_set = true;
+		}
+		data->args.sattr_args = &data->sattr;
+		data->res.sattr_res = true;
+	}
+
 	task_setup_data.callback_data = data;
 	msg.rpc_argp = &data->args;
 	msg.rpc_resp = &data->res;
@@ -6076,13 +6093,17 @@ out:
 	return status;
 }
 
-int nfs4_proc_delegreturn(struct inode *inode, struct rpc_cred *cred, const nfs4_stateid *stateid, int issync)
+int nfs4_proc_delegreturn(struct inode *inode, struct rpc_cred *cred,
+		const nfs4_stateid *stateid,
+		struct nfs_delegation *delegation,
+		bool issync)
 {
 	struct nfs_server *server = NFS_SERVER(inode);
 	struct nfs4_exception exception = { };
 	int err;
 	do {
-		err = _nfs4_proc_delegreturn(inode, cred, stateid, issync);
+		err = _nfs4_proc_delegreturn(inode, cred, stateid,
+				delegation, issync);
 		trace_nfs4_delegreturn(inode, stateid, err);
 		switch (err) {
 			case -NFS4ERR_STALE_STATEID:
