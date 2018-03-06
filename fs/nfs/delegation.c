@@ -213,7 +213,7 @@ void nfs_inode_reclaim_delegation(struct inode *inode, const struct cred *cred,
 	nfs_inode_set_delegation(inode, cred, type, stateid, pagemod_limit);
 }
 
-static int nfs_do_return_delegation(struct inode *inode, struct nfs_delegation *delegation, int issync)
+static int nfs_do_return_delegation(struct inode *inode, struct nfs_delegation *delegation, bool issync)
 {
 	int res = 0;
 
@@ -221,6 +221,7 @@ static int nfs_do_return_delegation(struct inode *inode, struct nfs_delegation *
 		res = nfs4_proc_delegreturn(inode,
 				delegation->cred,
 				&delegation->stateid,
+				delegation,
 				issync);
 	nfs_free_delegation(delegation);
 	return res;
