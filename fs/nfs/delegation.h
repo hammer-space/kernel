@@ -77,9 +77,19 @@ int nfs4_inode_make_writeable(struct inode *inode);
 
 #endif
 
+static inline int nfs_have_read_or_write_delegation(struct inode *inode)
+{
+	return NFS_PROTO(inode)->have_delegation(inode, FMODE_READ);
+}
+
+static inline int nfs_have_write_delegation(struct inode *inode)
+{
+	return NFS_PROTO(inode)->have_delegation(inode, FMODE_WRITE);
+}
+
 static inline int nfs_have_delegated_attributes(struct inode *inode)
 {
-	return NFS_PROTO(inode)->have_delegation(inode, FMODE_READ) &&
+	return nfs_have_read_or_write_delegation(inode) &&
 		!(NFS_I(inode)->cache_validity & NFS_INO_REVAL_FORCED);
 }
 

@@ -3447,7 +3447,7 @@ static void nfs4_close_prepare(struct rpc_task *task, void *data)
 
 	if (calldata->arg.fmode == 0 || calldata->arg.fmode == FMODE_READ) {
 		/* Close-to-open cache consistency revalidation */
-		if (!nfs4_have_delegation(inode, FMODE_READ))
+		if (!nfs_have_read_or_write_delegation(inode))
 			calldata->arg.bitmask = NFS_SERVER(inode)->cache_consistency_bitmask;
 		else
 			calldata->arg.bitmask = NULL;
@@ -5145,7 +5145,7 @@ bool nfs4_write_need_cache_consistency_data(struct nfs_pgio_header *hdr)
 	/* Otherwise, request attributes if and only if we don't hold
 	 * a delegation
 	 */
-	return nfs4_have_delegation(hdr->inode, FMODE_READ) == 0;
+	return !nfs_have_read_or_write_delegation(hdr->inode);
 }
 
 static void nfs4_proc_write_setup(struct nfs_pgio_header *hdr,

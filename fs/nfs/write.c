@@ -758,8 +758,7 @@ static void nfs_inode_add_request(struct inode *inode, struct nfs_page *req)
 	 * with invalidate/truncate.
 	 */
 	spin_lock(&mapping->private_lock);
-	if (!nfs_have_writebacks(inode) &&
-	    NFS_PROTO(inode)->have_delegation(inode, FMODE_WRITE))
+	if (!nfs_have_writebacks(inode) && nfs_have_write_delegation(inode))
 		inode_inc_iversion_raw(inode);
 	if (likely(!PageSwapCache(req->wb_page))) {
 		set_bit(PG_MAPPED, &req->wb_flags);
@@ -1317,7 +1316,7 @@ static int nfs_can_extend_write(struct file *file, struct page *page, struct ino
 		return 0;
 	if (!nfs_write_pageuptodate(page, inode))
 		return 0;
-	if (NFS_PROTO(inode)->have_delegation(inode, FMODE_WRITE))
+	if (nfs_have_write_delegation(inode))
 		return 1;
 	if (!flctx || (list_empty_careful(&flctx->flc_flock) &&
 		       list_empty_careful(&flctx->flc_posix)))
