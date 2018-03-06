@@ -27,6 +27,7 @@
 #include "fscache.h"
 #include "pnfs.h"
 #include "nfstrace.h"
+#include "delegation.h"
 
 #define NFSDBG_FACILITY		NFSDBG_PAGECACHE
 
@@ -370,6 +371,7 @@ int nfs_readpage(struct file *file, struct page *page)
 		goto out;
 
 	nfs_pageio_complete_read(&desc.pgio);
+	nfs_update_delegated_atime(inode);
 	ret = desc.pgio.pg_error < 0 ? desc.pgio.pg_error : 0;
 	if (!ret) {
 		ret = wait_on_page_locked_killable(page);
@@ -421,6 +423,7 @@ void nfs_readahead(struct readahead_control *ractl)
 	}
 
 	nfs_pageio_complete_read(&desc.pgio);
+	nfs_update_delegated_atime(inode);
 
 	put_nfs_open_context(desc.ctx);
 out:
