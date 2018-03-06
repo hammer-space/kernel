@@ -1648,6 +1648,9 @@ int nfs_instantiate(struct dentry *dentry, struct nfs_fh *fhandle,
 		goto out_error;
 	d_add(dentry, inode);
 out:
+	/* Case insensitive server? Revalidate negative dentries */
+	if (nfs_server_capable(dir, NFS_CAP_CASE_INSENSITIVE))
+		nfs_mark_for_revalidate(dir);
 	dput(parent);
 	return 0;
 out_error:
@@ -1949,6 +1952,9 @@ nfs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *dentry)
 	if (error == 0) {
 		ihold(inode);
 		d_add(dentry, inode);
+		/* Case insensitive server? Revalidate negative dentries */
+		if (nfs_server_capable(dir, NFS_CAP_CASE_INSENSITIVE))
+			nfs_mark_for_revalidate(dir);
 	}
 	trace_nfs_link_exit(inode, dir, dentry, error);
 	return error;
