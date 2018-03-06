@@ -27,6 +27,7 @@
 #include "fscache.h"
 #include "pnfs.h"
 #include "nfstrace.h"
+#include "delegation.h"
 
 #define NFSDBG_FACILITY		NFSDBG_PAGECACHE
 
@@ -380,6 +381,7 @@ int nfs_readpage(struct file *file, struct page *page)
 		goto out;
 
 	nfs_pageio_complete_read(&desc.pgio);
+	nfs_update_delegated_atime(inode);
 	ret = desc.pgio.pg_error < 0 ? desc.pgio.pg_error : 0;
 out_wait:
 	if (!ret) {
@@ -433,6 +435,7 @@ int nfs_readpages(struct file *file, struct address_space *mapping,
 	ret = read_cache_pages(mapping, pages, readpage_async_filler, &desc);
 
 	nfs_pageio_complete_read(&desc.pgio);
+	nfs_update_delegated_atime(inode);
 
 read_complete:
 	put_nfs_open_context(desc.ctx);
