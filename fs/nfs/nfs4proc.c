@@ -2723,7 +2723,7 @@ static int nfs41_check_open_stateid(struct nfs4_state *state)
 
 	if (test_bit(NFS_OPEN_STATE, &state->flags) == 0) {
 		if (test_bit(NFS_DELEGATED_STATE, &state->flags) == 0)  {
-			if (nfs4_have_delegation(state->inode, state->state))
+			if (nfs4_have_delegation(state->inode, state->state, 0))
 				return NFS_OK;
 			return -NFS4ERR_OPENMODE;
 		}
