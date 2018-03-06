@@ -65,6 +65,9 @@ nfs4_do_check_delegation(struct inode *inode, fmode_t type, int flags, bool mark
 		if (mark)
 			nfs_mark_delegation_referenced(delegation);
 		ret = 1;
+		if ((flags & NFS_DELEGATION_FLAG_TIME) &&
+		    !test_bit(NFS_DELEGATION_DELEGTIME, &delegation->flags))
+			ret = 0;
 	}
 	rcu_read_unlock();
 	return ret;

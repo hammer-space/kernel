@@ -26,6 +26,7 @@
 #include "fscache.h"
 #include "pnfs.h"
 #include "nfstrace.h"
+#include "delegation.h"
 
 #define NFSDBG_FACILITY		NFSDBG_PAGECACHE
 
@@ -133,6 +134,7 @@ int nfs_readpage_async(struct nfs_open_context *ctx, struct inode *inode,
 		nfs_readpage_release(new);
 	}
 	nfs_pageio_complete(&pgio);
+	nfs_update_delegated_atime(inode);
 
 	/* It doesn't make sense to do mirrored reads! */
 	WARN_ON_ONCE(pgio.pg_mirror_count != 1);
@@ -422,6 +424,7 @@ int nfs_readpages(struct file *filp, struct address_space *mapping,
 
 	ret = read_cache_pages(mapping, pages, readpage_async_filler, &desc);
 	nfs_pageio_complete(&pgio);
+	nfs_update_delegated_atime(inode);
 
 	/* It doesn't make sense to do mirrored reads! */
 	WARN_ON_ONCE(pgio.pg_mirror_count != 1);

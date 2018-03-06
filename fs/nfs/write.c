@@ -233,6 +233,8 @@ void nfs_grow_file(struct inode *inode, loff_t offset, unsigned int count)
 	NFS_I(inode)->cache_validity &= ~NFS_INO_INVALID_SIZE;
 	nfs_inc_stats(inode, NFSIOS_EXTENDWRITE);
 out:
+	/* Atomically update timestamps if they are delegated to us. */
+	nfs_update_delegated_mtime_locked(inode);
 	spin_unlock(&inode->i_lock);
 }
 

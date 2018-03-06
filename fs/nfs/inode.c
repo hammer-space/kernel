@@ -273,6 +273,8 @@ EXPORT_SYMBOL_GPL(nfs_zap_acl_cache);
 
 void nfs_invalidate_atime(struct inode *inode)
 {
+	if (nfs_have_delegated_atime(inode))
+		return;
 	spin_lock(&inode->i_lock);
 	nfs_set_cache_invalid(inode, NFS_INO_INVALID_ATIME);
 	spin_unlock(&inode->i_lock);
@@ -608,6 +610,22 @@ out_no_inode:
 }
 EXPORT_SYMBOL_GPL(nfs_fhget);
 
+void
+nfs_update_delegated_atime(struct inode *inode)
+{
+	spin_lock(&inode->i_lock);
+	if (nfs_have_delegated_atime(inode))
+		inode->i_atime = current_time(inode);
+	spin_unlock(&inode->i_lock);
+}
+
+void
+nfs_update_delegated_mtime_locked(struct inode *inode)
+{
+	if (nfs_have_delegated_mtime(inode))
+		inode->i_mtime = inode->i_ctime = current_time(inode);
+}
+
 #define NFS_VALID_ATTRS (ATTR_MODE|ATTR_UID|ATTR_GID|ATTR_SIZE|ATTR_ATIME|ATTR_ATIME_SET|ATTR_MTIME|ATTR_MTIME_SET|ATTR_FILE|ATTR_OPEN)
 
 int
@@ -687,6 +705,7 @@ static int nfs_vmtruncate(struct inode * inode, loff_t offset)
 
 	spin_unlock(&inode->i_lock);
 	truncate_pagecache(inode, offset);
+	nfs_update_delegated_mtime_locked(inode);
 	spin_lock(&inode->i_lock);
 out:
 	return err;
@@ -821,7 +840,10 @@ int nfs_getattr(const struct path *path, struct kstat *stat,
 	/* Flush out writes to the server in order to update c/mtime.  */
 	if ((request_mask & (STATX_CTIME|STATX_MTIME)) &&
 			S_ISREG(inode->i_mode)) {
-		err = filemap_write_and_wait(inode->i_mapping);
+		if (nfs_have_delegated_mtime(inode))
+			err = filemap_fdatawrite(inode->i_mapping);
+		else
+			err = filemap_write_and_wait(inode->i_mapping);
 		if (err)
 			goto out;
 	}
@@ -1638,6 +1660,27 @@ static int nfs_refresh_inode_locked(struct inode *inode, struct nfs_fattr *fattr
 	int ret;
 
 	trace_nfs_refresh_inode_enter(inode);
+
+	if (nfs_have_delegated_mtime(inode)) {
+		if (!(fattr->valid & NFS_ATTR_FATTR_CTIME) ||
+		    timespec_equal(&fattr->ctime, &fattr->mtime) ||
+		    timespec_compare(&fattr->ctime, &inode->i_ctime) < 0) {
+			fattr->ctime = inode->i_ctime;
+			fattr->change_attr = inode_peek_iversion_raw(inode);
+			fattr->valid &= ~(NFS_ATTR_FATTR_PRECHANGE|
+					NFS_ATTR_FATTR_PRECTIME);
+			fattr->valid |= NFS_ATTR_FATTR_CHANGE|
+				NFS_ATTR_FATTR_CTIME;
+		}
+		fattr->atime = inode->i_atime;
+		fattr->mtime = inode->i_mtime;
+		fattr->valid &= ~NFS_ATTR_FATTR_PREMTIME;
+		fattr->valid |= NFS_ATTR_FATTR_ATIME|
+			NFS_ATTR_FATTR_MTIME;
+	} else if (nfs_have_delegated_atime(inode)) {
+		fattr->valid |= NFS_ATTR_FATTR_ATIME;
+		fattr->atime = inode->i_atime;
+	}
 
 	if (nfs_inode_attrs_need_update(inode, fattr))
 		ret = nfs_update_inode(inode, fattr);
