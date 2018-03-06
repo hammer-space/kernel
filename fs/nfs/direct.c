@@ -949,6 +949,7 @@ static ssize_t nfs_direct_write_schedule_iovec(struct nfs_direct_req *dreq,
 		return result < 0 ? result : -EIO;
 	}
 
+	nfs_grow_file(inode, dreq->io_start, requested_bytes);
 	if (put_dreq(dreq))
 		nfs_direct_write_complete(dreq);
 	return requested_bytes;

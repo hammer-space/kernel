@@ -220,18 +220,13 @@ static struct nfs_page *nfs_page_find_head_request(struct page *page)
 }
 
 /* Adjust the file length if we're writing beyond the end */
-static void nfs_grow_file(struct page *page, unsigned int offset, unsigned int count)
+void nfs_grow_file(struct inode *inode, loff_t offset, unsigned int count)
 {
-	struct inode *inode = page_file_mapping(page)->host;
-	loff_t end, i_size;
-	pgoff_t end_index;
+	loff_t end = offset + count;
+	loff_t i_size;
 
 	spin_lock(&inode->i_lock);
 	i_size = i_size_read(inode);
-	end_index = (i_size - 1) >> PAGE_SHIFT;
-	if (i_size > 0 && page_index(page) < end_index)
-		goto out;
-	end = page_file_offset(page) + ((loff_t)offset+count);
 	if (i_size >= end)
 		goto out;
 	i_size_write(inode, end);
@@ -1179,13 +1174,14 @@ out:
 static int nfs_writepage_setup(struct nfs_open_context *ctx, struct page *page,
 		unsigned int offset, unsigned int count)
 {
+	struct inode *inode = page_file_mapping(page)->host;
 	struct nfs_page	*req;
 
 	req = nfs_setup_write_request(ctx, page, offset, count);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	/* Update file length */
-	nfs_grow_file(page, offset, count);
+	nfs_grow_file(inode, req_offset(req), req->wb_bytes);
 	nfs_mark_uptodate(req);
 	nfs_mark_request_dirty(req);
 	nfs_unlock_and_release_request(req);
