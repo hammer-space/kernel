@@ -511,6 +511,7 @@ nfs_sillyrename(struct inode *dir, struct dentry *dentry)
 	switch (error) {
 	case 0:
 		/* The rename succeeded */
+		nfs_d_revalidate_case_insensitive(dir);
 		nfs_set_verifier(dentry, nfs_save_change_attribute(dir));
 		d_move(dentry, sdentry);
 		break;
