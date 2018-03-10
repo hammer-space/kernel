@@ -2949,6 +2949,7 @@ static int _nfs4_open_and_get_state(struct nfs4_opendata *opendata,
 			dput(ctx->dentry);
 			ctx->dentry = dentry = alias;
 		}
+		nfs_d_revalidate_case_insensitive(d_inode(opendata->dir));
 		nfs_set_verifier(dentry,
 				nfs_save_change_attribute(d_inode(opendata->dir)));
 	}

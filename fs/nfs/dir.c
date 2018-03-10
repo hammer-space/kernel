@@ -1435,6 +1435,14 @@ out:
 }
 EXPORT_SYMBOL_GPL(nfs_lookup);
 
+void nfs_d_revalidate_case_insensitive(struct inode *dir)
+{
+	/* Case insensitive server? Revalidate negative dentries */
+	if (nfs_server_capable(dir, NFS_CAP_CASE_INSENSITIVE))
+		nfs_force_lookup_revalidate(dir);
+}
+EXPORT_SYMBOL_GPL(nfs_d_revalidate_case_insensitive);
+
 #if IS_ENABLED(CONFIG_NFS_V4)
 static int nfs4_lookup_revalidate(struct dentry *, unsigned int);
 
@@ -1686,6 +1694,7 @@ int nfs_instantiate(struct dentry *dentry, struct nfs_fh *fhandle,
 		if (error)
 			goto out_error;
 	}
+	nfs_d_revalidate_case_insensitive(dir);
 	nfs_set_verifier(dentry, nfs_save_change_attribute(dir));
 	if (!(fattr->valid & NFS_ATTR_FATTR)) {
 		struct nfs_server *server = NFS_SB(dentry->d_sb);
@@ -1702,9 +1711,6 @@ int nfs_instantiate(struct dentry *dentry, struct nfs_fh *fhandle,
 	}
 	dput(d);
 out:
-	/* Case insensitive server? Revalidate negative dentries */
-	if (nfs_server_capable(dir, NFS_CAP_CASE_INSENSITIVE))
-		nfs_mark_for_revalidate(dir);
 	dput(parent);
 	return 0;
 out_error:
@@ -2003,9 +2009,8 @@ nfs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *dentry)
 	if (error == 0) {
 		ihold(inode);
 		d_add(dentry, inode);
-		/* Case insensitive server? Revalidate negative dentries */
-		if (nfs_server_capable(dir, NFS_CAP_CASE_INSENSITIVE))
-			nfs_mark_for_revalidate(dir);
+		nfs_d_revalidate_case_insensitive(dir);
+		nfs_set_verifier(dentry, nfs_save_change_attribute(dir));
 	}
 	trace_nfs_link_exit(inode, dir, dentry, error);
 	return error;
@@ -2128,6 +2133,7 @@ out:
 		 * should mark the directories for revalidation.
 		 */
 		d_move(old_dentry, new_dentry);
+		nfs_d_revalidate_case_insensitive(new_dir);
 		nfs_set_verifier(old_dentry,
 					nfs_save_change_attribute(new_dir));
 	} else if (error == -ENOENT)
