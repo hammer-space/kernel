@@ -3704,7 +3704,7 @@ static int _nfs4_server_capabilities(struct nfs_server *server, struct nfs_fh *f
 		if (!(res.attr_bitmask[2] & FATTR4_WORD2_SECURITY_LABEL))
 			server->fattr_valid &= ~NFS_ATTR_FATTR_V4_SECURITY_LABEL;
 #endif
-		if (!(res.attr_bitmask[2] & FATTR4_WORD2_OFFLINE))
+		if (res.attr_bitmask[2] & FATTR4_WORD2_OFFLINE)
 			server->fattr_valid |= NFS_ATTR_FATTR_OFFLINE;
 		memcpy(server->attr_bitmask_nl, res.attr_bitmask,
 				sizeof(server->attr_bitmask));
