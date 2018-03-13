@@ -529,23 +529,23 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 		if (fattr->valid & NFS_ATTR_FATTR_TIME_CREATE)
 			nfsi->timecreate = fattr->time_create;
 		else if (fattr_supported & NFS_ATTR_FATTR_TIME_CREATE)
-			nfs_set_cache_invalid(inode, NFS_INO_INVALID_ATTR);
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_OTHER);
 		if (fattr->valid & NFS_ATTR_FATTR_HIDDEN)
 			nfsi->hidden = (fattr->hsa_flags & NFS_HSA_HIDDEN) != 0;
 		else if (fattr_supported & NFS_ATTR_FATTR_HIDDEN)
-			nfs_set_cache_invalid(inode, NFS_INO_INVALID_ATTR);
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_OTHER);
 		if (fattr->valid & NFS_ATTR_FATTR_SYSTEM)
 			nfsi->system = (fattr->hsa_flags & NFS_HSA_SYSTEM) != 0;
 		else if (fattr_supported & NFS_ATTR_FATTR_SYSTEM)
-			nfs_set_cache_invalid(inode, NFS_INO_INVALID_ATTR);
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_OTHER);
 		if (fattr->valid & NFS_ATTR_FATTR_ARCHIVE)
 			nfsi->archive = (fattr->hsa_flags & NFS_HSA_ARCHIVE) !=0;
 		else if (fattr_supported & NFS_ATTR_FATTR_ARCHIVE)
-			nfs_set_cache_invalid(inode, NFS_INO_INVALID_ATTR);
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_OTHER);
 		if (fattr->valid & NFS_ATTR_FATTR_TIME_BACKUP)
 			nfsi->timebackup = fattr->time_backup;
 		else if (fattr_supported & NFS_ATTR_FATTR_TIME_BACKUP)
-			nfs_set_cache_invalid(inode, NFS_INO_INVALID_ATTR);
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_OTHER);
 		if (fattr->valid & NFS_ATTR_FATTR_CHANGE)
 			inode_set_iversion_raw(inode, fattr->change_attr);
 		else
@@ -577,7 +577,7 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 		if (fattr->valid & NFS_ATTR_FATTR_OFFLINE)
 			nfsi->offline = (fattr->hsa_flags & NFS_HSA_OFFLINE) != 0;
 		else if (fattr_supported & NFS_ATTR_FATTR_OFFLINE)
-			nfs_set_cache_invalid(inode, NFS_INO_INVALID_ATTR);
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_OTHER);
 
 		if (nfsi->cache_validity != 0)
 			nfsi->cache_validity |= NFS_INO_REVAL_FORCED;
@@ -1981,7 +1981,7 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 		memcpy(&nfsi->timecreate, &fattr->time_create, sizeof(nfsi->timecreate));
 	} else if (fattr_supported & NFS_ATTR_FATTR_TIME_CREATE) {
 		nfsi->cache_validity |= save_cache_validity &
-				(NFS_INO_INVALID_ATTR
+				(NFS_INO_INVALID_OTHER
 				| NFS_INO_REVAL_FORCED);
 		cache_revalidated = false;
 	}
@@ -1990,7 +1990,7 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 		nfsi->hidden = (fattr->hsa_flags & NFS_HSA_HIDDEN) != 0;
 	} else if (fattr_supported & NFS_ATTR_FATTR_HIDDEN) {
 		nfsi->cache_validity |= save_cache_validity &
-				(NFS_INO_INVALID_ATTR
+				(NFS_INO_INVALID_OTHER
 				| NFS_INO_REVAL_FORCED);
 		cache_revalidated = false;
 	}
@@ -1999,7 +1999,7 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 		nfsi->system = (fattr->hsa_flags & NFS_HSA_SYSTEM) != 0;
 	} else if (fattr_supported & NFS_ATTR_FATTR_SYSTEM) {
 		nfsi->cache_validity |= save_cache_validity &
-				(NFS_INO_INVALID_ATTR
+				(NFS_INO_INVALID_OTHER
 				| NFS_INO_REVAL_FORCED);
 		cache_revalidated = false;
 	}
@@ -2008,7 +2008,7 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 		nfsi->archive = (fattr->hsa_flags & NFS_HSA_ARCHIVE) != 0;
 	} else if (fattr_supported & NFS_ATTR_FATTR_ARCHIVE) {
 		nfsi->cache_validity |= save_cache_validity &
-				(NFS_INO_INVALID_ATTR
+				(NFS_INO_INVALID_OTHER
 				| NFS_INO_REVAL_FORCED);
 		cache_revalidated = false;
 	}
@@ -2017,7 +2017,7 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 		memcpy(&nfsi->timebackup, &fattr->time_backup, sizeof(nfsi->timebackup));
 	} else if (fattr_supported & NFS_ATTR_FATTR_TIME_BACKUP) {
 		nfsi->cache_validity |= save_cache_validity &
-				(NFS_INO_INVALID_ATTR
+				(NFS_INO_INVALID_OTHER
 				| NFS_INO_REVAL_FORCED);
 		cache_revalidated = false;
 	}
@@ -2132,7 +2132,7 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 		nfsi->offline = (fattr->hsa_flags & NFS_HSA_OFFLINE) != 0;
 	} else if (fattr_supported & NFS_ATTR_FATTR_OFFLINE) {
 		nfsi->cache_validity |= save_cache_validity &
-				(NFS_INO_INVALID_ATTR
+				(NFS_INO_INVALID_OTHER
 				| NFS_INO_REVAL_FORCED);
 		cache_revalidated = false;
 	}

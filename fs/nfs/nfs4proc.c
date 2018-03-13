@@ -1113,10 +1113,11 @@ update_changeattr_locked(struct inode *dir, struct nfs4_change_info *cinfo,
 {
 	struct nfs_inode *nfsi = NFS_I(dir);
 
-	nfsi->cache_validity |= NFS_INO_INVALID_CTIME
-		| NFS_INO_INVALID_MTIME
-		| NFS_INO_INVALID_DATA
+	nfsi->cache_validity |= NFS_INO_INVALID_DATA
 		| cache_validity;
+	if (!nfs_have_delegated_mtime(dir))
+		nfsi->cache_validity |= NFS_INO_INVALID_CTIME
+			| NFS_INO_INVALID_MTIME;
 	if (cinfo->atomic && cinfo->before == inode_peek_iversion_raw(dir)) {
 		nfsi->cache_validity &= ~NFS_INO_REVAL_PAGECACHE;
 		nfsi->attrtimeo_timestamp = jiffies;
