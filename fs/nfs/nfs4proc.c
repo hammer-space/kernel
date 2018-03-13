@@ -1066,7 +1066,10 @@ static void update_changeattr(struct inode *dir, struct nfs4_change_info *cinfo,
 	struct nfs_inode *nfsi = NFS_I(dir);
 
 	spin_lock(&dir->i_lock);
-	nfsi->cache_validity |= NFS_INO_INVALID_ATTR|NFS_INO_INVALID_DATA;
+	nfsi->cache_validity |= NFS_INO_INVALID_DATA;
+	if (!nfs_have_delegated_mtime(dir))
+		nfsi->cache_validity |= NFS_INO_INVALID_CTIME
+			| NFS_INO_INVALID_MTIME;
 	if (cinfo->atomic && cinfo->before == inode_peek_iversion_raw(dir)) {
 		nfsi->cache_validity &= ~NFS_INO_REVAL_PAGECACHE;
 		nfsi->attrtimeo_timestamp = jiffies;
@@ -5447,7 +5450,8 @@ static int __nfs4_proc_set_acl(struct inode *inode, struct richacl *acl)
 	 * so mark the attribute cache invalid.
 	 */
 	spin_lock(&inode->i_lock);
-	NFS_I(inode)->cache_validity |= NFS_INO_INVALID_ATTR;
+	NFS_I(inode)->cache_validity |= NFS_INO_INVALID_CHANGE
+		| NFS_INO_INVALID_CTIME;
 	spin_unlock(&inode->i_lock);
 	nfs_access_zap_cache(inode);
 	nfs_zap_acl_cache(inode);
