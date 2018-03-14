@@ -151,10 +151,34 @@ static u64 nfs_fetch_iversion(struct inode *inode)
 	return inode_peek_iversion_raw(inode);
 }
 
+static int nfs_exp_getattr(struct path *path, struct kstat *stat, bool force)
+{
+	const unsigned long check_valid =
+		NFS_INO_INVALID_CHANGE | NFS_INO_INVALID_ATIME |
+		NFS_INO_INVALID_CTIME | NFS_INO_INVALID_MTIME |
+		NFS_INO_INVALID_SIZE | /* NFS_INO_INVALID_BLOCKS | */
+		NFS_INO_INVALID_OTHER | NFS_INO_INVALID_NLINK;
+	struct inode *inode = d_inode(path->dentry);
+	int flags = force ? AT_STATX_SYNC_AS_STAT : AT_STATX_DONT_SYNC;
+	int ret, ret2 = 0;
+
+	if (!force && nfs_check_cache_invalid(inode, check_valid))
+		ret2 = -EAGAIN;
+	ret = vfs_getattr(path, stat, STATX_BASIC_STATS & ~STATX_BLOCKS, flags);
+	if (ret < 0)
+		return ret;
+	stat->blocks = nfs_calc_block_size(stat->size);
+	if (S_ISDIR(inode->i_mode))
+		stat->blksize = NFS_SERVER(inode)->dtsize;
+	stat->result_mask |= STATX_BLOCKS;
+	return ret2;
+}
+
 const struct export_operations nfs_export_ops = {
 	.encode_fh = nfs_encode_fh,
 	.fh_to_dentry = nfs_fh_to_dentry,
 	.get_parent = nfs_get_parent,
+	.getattr = nfs_exp_getattr,
 	.fetch_iversion = nfs_fetch_iversion,
 	.flags = EXPORT_OP_NOWCC|EXPORT_OP_NOSUBTREECHK|
 		EXPORT_OP_CLOSE_BEFORE_UNLINK|EXPORT_OP_REMOTE_FS|

@@ -10,6 +10,8 @@ struct inode;
 struct iomap;
 struct super_block;
 struct vfsmount;
+struct path;
+struct kstat;
 
 /* limit the handle size to NFSv4 handle size now */
 #define MAX_HANDLE_SZ 128
@@ -224,6 +226,7 @@ struct export_operations {
 #define EXPORT_OP_SYNC_LOCKS		(0x20) /* Filesystem can't do
 						  asychronous blocking locks */
 	unsigned long	flags;
+	int (*getattr)(struct path *, struct kstat *, bool);
 };
 
 extern int exportfs_encode_inode_fh(struct inode *inode, struct fid *fid,
