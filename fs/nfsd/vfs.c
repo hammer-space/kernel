@@ -2435,3 +2435,17 @@ nfsd_permission(struct svc_rqst *rqstp, struct svc_export *exp,
 
 	return err? nfserrno(err) : 0;
 }
+
+
+__be32
+nfsd_getattr(struct path *p, struct kstat *stat, bool force)
+{
+	const struct export_operations *ops = p->dentry->d_sb->s_export_op;
+	int err;
+
+	if (ops->getattr)
+		err = ops->getattr(p, stat, force);
+	else
+		err = vfs_getattr(p, stat, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
+	return err ? nfserrno(err) : 0;
+}
