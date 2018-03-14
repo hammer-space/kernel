@@ -140,6 +140,8 @@ int		nfsd_open_local_fh(struct rpc_clnt *rpc_clnt,
 				   const fmode_t fmode,
 				   struct file **pfilp);
 
+__be32		nfsd_getattr(struct path *p, struct kstat *, bool);
+
 static inline int fh_want_write(struct svc_fh *fh)
 {
 	int ret;
@@ -164,8 +166,7 @@ static inline __be32 fh_getattr(const struct svc_fh *fh, struct kstat *stat)
 {
 	struct path p = {.mnt = fh->fh_export->ex_path.mnt,
 			 .dentry = fh->fh_dentry};
-	return nfserrno(vfs_getattr(&p, stat, STATX_BASIC_STATS,
-				    AT_STATX_SYNC_AS_STAT));
+	return nfsd_getattr(&p, stat, true);
 }
 
 static inline int nfsd_create_is_exclusive(int createmode)
