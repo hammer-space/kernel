@@ -207,14 +207,18 @@ encode_saved_post_attr(struct svc_rqst *rqstp, __be32 *p, struct svc_fh *fhp)
  */
 static __be32 *
 __encode_post_op_attr(struct svc_rqst *rqstp, __be32 *p, struct svc_fh *fhp,
-		bool getattr)
+		bool force)
 {
 	struct dentry *dentry = fhp->fh_dentry;
-	if (getattr && dentry && d_really_is_positive(dentry)) {
+	if (dentry && d_really_is_positive(dentry)) {
 	        __be32 err;
 		struct kstat stat;
+		struct path path = {
+			.mnt = fhp->fh_export->ex_path.mnt,
+			.dentry = dentry,
+		};
 
-		err = fh_getattr(fhp, &stat);
+		err = nfsd_getattr(&path, &stat, force);
 		if (!err) {
 			*p++ = xdr_one;		/* attributes follow */
 			lease_get_mtime(d_inode(dentry), &stat.mtime);

@@ -10,6 +10,7 @@
 #include <linux/nfs_fs.h>
 
 #include "internal.h"
+#include "delegation.h"
 #include "nfstrace.h"
 
 #define NFSDBG_FACILITY		NFSDBG_VFS
@@ -171,9 +172,38 @@ out:
 	return parent;
 }
 
+static int
+nfs_exp_getattr(struct path *path, struct kstat *stat, bool force)
+{
+	struct inode *inode = d_inode(path->dentry);
+
+	if (nfs_have_delegated_mtime(inode) ||
+	    nfs_have_delegated_atime(inode))
+		goto out_fillattr;
+	if (!nfs_need_revalidate_inode(inode)) {
+		if (!S_ISREG(inode->i_mode))
+			goto out_fillattr;
+		if (!(mapping_tagged(inode->i_mapping, PAGECACHE_TAG_DIRTY) ||
+		    mapping_tagged(inode->i_mapping, PAGECACHE_TAG_WRITEBACK)))
+			goto out_fillattr;
+	}
+
+	if (!force)
+		return -EAGAIN;
+	return vfs_getattr(path, stat, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
+
+out_fillattr:
+	generic_fillattr(inode, stat);
+	stat->ino = nfs_compat_user_ino64(NFS_FILEID(inode));
+	if (S_ISDIR(inode->i_mode))
+		stat->blksize = NFS_SERVER(inode)->dtsize;
+	return 0;
+}
+
 const struct export_operations nfs_export_ops = {
 	.encode_fh = nfs_encode_fh,
 	.fh_to_dentry = nfs_fh_to_dentry,
 	.get_parent = nfs_get_parent,
+	.getattr = nfs_exp_getattr,
 	.flags = EXPORT_OP_NOWCC|EXPORT_OP_NOSUBTREECHK|EXPORT_OP_CLOSE_BEFORE_UNLINK,
 };
