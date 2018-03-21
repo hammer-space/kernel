@@ -1184,6 +1184,8 @@ nfs4_map_atomic_open_share(struct nfs_server *server,
 		res |= NFS4_SHARE_WANT_NO_DELEG;
 		goto out;
 	}
+	if (openflags & O_CREAT)
+		res |= NFS4_SHARE_WANT_WRITE_DELEG;
 	/* res |= NFS4_SHARE_WANT_NO_PREFERENCE; */
 	if (server->caps & NFS_CAP_DELEGTIME)
 		res |= NFS4_SHARE_WANT_DELEG_TIMESTAMPS;
