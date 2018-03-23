@@ -711,10 +711,10 @@ static int nfs_vmtruncate(struct inode * inode, loff_t offset)
 	if (offset == 0)
 		NFS_I(inode)->cache_validity &= ~NFS_INO_INVALID_DATA;
 	NFS_I(inode)->cache_validity &= ~NFS_INO_INVALID_SIZE;
+	nfs_update_delegated_mtime_locked(inode);
 
 	spin_unlock(&inode->i_lock);
 	truncate_pagecache(inode, offset);
-	nfs_update_delegated_mtime_locked(inode);
 	spin_lock(&inode->i_lock);
 out:
 	return err;
