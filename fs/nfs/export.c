@@ -176,8 +176,10 @@ static int
 nfs_exp_getattr(struct path *path, struct kstat *stat, bool force)
 {
 	struct inode *inode = d_inode(path->dentry);
+	bool have_delegated_mtime = nfs_have_delegated_mtime(inode);
+	int ret;
 
-	if (nfs_have_delegated_mtime(inode) ||
+	if (have_delegated_mtime ||
 	    nfs_have_delegated_atime(inode))
 		goto out_fillattr;
 	if (!nfs_need_revalidate_inode(inode)) {
@@ -190,11 +192,15 @@ nfs_exp_getattr(struct path *path, struct kstat *stat, bool force)
 
 	if (!force)
 		return -EAGAIN;
-	return vfs_getattr(path, stat, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
+	ret = vfs_getattr(path, stat, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
+	if (!ret)
+		stat->blocks = nfs_calc_block_size(stat->size);
+	return ret;
 
 out_fillattr:
 	generic_fillattr(inode, stat);
 	stat->ino = nfs_compat_user_ino64(NFS_FILEID(inode));
+	stat->blocks = nfs_calc_block_size(stat->size);
 	if (S_ISDIR(inode->i_mode))
 		stat->blksize = NFS_SERVER(inode)->dtsize;
 	return 0;
