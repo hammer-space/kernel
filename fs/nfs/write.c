@@ -229,6 +229,7 @@ void nfs_grow_file(struct inode *inode, loff_t offset, unsigned int count)
 	if (i_size >= end)
 		goto out;
 	i_size_write(inode, end);
+	NFS_I(inode)->cache_validity &= ~NFS_INO_INVALID_SIZE;
 	nfs_inc_stats(inode, NFSIOS_EXTENDWRITE);
 out:
 	/* Atomically update timestamps if they are delegated to us. */
