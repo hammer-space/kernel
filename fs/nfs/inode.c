@@ -618,16 +618,21 @@ void
 nfs_update_delegated_atime(struct inode *inode)
 {
 	spin_lock(&inode->i_lock);
-	if (nfs_have_delegated_atime(inode))
+	if (nfs_have_delegated_atime(inode)) {
 		inode->i_atime = current_time(inode);
+		NFS_I(inode)->cache_validity &= ~NFS_INO_INVALID_ATIME;
+	}
 	spin_unlock(&inode->i_lock);
 }
 
 void
 nfs_update_delegated_mtime_locked(struct inode *inode)
 {
-	if (nfs_have_delegated_mtime(inode))
+	if (nfs_have_delegated_mtime(inode)) {
 		inode->i_mtime = inode->i_ctime = current_time(inode);
+		NFS_I(inode)->cache_validity &= ~(NFS_INO_INVALID_CTIME
+				|NFS_INO_INVALID_MTIME);
+	}
 }
 
 #define NFS_VALID_ATTRS (ATTR_MODE|ATTR_UID|ATTR_GID|ATTR_SIZE|ATTR_ATIME|ATTR_ATIME_SET|ATTR_MTIME|ATTR_MTIME_SET|ATTR_FILE|ATTR_OPEN)
