@@ -667,6 +667,14 @@ nfs_update_delegated_mtime_locked(struct inode *inode)
 }
 EXPORT_SYMBOL_GPL(nfs_update_delegated_mtime);
 
+void
+nfs_update_delegated_mtime(struct inode *inode)
+{
+	spin_lock(&inode->i_lock);
+	nfs_update_delegated_mtime_locked(inode);
+	spin_unlock(&inode->i_lock);
+}
+
 #define NFS_VALID_ATTRS (ATTR_MODE|ATTR_UID|ATTR_GID|ATTR_SIZE|ATTR_ATIME|ATTR_ATIME_SET|ATTR_MTIME|ATTR_MTIME_SET|ATTR_FILE|ATTR_OPEN)
 
 int
@@ -691,6 +699,17 @@ nfs_setattr(struct dentry *dentry, struct iattr *attr)
 
 		if (attr->ia_size == i_size_read(inode))
 			attr->ia_valid &= ~ATTR_SIZE;
+	}
+
+	if (nfs_have_delegated_mtime(inode)) {
+		if (attr->ia_valid & ATTR_MTIME) {
+			nfs_update_delegated_mtime(inode);
+			attr->ia_valid &= ~ATTR_MTIME;
+		}
+		if (attr->ia_valid & ATTR_ATIME) {
+			nfs_update_delegated_atime(inode);
+			attr->ia_valid &= ~ATTR_ATIME;
+		}
 	}
 
 	/* Optimization: if the end result is no change, don't RPC */
