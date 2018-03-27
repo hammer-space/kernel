@@ -457,6 +457,7 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 		/* We can't support update_atime(), since the server will reset it */
 		inode->i_flags |= S_NOATIME|S_NOCMTIME;
 		inode->i_mode = fattr->mode;
+		nfsi->cache_validity = 0;
 		if ((fattr->valid & NFS_ATTR_FATTR_MODE) == 0
 				&& (fattr_supported & NFS_ATTR_FATTR_MODE))
 			nfs_set_cache_invalid(inode, NFS_INO_INVALID_OTHER);
@@ -575,6 +576,9 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 			nfsi->offline = (fattr->hsa_flags & NFS_HSA_OFFLINE) != 0;
 		else if (fattr_supported & NFS_ATTR_FATTR_OFFLINE)
 			nfs_set_cache_invalid(inode, NFS_INO_INVALID_ATTR);
+
+		if (nfsi->cache_validity != 0)
+			nfsi->cache_validity |= NFS_INO_REVAL_FORCED;
 
 		nfs_setsecurity(inode, fattr, label);
 
