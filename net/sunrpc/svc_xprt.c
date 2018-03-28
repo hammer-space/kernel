@@ -516,11 +516,7 @@ static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool, bool rescue)
 				break;
 			}
 
-			/* Enforce per-xprt concurrent RPC limits */
-			if (!svc_xprt_slots_in_range(xprt))
-				continue;
-
-			/* Next prefer xprts with fewer inflight RPCs */
+			/* Prefer xprts with fewer inflight RPCs */
 			inflight = atomic_read(&xprt->xpt_inflight);
 			if (inflight >= prev_inflight)
 				continue;
