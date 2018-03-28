@@ -642,6 +642,27 @@ int svc_port_is_privileged(struct sockaddr *sin)
 	}
 }
 
+static void
+svc_gc_list(struct list_head *xprt_list)
+{
+	struct svc_xprt *xprt;
+
+	list_for_each_entry(xprt, xprt_list, xpt_list) {
+		if (refcount_read(&xprt->xpt_ref.refcount) > 1 ||
+		    test_bit(XPT_BUSY, &xprt->xpt_flags))
+			continue;
+		/* First time through, just mark it OLD. Second time
+		 * through, close it. */
+		if (!test_and_set_bit(XPT_OLD, &xprt->xpt_flags))
+			continue;
+		if (test_and_set_bit(XPT_CLOSE, &xprt->xpt_flags))
+			continue;
+		dprintk("queuing xprt %p for closing\n", xprt);
+		/* a thread will dequeue and close it soon */
+		svc_xprt_enqueue(xprt);
+	}
+}
+
 /*
  * Make sure that we don't have too many active connections. If we have,
  * something must be dropped. It's not clear what will happen if we allow
@@ -668,28 +689,13 @@ static void svc_check_conn_limits(struct svc_serv *serv)
 	if (serv->sv_tmpcnt > limit) {
 		struct svc_xprt *xprt = NULL;
 		spin_lock_bh(&serv->sv_lock);
-		if (!list_empty(&serv->sv_tempsocks)) {
-			/* Try to help the admin */
-			net_notice_ratelimited("%s: too many open connections, consider increasing the %s\n",
-					       serv->sv_name, serv->sv_maxconn ?
-					       "max number of connections" :
-					       "number of threads");
-			/*
-			 * Always select the oldest connection. It's not fair,
-			 * but so is life
-			 */
-			xprt = list_entry(serv->sv_tempsocks.prev,
-					  struct svc_xprt,
-					  xpt_list);
-			set_bit(XPT_CLOSE, &xprt->xpt_flags);
-			svc_xprt_get(xprt);
-		}
+		/* Try to help the admin */
+		net_notice_ratelimited("%s: too many open connections, consider increasing the %s\n",
+				       serv->sv_name, serv->sv_maxconn ?
+				       "max number of connections" :
+				       "number of threads");
+		svc_gc_list(&serv->sv_tempsocks);
 		spin_unlock_bh(&serv->sv_lock);
-
-		if (xprt) {
-			svc_xprt_enqueue(xprt);
-			svc_xprt_put(xprt);
-		}
 	}
 }
 
@@ -1036,23 +1042,7 @@ static void svc_age_temp_xprts(struct timer_list *t)
 		return;
 	}
 
-	list_for_each_safe(le, next, &serv->sv_tempsocks) {
-		xprt = list_entry(le, struct svc_xprt, xpt_list);
-
-		/* First time through, just mark it OLD. Second time
-		 * through, close it. */
-		if (!test_and_set_bit(XPT_OLD, &xprt->xpt_flags))
-			continue;
-		if (kref_read(&xprt->xpt_ref) > 1 ||
-		    test_bit(XPT_BUSY, &xprt->xpt_flags))
-			continue;
-		list_del_init(le);
-		set_bit(XPT_CLOSE, &xprt->xpt_flags);
-		dprintk("queuing xprt %p for closing\n", xprt);
-
-		/* a thread will dequeue and close it soon */
-		svc_xprt_enqueue(xprt);
-	}
+	svc_gc_list(&serv->sv_tempsocks);
 	spin_unlock_bh(&serv->sv_lock);
 
 	mod_timer(&serv->sv_temptimer, jiffies + svc_conn_age_period * HZ);
