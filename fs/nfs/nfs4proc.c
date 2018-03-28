@@ -2795,7 +2795,7 @@ static unsigned nfs4_exclusive_attrset(struct nfs4_opendata *opendata,
 {
 	const __u32 *bitmask = opendata->o_arg.server->exclcreat_bitmask;
 	__u32 attrset[3];
-	unsigned ret = 0;
+	unsigned ret;
 	unsigned i;
 
 	for (i = 0; i < ARRAY_SIZE(attrset); i++) {
@@ -2803,6 +2803,9 @@ static unsigned nfs4_exclusive_attrset(struct nfs4_opendata *opendata,
 		if (opendata->o_arg.createmode == NFS4_CREATE_EXCLUSIVE4_1)
 			attrset[i] &= ~bitmask[i];
 	}
+
+	ret = (opendata->o_arg.createmode == NFS4_CREATE_EXCLUSIVE) ?
+		sattr->ia_valid : 0;
 
 	if ((attrset[1] & (FATTR4_WORD1_TIME_ACCESS|FATTR4_WORD1_TIME_ACCESS_SET))) {
 		if (sattr->ia_valid & ATTR_ATIME_SET)
