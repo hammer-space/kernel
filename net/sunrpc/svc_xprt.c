@@ -351,8 +351,9 @@ static bool svc_xprt_reserve_slot(struct svc_rqst *rqstp, struct svc_xprt *xprt)
 	if (!test_bit(RQ_DATA, &rqstp->rq_flags)) {
 		if (!svc_xprt_slots_in_range(xprt))
 			return false;
-		atomic_inc(&xprt->xpt_inflight);
 		set_bit(RQ_DATA, &rqstp->rq_flags);
+		atomic_inc(&xprt->xpt_inflight);
+		smp_mb__after_atomic();
 	}
 	return true;
 }
@@ -362,7 +363,7 @@ static void svc_xprt_release_slot(struct svc_rqst *rqstp)
 	struct svc_xprt	*xprt = rqstp->rq_xprt;
 	if (test_and_clear_bit(RQ_DATA, &rqstp->rq_flags)) {
 		atomic_dec(&xprt->xpt_inflight);
-		smp_wmb(); /* See smp_rmb() in svc_xprt_ready() */
+		smp_mb__after_atomic();
 		svc_xprt_enqueue(xprt);
 	}
 }
@@ -411,9 +412,9 @@ svc_dequeue_xprt_from_pool(struct svc_xprt *xprt, struct svc_pool *pool)
 	__must_hold(&pool->sp_lock)
 {
 	list_del_init(&xprt->xpt_ready);
-	if (test_bit(XPT_RESCUE, &xprt->xpt_flags)) {
+	if (test_and_clear_bit(XPT_RESCUE, &xprt->xpt_flags)) {
 		atomic_dec(&pool->sp_need_rescue);
-		clear_bit(XPT_RESCUE, &xprt->xpt_flags);
+		smp_mb__after_atomic();
 	}
 }
 
