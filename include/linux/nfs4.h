@@ -435,6 +435,7 @@ enum change_attr_type4 {
 #define FATTR4_WORD2_OFFLINE		(1UL << 19)
 #define FATTR4_WORD2_TIME_DELEG_ACCESS	(1UL << 20)
 #define FATTR4_WORD2_TIME_DELEG_MODIFY	(1UL << 21)
+#define FATTR4_WORD2_OPEN_ARGUMENTS	(1UL << 22)
 
 /* MDS threshold bitmap bits */
 #define THRESHOLD_RD                    (1UL << 0)
