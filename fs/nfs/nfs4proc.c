@@ -1877,8 +1877,11 @@ _nfs4_opendata_reclaim_to_nfs4_state(struct nfs4_opendata *data)
 				data->o_arg.claim,
 				&data->o_res.delegation);
 update:
-	update_open_stateid(state, &data->o_res.stateid, NULL,
-			    data->o_arg.fmode);
+	if (!(data->o_res.rflags & NFS4_OPEN_RESULT_NO_OPEN_STATEID))
+		update_open_stateid(state, &data->o_res.stateid, NULL,
+				data->o_arg.fmode);
+	else
+		update_open_stateid(state, NULL, NULL, data->o_arg.fmode);
 	refcount_inc(&state->count);
 
 	return state;
@@ -1945,8 +1948,11 @@ _nfs4_opendata_to_nfs4_state(struct nfs4_opendata *data)
 				data->owner->so_cred,
 				data->o_arg.claim,
 				&data->o_res.delegation);
-	update_open_stateid(state, &data->o_res.stateid, NULL,
-			data->o_arg.fmode);
+	if (!(data->o_res.rflags & NFS4_OPEN_RESULT_NO_OPEN_STATEID))
+		update_open_stateid(state, &data->o_res.stateid, NULL,
+				data->o_arg.fmode);
+	else
+		update_open_stateid(state, NULL, NULL, data->o_arg.fmode);
 out:
 	nfs_release_seqid(data->o_arg.seqid);
 	return state;
