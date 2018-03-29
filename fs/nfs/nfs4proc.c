@@ -3852,11 +3852,13 @@ static void nfs4_close_context(struct nfs_open_context *ctx, int is_sync)
 
 #define FATTR4_WORD1_NFS40_MASK (2*FATTR4_WORD1_MOUNTED_ON_FILEID - 1UL)
 #define FATTR4_WORD2_NFS41_MASK (2*FATTR4_WORD2_SUPPATTR_EXCLCREAT - 1UL)
-#define FATTR4_WORD2_NFS42_MASK (2*FATTR4_WORD2_TIME_DELEG_MODIFY - 1UL)
 
 static int _nfs4_server_capabilities(struct nfs_server *server, struct nfs_fh *fhandle)
 {
-	u32 bitmask[3] = {}, minorversion = server->nfs_client->cl_minorversion;
+	u32 minorversion = server->nfs_client->cl_minorversion;
+	u32 bitmask[3] = {
+		[0] = FATTR4_WORD0_SUPPORTED_ATTRS,
+	};
 	struct nfs4_server_caps_arg args = {
 		.fhandle = fhandle,
 		.bitmask = bitmask,
@@ -3870,15 +3872,22 @@ static int _nfs4_server_capabilities(struct nfs_server *server, struct nfs_fh *f
 	int status;
 	int i;
 
-	bitmask[0] = FATTR4_WORD0_SUPPORTED_ATTRS |
-		     FATTR4_WORD0_FH_EXPIRE_TYPE |
-		     FATTR4_WORD0_LINK_SUPPORT |
-		     FATTR4_WORD0_SYMLINK_SUPPORT |
-		     FATTR4_WORD0_ACLSUPPORT |
-		     FATTR4_WORD0_CASE_INSENSITIVE |
-		     FATTR4_WORD0_CASE_PRESERVING;
-	if (minorversion)
-		bitmask[2] = FATTR4_WORD2_SUPPATTR_EXCLCREAT;
+	status = nfs4_call_sync(server->client, server, &msg, &args.seq_args, &res.seq_res, 0);
+	if (status != 0)
+		return status;
+
+	bitmask[0] = (FATTR4_WORD0_SUPPORTED_ATTRS |
+		      FATTR4_WORD0_FH_EXPIRE_TYPE |
+		      FATTR4_WORD0_LINK_SUPPORT |
+		      FATTR4_WORD0_SYMLINK_SUPPORT |
+		      FATTR4_WORD0_ACLSUPPORT |
+		      FATTR4_WORD0_CASE_INSENSITIVE |
+		      FATTR4_WORD0_CASE_PRESERVING) & res.attr_bitmask[0];
+	bitmask[1] = 0;
+	bitmask[2] = (FATTR4_WORD2_SUPPATTR_EXCLCREAT |
+		      FATTR4_WORD2_OPEN_ARGUMENTS) & res.attr_bitmask[2];
+
+	memset(&res, 0, sizeof(res));
 
 	status = nfs4_call_sync(server->client, server, &msg, &args.seq_args, &res.seq_res, 0);
 	if (status == 0) {
@@ -3890,9 +3899,6 @@ static int _nfs4_server_capabilities(struct nfs_server *server, struct nfs_fh *f
 			break;
 		case 1:
 			res.attr_bitmask[2] &= FATTR4_WORD2_NFS41_MASK;
-			break;
-		case 2:
-			res.attr_bitmask[2] &= FATTR4_WORD2_NFS42_MASK;
 		}
 		memcpy(server->attr_bitmask, res.attr_bitmask, sizeof(server->attr_bitmask));
 		server->caps &= ~(NFS_CAP_ACLS | NFS_CAP_HARDLINKS |
