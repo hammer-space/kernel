@@ -40,6 +40,7 @@
 #include <linux/key.h>
 #include <linux/keyctl.h>
 #include <linux/key-type.h>
+#include <keys/request_key_auth-type.h>
 #include <keys/user-type.h>
 #include <linux/module.h>
 #include <trace/events/sunrpc.h>
@@ -226,7 +227,7 @@ static ssize_t sunrpc_idmap_get_key(const char *name, size_t namelen,
 
 	if (IS_ERR(rkey)) {
 		ret = PTR_ERR(rkey);
-		dprintk("RPC: %s err 1 %d\n", __func__, ret);
+		dprintk("RPC: %s err 1 %zd\n", __func__, ret);
 		goto out;
 	}
 
@@ -235,14 +236,14 @@ static ssize_t sunrpc_idmap_get_key(const char *name, size_t namelen,
 
 	ret = key_validate(rkey);
 	if (ret < 0) {
-		dprintk("RPC: %s err 2 %d\n", __func__, ret);
+		dprintk("RPC: %s err 2 %zd\n", __func__, ret);
 		goto out_up;
 	}
 
 	payload = dereference_key_rcu(rkey);
 	if (IS_ERR_OR_NULL(payload)) {
 		ret = PTR_ERR(payload);
-		dprintk("RPC: %s err 3 %d\n", __func__, ret);
+		dprintk("RPC: %s err 3 %zd\n", __func__, ret);
 		goto out_up;
 	}
 
@@ -251,7 +252,7 @@ static ssize_t sunrpc_idmap_get_key(const char *name, size_t namelen,
 		memcpy(data, payload->data, ret);
 	else {
 		ret = -EINVAL;
-		dprintk("RPC: %s err 4 %d\n", __func__, ret);
+		dprintk("RPC: %s err 4 %zd\n", __func__, ret);
 	}
 
 out_up:
@@ -272,7 +273,7 @@ static ssize_t sunrpc_idmap_lookup_name(__u32 id, const char *type, char *buf,
 	dprintk("RPC: %s\n", __func__);
 	id_len = snprintf(id_str, sizeof(id_str), "%u", id);
 	ret = sunrpc_idmap_get_key(id_str, id_len, type, buf, buflen, idmap);
-	dprintk("RPC: %s ret %d\n", __func__, ret);
+	dprintk("RPC: %s ret %zd\n", __func__, ret);
 	if (ret < 0)
 		return -EINVAL;
 	return ret;
@@ -726,9 +727,9 @@ int sunrpc_idmap_uid_to_name(const struct rpc_clnt *clnt, kuid_t uid, char *buf,
 	int ret = -EINVAL;
 	__u32 id;
 
-	dprintk("RPC: %s, %lu inomap=%d\n", __func__, uid, nomap);
-
 	id = from_kuid(&init_user_ns, uid);
+	dprintk("RPC: %s, %u inomap=%d\n", __func__, id, nomap);
+
 	if (!nomap)
 		ret = sunrpc_idmap_lookup_name(id, "user", buf, buflen, idmap);
 	if (ret < 0)

@@ -44,7 +44,6 @@
 #include <linux/keyctl.h>
 #include <linux/key-type.h>
 #include <keys/user-type.h>
-#include <keys/request_key_auth-type.h>
 #include <linux/module.h>
 
 #include "internal.h"
