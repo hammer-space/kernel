@@ -687,7 +687,6 @@ static void svc_check_conn_limits(struct svc_serv *serv)
 				(svc_get_num_threads(serv, NULL)+3) * 20;
 
 	if (serv->sv_tmpcnt > limit) {
-		struct svc_xprt *xprt = NULL;
 		spin_lock_bh(&serv->sv_lock);
 		/* Try to help the admin */
 		net_notice_ratelimited("%s: too many open connections, consider increasing the %s\n",
@@ -1030,8 +1029,6 @@ out:
 static void svc_age_temp_xprts(struct timer_list *t)
 {
 	struct svc_serv *serv = from_timer(serv, t, sv_temptimer);
-	struct svc_xprt *xprt;
-	struct list_head *le, *next;
 
 	dprintk("svc_age_temp_xprts\n");
 
