@@ -3942,9 +3942,10 @@ static int _nfs4_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
 				struct nfs_fattr *fattr, struct nfs4_label *label,
 				struct inode *inode)
 {
+	__u32 bitmask[3];
 	struct nfs4_getattr_arg args = {
 		.fh = fhandle,
-		.bitmask = server->attr_bitmask,
+		.bitmask = bitmask,
 	};
 	struct nfs4_getattr_res res = {
 		.fattr = fattr,
@@ -3957,7 +3958,7 @@ static int _nfs4_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
 		.rpc_resp = &res,
 	};
 
-	args.bitmask = nfs4_bitmask(server, label);
+	nfs4_bitmap_copy_adjust(bitmask, nfs4_bitmask(server, label), inode);
 
 	nfs_fattr_init(fattr);
 	return nfs4_call_sync(server->client, server, &msg, &args.seq_args, &res.seq_res, 0);
