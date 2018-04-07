@@ -783,13 +783,15 @@ out:
 void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr,
 		struct nfs_fattr *fattr)
 {
+	bool have_delegated_mtime = nfs_have_delegated_mtime(inode);
 	/* Barrier: bump the attribute generation count. */
 	nfs_fattr_set_barrier(fattr);
 
 	spin_lock(&inode->i_lock);
 	NFS_I(inode)->attr_gencount = fattr->gencount;
 	if ((attr->ia_valid & ATTR_SIZE) != 0) {
-		nfs_set_cache_invalid(inode, NFS_INO_INVALID_MTIME);
+		if (!have_delegated_mtime)
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_MTIME);
 		nfs_inc_stats(inode, NFSIOS_SETATTRTRUNC);
 		nfs_vmtruncate(inode, attr->ia_size);
 	}
