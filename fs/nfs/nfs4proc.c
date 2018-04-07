@@ -7797,11 +7797,12 @@ static int _nfs4_set_nfs4_statx(struct inode *inode,
 
 	struct iattr sattr = {0};
 	struct nfs_server *server = NFS_SERVER(inode);
+	__u32 bitmask[3];
 	struct nfs_setattrargs arg = {
 		.fh             = NFS_FH(inode),
 		.iap            = &sattr,
 		.server		= server,
-		.bitmask	= server->attr_bitmask,
+		.bitmask	= bitmask,
 		.statx		= statx,
 	};
 	struct nfs_setattrres res = {
@@ -7815,6 +7816,7 @@ static int _nfs4_set_nfs4_statx(struct inode *inode,
 	};
 	int status;
 
+	nfs4_bitmap_copy_adjust_setattr(bitmask, server->attr_bitmask, inode);
 	/* Use the iattr structure to set atime and mtime since handling already
 	 * exists for them using the iattr struct in the encode_attrs()
 	 * (xdr encoding) routine.
