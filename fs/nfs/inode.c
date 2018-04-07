@@ -671,6 +671,7 @@ nfs_update_delegated_mtime(struct inode *inode)
 	nfs_update_delegated_mtime_locked(inode);
 	spin_unlock(&inode->i_lock);
 }
+EXPORT_SYMBOL_GPL(nfs_update_delegated_mtime);
 
 #define NFS_VALID_ATTRS (ATTR_MODE|ATTR_UID|ATTR_GID|ATTR_SIZE|ATTR_ATIME|ATTR_ATIME_SET|ATTR_MTIME|ATTR_MTIME_SET|ATTR_FILE|ATTR_OPEN)
 
