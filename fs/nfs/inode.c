@@ -617,31 +617,40 @@ EXPORT_SYMBOL_GPL(nfs_fhget);
 static void
 nfs_fattr_fixup_delegated(struct inode *inode, struct nfs_fattr *fattr)
 {
-	if (!nfs_have_delegated_attributes(inode))
+	unsigned long cache_validity = NFS_I(inode)->cache_validity;
+
+	if (!nfs_have_read_or_write_delegation(inode))
 		return;
 
-	fattr->size = i_size_read(inode);
-	fattr->valid |= NFS_ATTR_FATTR_SIZE;
+	if (!(cache_validity & NFS_INO_REVAL_FORCED))
+		cache_validity &= ~(NFS_INO_INVALID_ATIME
+				| NFS_INO_INVALID_CHANGE
+				| NFS_INO_INVALID_CTIME
+				| NFS_INO_INVALID_MTIME
+				| NFS_INO_INVALID_SIZE);
+
+	if (!(cache_validity & NFS_INO_INVALID_SIZE))
+		fattr->valid &= ~(NFS_ATTR_FATTR_PRESIZE
+				| NFS_ATTR_FATTR_SIZE);
+
+	if (!(cache_validity & NFS_INO_INVALID_CHANGE))
+		fattr->valid &= ~(NFS_ATTR_FATTR_PRECHANGE
+				| NFS_ATTR_FATTR_CHANGE);
 
 	if (nfs_have_delegated_mtime(inode)) {
-		if (!(fattr->valid & NFS_ATTR_FATTR_CTIME) ||
-		    timespec_equal(&fattr->ctime, &fattr->mtime) ||
-		    timespec_compare(&fattr->ctime, &inode->i_ctime) < 0) {
-			fattr->ctime = inode->i_ctime;
-			fattr->change_attr = inode_peek_iversion_raw(inode);
-			fattr->valid &= ~(NFS_ATTR_FATTR_PRECHANGE|
-					NFS_ATTR_FATTR_PRECTIME);
-			fattr->valid |= NFS_ATTR_FATTR_CHANGE|
-				NFS_ATTR_FATTR_CTIME;
-		}
-		fattr->atime = inode->i_atime;
-		fattr->mtime = inode->i_mtime;
-		fattr->valid &= ~NFS_ATTR_FATTR_PREMTIME;
-		fattr->valid |= NFS_ATTR_FATTR_ATIME|
-			NFS_ATTR_FATTR_MTIME;
+		if (!(cache_validity & NFS_INO_INVALID_CTIME))
+			fattr->valid &= ~(NFS_ATTR_FATTR_PRECTIME
+					| NFS_ATTR_FATTR_CTIME);
+
+		if (!(cache_validity & NFS_INO_INVALID_MTIME))
+			fattr->valid &= ~(NFS_ATTR_FATTR_PREMTIME
+					| NFS_ATTR_FATTR_MTIME);
+
+		if (!(cache_validity & NFS_INO_INVALID_ATIME))
+			fattr->valid &= ~NFS_ATTR_FATTR_ATIME;
 	} else if (nfs_have_delegated_atime(inode)) {
-		fattr->valid |= NFS_ATTR_FATTR_ATIME;
-		fattr->atime = inode->i_atime;
+		if (!(cache_validity & NFS_INO_INVALID_ATIME))
+			fattr->valid &= ~NFS_ATTR_FATTR_ATIME;
 	}
 }
 
@@ -1957,14 +1966,14 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 	 */
 	nfsi->read_cache_jiffies = fattr->time_start;
 
+	/* Fix up any delegated attributes in the struct nfs_fattr */
+	nfs_fattr_fixup_delegated(inode, fattr);
+
 	save_cache_validity = nfsi->cache_validity;
 	nfsi->cache_validity &= ~(NFS_INO_INVALID_ATTR
 			| NFS_INO_INVALID_ATIME
 			| NFS_INO_REVAL_FORCED
 			| NFS_INO_REVAL_PAGECACHE);
-
-	/* Fix up any delegated attributes in the struct nfs_fattr */
-	nfs_fattr_fixup_delegated(inode, fattr);
 
 	/* Do atomic weak cache consistency updates */
 	nfs_wcc_update_inode(inode, fattr);
