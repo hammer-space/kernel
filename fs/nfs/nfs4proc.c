@@ -303,7 +303,10 @@ static void nfs4_bitmap_copy_adjust(__u32 *dst, const __u32 *src,
 
 	cache_validity = READ_ONCE(NFS_I(inode)->cache_validity);
 	if (!(cache_validity & NFS_INO_REVAL_FORCED))
-		cache_validity &= ~(NFS_INO_INVALID_CHANGE
+		cache_validity &= ~(NFS_INO_INVALID_ATIME
+				| NFS_INO_INVALID_CHANGE
+				| NFS_INO_INVALID_CTIME
+				| NFS_INO_INVALID_MTIME
 				| NFS_INO_INVALID_SIZE);
 
 	if (!(cache_validity & NFS_INO_INVALID_SIZE))
@@ -311,12 +314,26 @@ static void nfs4_bitmap_copy_adjust(__u32 *dst, const __u32 *src,
 
 	if (!(cache_validity & NFS_INO_INVALID_CHANGE))
 		dst[0] &= ~FATTR4_WORD0_CHANGE;
+
+	if (nfs_have_delegated_mtime(inode)) {
+		if (!(cache_validity & NFS_INO_INVALID_ATIME))
+			dst[1] &= ~FATTR4_WORD1_TIME_ACCESS;
+		if (!(cache_validity & NFS_INO_INVALID_MTIME))
+			dst[1] &= ~FATTR4_WORD1_TIME_MODIFY;
+		if (!(cache_validity & NFS_INO_INVALID_CTIME))
+			dst[1] &= ~FATTR4_WORD1_TIME_METADATA;
+	} else if (nfs_have_delegated_atime(inode)) {
+		if (!(cache_validity & NFS_INO_INVALID_ATIME))
+			dst[1] &= ~FATTR4_WORD1_TIME_ACCESS;
+	}
 }
 
 static void nfs4_bitmap_copy_adjust_setattr(__u32 *dst,
 		const __u32 *src, struct inode *inode)
 {
 	nfs4_bitmap_copy_adjust(dst, src, inode);
+	/* Add back in the ctime for setattr only */
+	dst[1] |= src[1] & FATTR4_WORD1_TIME_METADATA;
 }
 
 static void nfs4_setup_readdir(u64 cookie, __be32 *verifier, struct dentry *dentry,
