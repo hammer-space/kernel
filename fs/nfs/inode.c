@@ -789,6 +789,12 @@ void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr,
 	NFS_I(inode)->attr_gencount = fattr->gencount;
 	nfs_set_cache_invalid(inode, NFS_INO_INVALID_CHANGE
 				| NFS_INO_INVALID_CTIME);
+	if ((attr->ia_valid & ATTR_SIZE) != 0) {
+		if (!have_delegated_mtime)
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_MTIME);
+		nfs_inc_stats(inode, NFSIOS_SETATTRTRUNC);
+		nfs_vmtruncate(inode, attr->ia_size);
+	}
 	if ((attr->ia_valid & (ATTR_MODE|ATTR_UID|ATTR_GID)) != 0) {
 		if ((attr->ia_valid & ATTR_MODE) != 0) {
 			int mode = attr->ia_mode & S_IALLUGO;
@@ -815,11 +821,6 @@ void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr,
 			inode->i_mtime = fattr->mtime;
 		if (fattr->valid & NFS_ATTR_FATTR_CTIME)
 			inode->i_ctime = fattr->ctime;
-	}
-	if ((attr->ia_valid & ATTR_SIZE) != 0) {
-		nfs_set_cache_invalid(inode, NFS_INO_INVALID_MTIME);
-		nfs_inc_stats(inode, NFSIOS_SETATTRTRUNC);
-		nfs_vmtruncate(inode, attr->ia_size);
 	}
 	if (fattr->valid)
 		nfs_update_inode(inode, fattr);
