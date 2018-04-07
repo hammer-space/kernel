@@ -409,6 +409,11 @@ int nfs_inode_set_delegation(struct inode *inode, const struct cred *cred,
 
 	trace_nfs4_set_delegation(inode, type);
 
+	/* If we hold writebacks and have delegated mtime then update */
+	if (deleg_type == NFS4_OPEN_DELEGATE_WRITE_ATTRS_DELEG &&
+	    nfs_have_writebacks(inode))
+		nfs_update_delegated_mtime(inode);
+
 	spin_lock(&inode->i_lock);
 	if (NFS_I(inode)->cache_validity & (NFS_INO_INVALID_ATTR|NFS_INO_INVALID_ATIME))
 		NFS_I(inode)->cache_validity |= NFS_INO_REVAL_FORCED;
