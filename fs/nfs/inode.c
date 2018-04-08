@@ -790,15 +790,12 @@ out:
 void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr,
 		struct nfs_fattr *fattr)
 {
-	bool have_delegated_atime = nfs_have_delegated_atime(inode);
 	bool have_delegated_mtime = nfs_have_delegated_mtime(inode);
 	/* Barrier: bump the attribute generation count. */
 	nfs_fattr_set_barrier(fattr);
 
 	spin_lock(&inode->i_lock);
 	NFS_I(inode)->attr_gencount = fattr->gencount;
-	nfs_set_cache_invalid(inode, NFS_INO_INVALID_CHANGE
-				| NFS_INO_INVALID_CTIME);
 	if ((attr->ia_valid & ATTR_SIZE) != 0) {
 		if (!have_delegated_mtime)
 			nfs_set_cache_invalid(inode, NFS_INO_INVALID_MTIME);
@@ -806,6 +803,7 @@ void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr,
 		nfs_vmtruncate(inode, attr->ia_size);
 	}
 	if ((attr->ia_valid & (ATTR_MODE|ATTR_UID|ATTR_GID)) != 0) {
+		NFS_I(inode)->cache_validity &= ~NFS_INO_INVALID_CTIME;
 		if ((attr->ia_valid & ATTR_MODE) != 0) {
 			int mode = attr->ia_mode & S_IALLUGO;
 			mode |= inode->i_mode & ~S_IALLUGO;
@@ -815,22 +813,45 @@ void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr,
 			inode->i_uid = attr->ia_uid;
 		if ((attr->ia_valid & ATTR_GID) != 0)
 			inode->i_gid = attr->ia_gid;
-		if (have_delegated_mtime && fattr->valid & NFS_ATTR_FATTR_CTIME)
+		if (fattr->valid & NFS_ATTR_FATTR_CTIME)
 			inode->i_ctime = fattr->ctime;
+		else
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_CHANGE
+					| NFS_INO_INVALID_CTIME);
 		nfs_set_cache_invalid(inode, NFS_INO_INVALID_ACCESS
 				| NFS_INO_INVALID_ACL);
 	}
-	if (have_delegated_atime && attr->ia_valid & ATTR_ATIME_SET) {
+	if (attr->ia_valid & (ATTR_ATIME_SET|ATTR_ATIME)) {
+		NFS_I(inode)->cache_validity &= ~(NFS_INO_INVALID_ATIME
+				| NFS_INO_INVALID_CTIME);
 		if (fattr->valid & NFS_ATTR_FATTR_ATIME)
 			inode->i_atime = fattr->atime;
+		else if (attr->ia_valid & ATTR_ATIME_SET)
+			inode->i_atime = attr->ia_atime;
+		else
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_ATIME);
+
 		if (fattr->valid & NFS_ATTR_FATTR_CTIME)
 			inode->i_ctime = fattr->ctime;
+		else
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_CHANGE
+					| NFS_INO_INVALID_CTIME);
 	}
-	if (have_delegated_mtime && attr->ia_valid & ATTR_MTIME_SET) {
+	if (attr->ia_valid & (ATTR_MTIME_SET|ATTR_MTIME)) {
+		NFS_I(inode)->cache_validity &= ~(NFS_INO_INVALID_MTIME
+				| NFS_INO_INVALID_CTIME);
 		if (fattr->valid & NFS_ATTR_FATTR_MTIME)
 			inode->i_mtime = fattr->mtime;
+		else if (attr->ia_valid & ATTR_MTIME_SET)
+			inode->i_mtime = attr->ia_mtime;
+		else
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_MTIME);
+
 		if (fattr->valid & NFS_ATTR_FATTR_CTIME)
 			inode->i_ctime = fattr->ctime;
+		else
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_CHANGE
+					| NFS_INO_INVALID_CTIME);
 	}
 	if (fattr->valid)
 		nfs_update_inode(inode, fattr);
