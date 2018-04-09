@@ -1545,6 +1545,10 @@ void nfs_writeback_update_inode(struct nfs_pgio_header *hdr)
 	struct nfs_fattr *fattr = &hdr->fattr;
 	struct inode *inode = hdr->inode;
 
+	/* We may have already updated the attributes in nfs_grow_file(). */
+	if (nfs_have_delegated_mtime(inode))
+		return;
+
 	spin_lock(&inode->i_lock);
 	nfs_writeback_check_extend(hdr, fattr);
 	nfs_post_op_update_inode_force_wcc_locked(inode, fattr);

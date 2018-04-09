@@ -1816,7 +1816,7 @@ EXPORT_SYMBOL_GPL(nfs_post_op_update_inode);
  * @inode: pointer to inode
  * @fattr: updated attributes
  *
- * After an operation that has changed the inode metadata, mark the
+ * After an operation that has changed the inode mtime and ctime, mark the
  * attribute cache as being invalid, then try to update it. Fake up
  * weak cache consistency data, if none exist.
  *
@@ -1826,6 +1826,10 @@ int nfs_post_op_update_inode_force_wcc_locked(struct inode *inode, struct nfs_fa
 {
 	int status;
 
+	if (nfs_have_delegated_mtime(inode)) {
+		nfs_update_delegated_mtime_locked(inode);
+		return 0;
+	}
 	/* Don't do a WCC update if these attributes are already stale */
 	if ((fattr->valid & NFS_ATTR_FATTR) == 0 ||
 			!nfs_inode_attrs_need_update(inode, fattr)) {
@@ -1868,7 +1872,7 @@ out_noforce:
  * @inode: pointer to inode
  * @fattr: updated attributes
  *
- * After an operation that has changed the inode metadata, mark the
+ * After an operation that has changed the inode mtime and ctime, mark the
  * attribute cache as being invalid, then try to update it. Fake up
  * weak cache consistency data, if none exist.
  *
