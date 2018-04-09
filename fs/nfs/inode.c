@@ -652,6 +652,15 @@ nfs_fattr_fixup_delegated(struct inode *inode, struct nfs_fattr *fattr)
 	}
 }
 
+static void
+nfs_update_clear_reval_forced(struct inode *inode)
+{
+	struct nfs_inode *nfsi = NFS_I(inode);
+
+	if (!(nfsi->cache_validity & (NFS_INO_INVALID_ATTR|NFS_INO_INVALID_ATIME)))
+		nfsi->cache_validity &= ~NFS_INO_REVAL_FORCED;
+}
+
 void
 nfs_update_delegated_atime(struct inode *inode)
 {
@@ -659,6 +668,7 @@ nfs_update_delegated_atime(struct inode *inode)
 	if (nfs_have_delegated_atime(inode)) {
 		inode->i_atime = current_time(inode);
 		NFS_I(inode)->cache_validity &= ~NFS_INO_INVALID_ATIME;
+		nfs_update_clear_reval_forced(inode);
 	}
 	spin_unlock(&inode->i_lock);
 }
@@ -670,6 +680,7 @@ nfs_update_delegated_mtime_locked(struct inode *inode)
 		inode->i_mtime = inode->i_ctime = current_time(inode);
 		NFS_I(inode)->cache_validity &= ~(NFS_INO_INVALID_CTIME
 				|NFS_INO_INVALID_MTIME);
+		nfs_update_clear_reval_forced(inode);
 	}
 }
 
