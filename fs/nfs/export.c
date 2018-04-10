@@ -176,11 +176,16 @@ static int
 nfs_exp_getattr(struct path *path, struct kstat *stat, bool force)
 {
 	struct inode *inode = d_inode(path->dentry);
+	unsigned long cache_validity = NFS_I(inode)->cache_validity;
 	bool have_delegated_mtime = nfs_have_delegated_mtime(inode);
+	bool cache_invalid_attr = cache_validity & (NFS_INO_INVALID_ATIME
+					| NFS_INO_INVALID_CTIME
+					| NFS_INO_INVALID_MTIME
+					| NFS_INO_INVALID_OTHER);
+	bool cache_force_reval = cache_validity & NFS_INO_REVAL_FORCED;
 	int ret;
 
-	if (have_delegated_mtime ||
-	    nfs_have_delegated_atime(inode))
+	if (have_delegated_mtime && !(cache_invalid_attr && cache_force_reval))
 		goto out_fillattr;
 	if (!nfs_need_revalidate_inode(inode)) {
 		if (!S_ISREG(inode->i_mode))
