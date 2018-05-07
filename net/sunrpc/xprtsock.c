@@ -734,9 +734,8 @@ static int xs_tcp_send_request(struct rpc_task *task)
 
 	switch (status) {
 	case -ENOTSOCK:
-		status = -ENOTCONN;
 		clear_bit(XPRT_CONNECTED, &xprt->state);
-		break;
+		return -ENOTCONN;
 	case -EAGAIN:
 		return xs_nospace(task);
 	case -ECONNRESET:
