@@ -7547,7 +7547,7 @@ static ssize_t richace_get_who(struct nfs_server *server, struct richacl *acl,
 	if (ace->e_flags & RICHACE_IDENTIFIER_GROUP) {
 		err = nfs_map_group_to_gid(server, who, who_len,
 					   &ace->e_id.gid);
-		if (err && err != -ENOENT) {
+		if (err) {
 			dprintk("%s: nfs_map_group_to_gid "
 				"failed!\n", __func__);
 			return err;
@@ -7555,7 +7555,7 @@ static ssize_t richace_get_who(struct nfs_server *server, struct richacl *acl,
 	} else {
 		err = nfs_map_name_to_uid(server, who, who_len,
 					  &ace->e_id.uid);
-		if (err && err != -ENOENT) {
+		if (err) {
 			dprintk("%s: nfs_map_name_to_gid "
 				"failed!\n", __func__);
 			return err;

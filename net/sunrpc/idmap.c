@@ -280,7 +280,6 @@ static ssize_t sunrpc_idmap_lookup_name(__u32 id, const char *type, char *buf,
 }
 
 /* Name -> ID */
-/* Returns -ENOENT for unknown names (with @id set to the nobody id). */
 static int sunrpc_idmap_lookup_id(const char *name, size_t namelen, const char *type,
 			       __u32 *id, struct idmap *idmap)
 {
@@ -295,8 +294,6 @@ static int sunrpc_idmap_lookup_id(const char *name, size_t namelen, const char *
 	} else {
 		ret = kstrtol(id_str, 10, &id_long);
 		*id = (__u32)id_long;
-		if (!ret && *id_str != '+')
-			ret = -ENOENT;
 	}
 	return ret;
 }

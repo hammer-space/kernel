@@ -5630,14 +5630,14 @@ nfs4_decode_ace_who(struct richace *ace,
 	}
 	if (ace->e_flags & RICHACE_IDENTIFIER_GROUP) {
 		error = nfs_map_group_to_gid(server, who, len, &ace->e_id.gid);
-		if (error && error != -ENOENT) {
+		if (error) {
 			dprintk("%s: nfs_map_group_to_gid failed!\n",
 					__func__);
 			return error;
 		}
 	} else {
 		error = nfs_map_name_to_uid(server, who, len, &ace->e_id.uid);
-		if (error && error != -ENOENT) {
+		if (error) {
 			dprintk("%s: nfs_map_name_to_uid failed!\n",
 					__func__);
 			return error;
