@@ -257,13 +257,6 @@ static void nfs_readpage_retry(struct rpc_task *task,
 		nfs_set_pgio_error(hdr, -EIO, argp->offset);
 		return;
 	}
-
-	/* For non rpc-based layout drivers, retry-through-MDS */
-	if (!task->tk_ops) {
-		hdr->pnfs_error = -EAGAIN;
-		return;
-	}
-
 	/* Yes, so retry the read at the end of the hdr */
 	hdr->mds_offset += resp->count;
 	argp->offset += resp->count;
