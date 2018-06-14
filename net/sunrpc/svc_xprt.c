@@ -509,7 +509,7 @@ static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool)
 
 			dprintk("svc: transport %p dequeued, inuse=%d\n",
 					found,
-					atomic_read(&found->xpt_ref.refcount));
+					refcount_read(&found->xpt_ref.refcount));
 		}
 	}
 	spin_unlock_bh(&pool->sp_lock);
