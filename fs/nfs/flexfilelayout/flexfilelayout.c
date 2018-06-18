@@ -1478,13 +1478,15 @@ static int ff_layout_write_done_cb(struct rpc_task *task,
 					   hdr->ds_clp, hdr->lseg,
 					   hdr->pgio_mirror_idx);
 
+	clear_bit(NFS_IOHDR_RESEND_PNFS, &hdr->flags);
+	clear_bit(NFS_IOHDR_RESEND_MDS, &hdr->flags);
 	switch (err) {
 	case -NFS4ERR_RESET_TO_PNFS:
-		ff_layout_reset_write(hdr, true);
-		return task->tk_status ? : -EAGAIN;
+		set_bit(NFS_IOHDR_RESEND_PNFS, &hdr->flags);
+		return task->tk_status;
 	case -NFS4ERR_RESET_TO_MDS:
-		ff_layout_reset_write(hdr, false);
-		return task->tk_status ? : -EAGAIN;
+		set_bit(NFS_IOHDR_RESEND_MDS, &hdr->flags);
+		return task->tk_status;
 	case -EAGAIN:
 		return -EAGAIN;
 	}
@@ -1639,6 +1641,10 @@ static void ff_layout_write_release(void *data)
 	struct nfs_pgio_header *hdr = data;
 
 	ff_layout_write_record_layoutstats_done(&hdr->task, hdr);
+	if (test_bit(NFS_IOHDR_RESEND_PNFS, &hdr->flags))
+		ff_layout_reset_write(hdr, true);
+	else if (test_bit(NFS_IOHDR_RESEND_MDS, &hdr->flags))
+		ff_layout_reset_write(hdr, false);
 	pnfs_generic_rw_release(data);
 }
 
