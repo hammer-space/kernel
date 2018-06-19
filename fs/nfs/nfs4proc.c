@@ -834,6 +834,7 @@ static int nfs41_sequence_process(struct rpc_task *task,
 			goto retry_nowait;
 		}
 		goto session_recover;
+	case -NFS4ERR_RETRY_UNCACHED_REP:
 	case -NFS4ERR_SEQ_FALSE_RETRY:
 		if (interrupted)
 			goto retry_new_seq;
