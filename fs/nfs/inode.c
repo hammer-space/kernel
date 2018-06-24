@@ -90,6 +90,7 @@ int nfs_wait_atomic_killable(atomic_t *p, unsigned int mode)
 {
 	return nfs_wait_killable(mode);
 }
+EXPORT_SYMBOL_GPL(nfs_wait_atomic_killable);
 
 /**
  * nfs_compat_user_ino64 - returns the user-visible inode number

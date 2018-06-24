@@ -391,6 +391,7 @@ void pnfs_layout_mark_request_commit(struct nfs_page *req,
 				     struct pnfs_layout_segment *lseg,
 				     struct nfs_commit_info *cinfo,
 				     u32 ds_commit_idx);
+void nfs_layoutget_end(struct pnfs_layout_hdr *lo);
 void pnfs_clear_first_layoutget(struct pnfs_layout_hdr *lo);
 void pnfs_lgopen_prepare(struct nfs4_opendata *data,
 			 struct nfs_open_context *ctx);
