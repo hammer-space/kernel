@@ -605,6 +605,10 @@ static ssize_t __write_versions(struct file *file, char *buf, size_t size)
 				if (*minorp == '.') {
 					if (nfsd_minorversion(minor, cmd) < 0)
 						return -EINVAL;
+					// Disable NFS v4.0 when v4.2 is enabled - for compatibility with RHEL7
+					if (minor == 2 && cmd == NFSD_SET)
+						if (nfsd_minorversion(0, NFSD_CLEAR) < 0)
+							return -EINVAL;
 				} else if ((cmd == NFSD_SET) != nfsd_vers(num, NFSD_TEST)) {
 					/*
 					 * Either we have +4 and no minors are enabled,
