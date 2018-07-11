@@ -384,6 +384,12 @@ extern struct nfs_client *nfs_init_client(struct nfs_client *clp,
 			   const struct nfs_client_initdata *);
 
 /* dir.c */
+int nfs_opendir(struct inode *, struct file *);
+int nfs_closedir(struct inode *, struct file *);
+int nfs_readdir(struct file *file, struct dir_context *ctx);
+int nfs_fsync_dir(struct file *, loff_t, loff_t, int);
+loff_t nfs_llseek_dir(struct file *filp, loff_t offset, int whence);
+
 extern void nfs_readdir_record_entry_cache_hit(struct inode *dir);
 extern void nfs_readdir_record_entry_cache_miss(struct inode *dir);
 extern unsigned long nfs_access_cache_count(struct shrinker *shrink,
@@ -444,6 +450,8 @@ extern void nfs_set_cache_invalid(struct inode *inode, unsigned long flags);
 extern bool nfs_check_cache_invalid(struct inode *, unsigned long);
 extern int nfs_wait_bit_killable(struct wait_bit_key *key, int mode);
 extern int nfs_wait_atomic_killable(atomic_t *p, unsigned int mode);
+extern int nfs_getattr_revalidate(const struct path *path, unsigned long flags,
+				  unsigned int query_flags);
 
 /* localio.c */
 extern void nfs_local_init(void);
