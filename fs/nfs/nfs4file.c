@@ -210,11 +210,17 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 			goto out;
 	}
 
+        /*
+         * It looks like PDFS does not support or properly handle the
+         * archive bit.
+         */
 	if (fattr_supported & NFS_ATTR_FATTR_ARCHIVE) {
 		args.fa_valid[0] |= NFS_FA_VALID_ARCHIVE;
 		if (nfsi->archive)
 			args.fa_flags |= NFS_FA_FLAG_ARCHIVE;
-	} else if (fattr_supported & NFS_ATTR_FATTR_TIME_BACKUP) {
+	}
+
+	if (fattr_supported & NFS_ATTR_FATTR_TIME_BACKUP) {
 		struct timespec ts = timespec64_to_timespec(inode->i_mtime);
 		args.fa_valid[0] |= NFS_FA_VALID_ARCHIVE;
 		if (timespec_compare(&nfsi->timebackup, &ts) >= 0)
@@ -245,6 +251,58 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	    put_user(args.fa_flags, &uarg->fa_flags))
 		goto out;
 
+	if ((fattr_supported & NFS_ATTR_FATTR_MODE)) {
+		args.fa_valid[0] |= NFS_FA_VALID_MODE;
+		/* This is an unsigned short we put into an __u32 */
+		if (copy_to_user(&uarg->fa_mode, &inode->i_mode,
+				sizeof(unsigned short)))
+			goto out;
+	}
+
+	if ((fattr_supported & NFS_ATTR_FATTR_NLINK)) {
+		args.fa_valid[0] |= NFS_FA_VALID_NLINK;
+		if (copy_to_user(&uarg->fa_nlink, &inode->i_nlink,
+				sizeof(uarg->fa_nlink)))
+			goto out;
+	}
+
+	args.fa_valid[0] |= NFS_FA_VALID_BLKSIZE;
+	if (copy_to_user(&uarg->fa_blksize, &NFS_SERVER(inode)->dtsize,
+			sizeof(uarg->fa_blksize)))
+		goto out;
+
+	args.fa_valid[0] |= NFS_FA_VALID_INO;
+	if (copy_to_user(&uarg->fa_ino, &inode->i_ino,
+			sizeof(uarg->fa_ino)))
+		goto out;
+
+	args.fa_valid[0] |= NFS_FA_VALID_DEV;
+	if (copy_to_user(&uarg->fa_dev, &inode->i_sb->s_dev,
+			sizeof(uarg->fa_dev)))
+		goto out;
+
+	if ((fattr_supported & NFS_ATTR_FATTR_RDEV)) {
+		args.fa_valid[0] |= NFS_FA_VALID_RDEV;
+		if (copy_to_user(&uarg->fa_rdev, &inode->i_rdev,
+				sizeof(uarg->fa_rdev)))
+			goto out;
+	}
+
+	if ((fattr_supported & NFS_ATTR_FATTR_SIZE)) {
+		loff_t size = i_size_read(inode);
+		args.fa_valid[0] |= NFS_FA_VALID_SIZE;
+		if (copy_to_user(&uarg->fa_size, &size,
+				sizeof(uarg->fa_size)))
+			goto out;
+	}
+
+	if ((fattr_supported & NFS_ATTR_FATTR_BLOCKS_USED)) {
+		args.fa_valid[0] |= NFS_FA_VALID_BLOCKS;
+		if (copy_to_user(&uarg->fa_blocks, &inode->i_blocks,
+				sizeof(uarg->fa_blocks)))
+			goto out;
+	}
+
 	if (copy_to_user(uarg->fa_valid, args.fa_valid, sizeof(uarg->fa_valid)))
 		goto out;
 
@@ -268,6 +326,11 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 	 */
 	int ret = -EFAULT;
 
+	if (fattr == NULL) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
 	/*
 	 * We get the first u64 word from the uarg as it tells us whether
 	 * to use the passed in struct file or use that fd to find the
@@ -283,10 +346,6 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 		inode = file_inode(dst_file);
 	}
 
-	if (fattr == NULL) {
-		ret = -ENOMEM;
-		goto out;
-	}
 	if (get_user(args.fa_valid[0], &uarg->fa_valid[0]))
 		goto out;
 	args.fa_valid[0] &= NFS_FA_VALID_ALL_ATTR_0;
@@ -337,6 +396,15 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 			args.fa_time_backup = args.fa_time_create;
 		else
 			args.fa_time_backup = NFS_I(inode)->timecreate;
+	}
+
+        if (args.fa_valid[0] & NFS_FA_VALID_SIZE) {
+		if (copy_from_user(&args.fa_size, &uarg->fa_size,
+					sizeof(args.fa_size)))
+		goto out;
+		/* Write all dirty data */
+		if (S_ISREG(inode->i_mode))
+			nfs_sync_inode(inode);
 	}
 
 	ret = nfs4_set_nfs4_statx(inode, &args, fattr);

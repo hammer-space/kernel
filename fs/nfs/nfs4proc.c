@@ -7955,6 +7955,11 @@ static int _nfs4_set_nfs4_statx(struct inode *inode,
 		sattr.ia_gid.val = statx->fa_group_gid;
 	}
 
+	if (statx && (statx->fa_valid[0] & NFS_FA_VALID_SIZE)) {
+		sattr.ia_valid |= ATTR_SIZE;
+		sattr.ia_size = statx->fa_size;
+	}
+
 	nfs4_stateid_copy(&arg.stateid, &zero_stateid);
 
 	status = nfs4_call_sync(server->client, server, &msg, &arg.seq_args, &res.seq_res, 1);

@@ -39,17 +39,25 @@
 #define NFS_IOC_FILE_STATX_GET	_IOR('N', 2, struct nfs_ioctl_nfs4_statx)
 #define NFS_IOC_FILE_STATX_SET	_IOW('N', 3, struct nfs_ioctl_nfs4_statx)
 
-#define NFS_FA_VALID_TIME_CREATE			0x0001UL
-#define NFS_FA_VALID_TIME_BACKUP			0x0002UL
-#define NFS_FA_VALID_ARCHIVE				0x0004UL
-#define NFS_FA_VALID_HIDDEN				0x0008UL
-#define NFS_FA_VALID_SYSTEM				0x0010UL
-#define NFS_FA_VALID_OWNER				0x0020UL
-#define NFS_FA_VALID_OWNER_GROUP			0x0040UL
-#define NFS_FA_VALID_ATIME				0x0080UL
-#define NFS_FA_VALID_MTIME				0x0100UL
-#define NFS_FA_VALID_CTIME				0x0200UL
-#define NFS_FA_VALID_OFFLINE				0x0400UL
+#define NFS_FA_VALID_TIME_CREATE			0x00001UL
+#define NFS_FA_VALID_TIME_BACKUP			0x00002UL
+#define NFS_FA_VALID_ARCHIVE				0x00004UL
+#define NFS_FA_VALID_HIDDEN				0x00008UL
+#define NFS_FA_VALID_SYSTEM				0x00010UL
+#define NFS_FA_VALID_OWNER				0x00020UL
+#define NFS_FA_VALID_OWNER_GROUP			0x00040UL
+#define NFS_FA_VALID_ATIME				0x00080UL
+#define NFS_FA_VALID_MTIME				0x00100UL
+#define NFS_FA_VALID_CTIME				0x00200UL
+#define NFS_FA_VALID_OFFLINE				0x00400UL
+#define NFS_FA_VALID_MODE				0x00800UL
+#define NFS_FA_VALID_NLINK				0x01000UL
+#define NFS_FA_VALID_BLKSIZE				0x02000UL
+#define NFS_FA_VALID_INO				0x04000UL
+#define NFS_FA_VALID_DEV				0x08000UL
+#define NFS_FA_VALID_RDEV				0x10000UL
+#define NFS_FA_VALID_SIZE				0x20000UL
+#define NFS_FA_VALID_BLOCKS				0x40000UL
 
 #define NFS_FA_VALID_ALL_ATTR_0 ( NFS_FA_VALID_TIME_CREATE | \
 		NFS_FA_VALID_TIME_BACKUP | \
@@ -61,7 +69,15 @@
 		NFS_FA_VALID_ATIME | \
 		NFS_FA_VALID_MTIME | \
 		NFS_FA_VALID_CTIME | \
-		NFS_FA_VALID_OFFLINE)
+		NFS_FA_VALID_OFFLINE | \
+                NFS_FA_VALID_MODE | \
+		NFS_FA_VALID_NLINK | \
+		NFS_FA_VALID_BLKSIZE | \
+		NFS_FA_VALID_INO | \
+		NFS_FA_VALID_DEV | \
+		NFS_FA_VALID_RDEV | \
+		NFS_FA_VALID_SIZE | \
+		NFS_FA_VALID_BLOCKS)
 
 #define NFS_FA_FLAG_ARCHIVE				(1UL << 0)
 #define NFS_FA_FLAG_HIDDEN				(1UL << 1)
@@ -81,7 +97,17 @@ struct nfs_ioctl_nfs4_statx {
 	struct timespec fa_ctime;		/* Change time */
 	uid_t fa_owner_uid;			/* Owner User ID */
 	gid_t fa_group_gid;			/* Primary Group ID */
-	__u64 fa_padding[10];
+        /* Normal stat fields after this */
+	__u32	 	fa_mode;		/* Mode */
+	unsigned int 	fa_nlink;
+	__u32		fa_blksize;
+	__u32		fa_spare;		/* Alignment */
+	__u64		fa_ino;
+	dev_t		fa_dev;
+	dev_t		fa_rdev;
+	loff_t		fa_size;
+	__u64		fa_blocks;
+	__u64 		fa_padding[4];
 };
 
 /*
