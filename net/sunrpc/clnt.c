@@ -1154,11 +1154,11 @@ struct rpc_task *rpc_run_bc_task(struct rpc_rqst *req)
 	 */
 	xbufp->len = xbufp->head[0].iov_len + xbufp->page_len +
 			xbufp->tail[0].iov_len;
-	set_bit(RPC_TASK_NEED_XMIT, &task->tk_runstate);
 
 	task->tk_action = call_bc_transmit;
 	atomic_inc(&task->tk_count);
 	WARN_ON_ONCE(atomic_read(&task->tk_count) != 2);
+	xprt_request_enqueue_transmit(task);
 	rpc_execute(task);
 
 	dprintk("RPC: rpc_run_bc_task: task= %p\n", task);
@@ -1756,8 +1756,6 @@ rpc_xdr_encode(struct rpc_task *task)
 
 	task->tk_status = rpcauth_wrap_req(task, encode, req, p,
 			task->tk_msg.rpc_argp);
-	if (task->tk_status == 0)
-		set_bit(RPC_TASK_NEED_XMIT, &task->tk_runstate);
 }
 
 /*
@@ -1961,6 +1959,7 @@ call_transmit(struct rpc_task *task)
 	/* Add task to reply queue before transmission to avoid races */
 	if (rpc_reply_expected(task))
 		xprt_request_enqueue_receive(task);
+	xprt_request_enqueue_transmit(task);
 
 	if (!xprt_prepare_transmit(task))
 		return;
@@ -1995,7 +1994,6 @@ call_transmit_status(struct rpc_task *task)
 		xprt_end_transmit(task);
 		break;
 	case -EBADMSG:
-		clear_bit(RPC_TASK_NEED_XMIT, &task->tk_runstate);
 		task->tk_action = call_transmit;
 		task->tk_status = 0;
 		xprt_end_transmit(task);
