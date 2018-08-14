@@ -337,12 +337,14 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 	 * struct file.
 	 */
 	if (get_user(args.real_fd, &uarg->real_fd))
-		return -EFAULT;
+		goto out_free;
 
 	if (args.real_fd >= 0) {
 		dst_file = fget_raw(args.real_fd);
-		if (!dst_file)
-			return -EBADF;
+		if (!dst_file) {
+			ret = -EBADF;
+			goto out_free;
+		}
 		inode = file_inode(dst_file);
 	}
 
@@ -407,13 +409,16 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 			nfs_sync_inode(inode);
 	}
 
+	/*
+	 * No need to update the inode because that is done in nfs4_set_nfs4_statx
+	 */
 	ret = nfs4_set_nfs4_statx(inode, &args, fattr);
-	if (ret == 0)
-		nfs_post_op_update_inode(inode, fattr);
 
 out:
 	if (args.real_fd >= 0)
 		fput(dst_file);
+out_free:
+	nfs_free_fattr(fattr);
 	return ret;
 }
 
