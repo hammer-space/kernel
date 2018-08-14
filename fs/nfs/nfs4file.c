@@ -405,9 +405,11 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 			nfs_sync_inode(inode);
 	}
 
+	/*
+	 * No need to update the inode because that is done in nfs4_set_nfs4_statx
+	 */
 	ret = nfs4_set_nfs4_statx(inode, &args, fattr);
-	if (ret == 0)
-		nfs_post_op_update_inode(inode, fattr);
+	nfs_free_fattr(fattr);
 
 out:
 	if (args.real_fd >= 0)
