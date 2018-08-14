@@ -2181,6 +2181,9 @@ call_status(struct rpc_task *task)
 		/* shutdown or soft timeout */
 		rpc_exit(task, status);
 		break;
+	case -EBADMSG:
+		task->tk_action = call_transmit;
+		break;
 	default:
 		if (clnt->cl_chatty)
 			printk("%s: RPC call returned error %d\n",
