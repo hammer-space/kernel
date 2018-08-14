@@ -362,7 +362,9 @@ pnfs_clear_lseg_state(struct pnfs_layout_segment *lseg,
 /*
  * Update the seqid of a layout stateid
  */
-bool nfs4_layoutreturn_refresh_stateid(nfs4_stateid *dst, struct inode *inode)
+bool nfs4_layoutreturn_refresh_stateid(nfs4_stateid *dst,
+		struct pnfs_layout_range *dst_range,
+		struct inode *inode)
 {
 	struct pnfs_layout_hdr *lo;
 	struct pnfs_layout_range range = {
@@ -380,6 +382,7 @@ bool nfs4_layoutreturn_refresh_stateid(nfs4_stateid *dst, struct inode *inode)
 		err = pnfs_mark_matching_lsegs_return(lo, &head, &range, 0);
 		if (err != -EBUSY) {
 			dst->seqid = lo->plh_stateid.seqid;
+			*dst_range = range;
 			ret = true;
 		}
 	}
