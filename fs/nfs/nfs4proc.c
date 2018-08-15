@@ -7990,6 +7990,8 @@ static int _nfs4_set_nfs4_statx(struct inode *inode,
 	status = nfs4_call_sync(server->client, server, &msg, &arg.seq_args, &res.seq_res, 1);
 	if (status)
 		dprintk("%s failed: %d\n", __func__, status);
+	else
+		nfs_setattr_update_inode(inode, &sattr, fattr);
 
 	return status;
 }
