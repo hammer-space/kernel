@@ -39,14 +39,6 @@
 #define NFS_IOC_FILE_STATX_GET	_IOR('N', 2, struct nfs_ioctl_nfs4_statx)
 #define NFS_IOC_FILE_STATX_SET	_IOW('N', 3, struct nfs_ioctl_nfs4_statx)
 
-#if 0
-struct nfs_ioctl_clone_range_args {
-	__s64 src_fd;
-	__u64 src_off, count;
-	__u64 dst_off;
-};
-#endif
-
 #define NFS_FA_VALID_TIME_CREATE			0x00001UL
 #define NFS_FA_VALID_TIME_BACKUP			0x00002UL
 #define NFS_FA_VALID_ARCHIVE				0x00004UL
