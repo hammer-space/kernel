@@ -62,6 +62,7 @@ static void	call_start(struct rpc_task *task);
 static void	call_reserve(struct rpc_task *task);
 static void	call_reserveresult(struct rpc_task *task);
 static void	call_allocate(struct rpc_task *task);
+static void	call_encode(struct rpc_task *task);
 static void	call_decode(struct rpc_task *task);
 static void	call_bind(struct rpc_task *task);
 static void	call_bind_status(struct rpc_task *task);
@@ -1138,7 +1139,8 @@ struct rpc_task *rpc_run_bc_task(struct rpc_rqst *req)
 	struct xdr_buf *xbufp = &req->rq_snd_buf;
 	struct rpc_task_setup task_setup_data = {
 		.callback_ops = &rpc_default_ops,
-		.flags = RPC_TASK_SOFTCONN,
+		.flags = RPC_TASK_SOFTCONN |
+			RPC_TASK_NO_RETRANS_TIMEOUT,
 	};
 
 	dprintk("RPC: rpc_run_bc_task req= %p\n", req);
@@ -1158,7 +1160,6 @@ struct rpc_task *rpc_run_bc_task(struct rpc_rqst *req)
 	task->tk_action = call_bc_transmit;
 	atomic_inc(&task->tk_count);
 	WARN_ON_ONCE(atomic_read(&task->tk_count) != 2);
-	xprt_request_enqueue_transmit(task);
 	rpc_execute(task);
 
 	dprintk("RPC: rpc_run_bc_task: task= %p\n", task);
@@ -1677,7 +1678,7 @@ call_allocate(struct rpc_task *task)
 	dprint_status(task);
 
 	task->tk_status = 0;
-	task->tk_action = call_bind;
+	task->tk_action = call_encode;
 
 	if (req->rq_buffer)
 		return;
@@ -1721,12 +1722,12 @@ call_allocate(struct rpc_task *task)
 static int
 rpc_task_need_encode(struct rpc_task *task)
 {
-	return test_bit(RPC_TASK_NEED_XMIT, &task->tk_runstate) == 0;
+	return test_bit(RPC_TASK_NEED_XMIT, &task->tk_runstate) == 0 &&
+		(!(task->tk_flags & RPC_TASK_SENT) ||
+		 !(task->tk_flags & RPC_TASK_NO_RETRANS_TIMEOUT) ||
+		 xprt_request_need_retransmit(task));
 }
 
-/*
- * 3.	Encode arguments of an RPC call
- */
 static void
 rpc_xdr_encode(struct rpc_task *task)
 {
@@ -1742,6 +1743,7 @@ rpc_xdr_encode(struct rpc_task *task)
 	xdr_buf_init(&req->rq_rcv_buf,
 		     req->rq_rbuffer,
 		     req->rq_rcvsize);
+	req->rq_bytes_sent = 0;
 
 	p = rpc_encode_header(task);
 	if (p == NULL) {
@@ -1756,6 +1758,34 @@ rpc_xdr_encode(struct rpc_task *task)
 
 	task->tk_status = rpcauth_wrap_req(task, encode, req, p,
 			task->tk_msg.rpc_argp);
+}
+
+/*
+ * 3.	Encode arguments of an RPC call
+ */
+static void
+call_encode(struct rpc_task *task)
+{
+	if (!rpc_task_need_encode(task))
+		goto out;
+	/* Encode here so that rpcsec_gss can use correct sequence number. */
+	rpc_xdr_encode(task);
+	/* Did the encode result in an error condition? */
+	if (task->tk_status != 0) {
+		/* Was the error nonfatal? */
+		if (task->tk_status == -EAGAIN)
+			rpc_delay(task, HZ >> 4);
+		else
+			rpc_exit(task, task->tk_status);
+		return;
+	}
+
+	/* Add task to reply queue before transmission to avoid races */
+	if (rpc_reply_expected(task))
+		xprt_request_enqueue_receive(task);
+	xprt_request_enqueue_transmit(task);
+out:
+	task->tk_action = call_bind;
 }
 
 /*
@@ -1942,24 +1972,8 @@ call_transmit(struct rpc_task *task)
 	dprint_status(task);
 
 	task->tk_action = call_transmit_status;
-	/* Encode here so that rpcsec_gss can use correct sequence number. */
-	if (rpc_task_need_encode(task)) {
-		rpc_xdr_encode(task);
-		/* Did the encode result in an error condition? */
-		if (task->tk_status != 0) {
-			/* Was the error nonfatal? */
-			if (task->tk_status == -EAGAIN)
-				rpc_delay(task, HZ >> 4);
-			else
-				rpc_exit(task, task->tk_status);
-			return;
-		}
-	}
-
-	/* Add task to reply queue before transmission to avoid races */
-	if (rpc_reply_expected(task))
-		xprt_request_enqueue_receive(task);
-	xprt_request_enqueue_transmit(task);
+	if (!test_bit(RPC_TASK_NEED_XMIT, &task->tk_runstate))
+		return;
 
 	if (!xprt_prepare_transmit(task))
 		return;
@@ -1994,9 +2008,9 @@ call_transmit_status(struct rpc_task *task)
 		xprt_end_transmit(task);
 		break;
 	case -EBADMSG:
-		task->tk_action = call_transmit;
-		task->tk_status = 0;
 		xprt_end_transmit(task);
+		task->tk_status = 0;
+		task->tk_action = call_encode;
 		break;
 		/*
 		 * Special cases: if we've been waiting on the
@@ -2044,6 +2058,9 @@ static void
 call_bc_transmit(struct rpc_task *task)
 {
 	struct rpc_rqst *req = task->tk_rqstp;
+
+	if (rpc_task_need_encode(task))
+		xprt_request_enqueue_transmit(task);
 
 	if (!xprt_prepare_transmit(task))
 		goto out_retry;
@@ -2166,7 +2183,7 @@ call_status(struct rpc_task *task)
 	case -EPIPE:
 	case -ENOTCONN:
 	case -EAGAIN:
-		task->tk_action = call_bind;
+		task->tk_action = call_encode;
 		break;
 	case -EIO:
 		/* shutdown or soft timeout */
@@ -2231,7 +2248,7 @@ call_timeout(struct rpc_task *task)
 	rpcauth_invalcred(task);
 
 retry:
-	task->tk_action = call_bind;
+	task->tk_action = call_encode;
 	task->tk_status = 0;
 }
 
@@ -2275,7 +2292,7 @@ call_decode(struct rpc_task *task)
 
 	if (req->rq_rcv_buf.len < 12) {
 		if (!RPC_IS_SOFT(task)) {
-			task->tk_action = call_bind;
+			task->tk_action = call_encode;
 			goto out_retry;
 		}
 		dprintk("RPC:       %s: too small RPC reply size (%d bytes)\n",
@@ -2406,7 +2423,7 @@ rpc_verify_header(struct rpc_task *task)
 			task->tk_garb_retry--;
 			dprintk("RPC: %5u %s: retry garbled creds\n",
 					task->tk_pid, __func__);
-			task->tk_action = call_bind;
+			task->tk_action = call_encode;
 			goto out_retry;
 		case RPC_AUTH_TOOWEAK:
 			printk(KERN_NOTICE "RPC: server %s requires stronger "
@@ -2475,7 +2492,7 @@ out_garbage:
 		task->tk_garb_retry--;
 		dprintk("RPC: %5u %s: retrying\n",
 				task->tk_pid, __func__);
-		task->tk_action = call_bind;
+		task->tk_action = call_encode;
 out_retry:
 		return ERR_PTR(-EAGAIN);
 	}
