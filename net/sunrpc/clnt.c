@@ -1993,6 +1993,11 @@ call_transmit_status(struct rpc_task *task)
 		dprint_status(task);
 		xprt_end_transmit(task);
 		break;
+	case -EBADSLT:
+		xprt_end_transmit(task);
+		task->tk_action = call_transmit;
+		task->tk_status = 0;
+		break;
 	case -EBADMSG:
 		xprt_end_transmit(task);
 		task->tk_status = 0;
