@@ -1545,10 +1545,36 @@ out:
 	return status;
 }
 
+static int __nfs4_reclaim_open_state(struct nfs4_state_owner *sp, struct nfs4_state *state,
+				     const struct nfs4_state_recovery_ops *ops)
+{
+	struct nfs4_lock_state *lock;
+	int status;
+
+	status = ops->recover_open(sp, state);
+	if (status < 0)
+		return status;
+
+	status = nfs4_reclaim_locks(state, ops);
+	if (status < 0)
+		return status;
+
+	if (!test_bit(NFS_DELEGATED_STATE, &state->flags)) {
+		spin_lock(&state->state_lock);
+		list_for_each_entry(lock, &state->lock_states, ls_locks) {
+			if (!test_bit(NFS_LOCK_INITIALIZED, &lock->ls_flags))
+				pr_warn_ratelimited("NFS: %s: Lock reclaim failed!\n", __func__);
+		}
+		spin_unlock(&state->state_lock);
+	}
+
+	clear_bit(NFS_STATE_RECLAIM_NOGRACE, &state->flags);
+	return status;
+}
+
 static int nfs4_reclaim_open_state(struct nfs4_state_owner *sp, const struct nfs4_state_recovery_ops *ops)
 {
 	struct nfs4_state *state;
-	struct nfs4_lock_state *lock;
 	int status = 0;
 
 	/* Note: we rely on the sp->so_states list being ordered 
@@ -1571,29 +1597,13 @@ restart:
 			continue;
 		refcount_inc(&state->count);
 		spin_unlock(&sp->so_lock);
-		status = ops->recover_open(sp, state);
+		status = __nfs4_reclaim_open_state(sp, state, ops);
 		if (status >= 0) {
-			status = nfs4_reclaim_locks(state, ops);
-			if (status >= 0) {
-				if (!test_bit(NFS_DELEGATED_STATE, &state->flags)) {
-					spin_lock(&state->state_lock);
-					list_for_each_entry(lock, &state->lock_states, ls_locks) {
-						if (!test_bit(NFS_LOCK_INITIALIZED, &lock->ls_flags))
-							pr_warn_ratelimited("NFS: "
-									    "%s: Lock reclaim "
-									    "failed!\n", __func__);
-					}
-					spin_unlock(&state->state_lock);
-				}
-				clear_bit(NFS_STATE_RECLAIM_NOGRACE,
-					&state->flags);
-				nfs4_put_open_state(state);
-				clear_bit(NFS4CLNT_RECLAIM_NOGRACE,
-					&state->flags);
-				spin_lock(&sp->so_lock);
-				goto restart;
-			}
+			nfs4_put_open_state(state);
+			spin_lock(&sp->so_lock);
+			goto restart;
 		}
+
 		switch (status) {
 			default:
 				printk(KERN_ERR "NFS: %s: unhandled error %d\n",
