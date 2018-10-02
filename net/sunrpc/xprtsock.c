@@ -637,15 +637,6 @@ process_status:
 	return status;
 }
 
-/*
- * Helper function to force a TCP close if the server is sending
- * junk and/or it has put us in CLOSE_WAIT
- */
-static void xs_tcp_force_close(struct rpc_xprt *xprt)
-{
-	xprt_force_disconnect(xprt);
-}
-
 /**
  * xs_tcp_send_request - write an RPC request to a TCP socket
  * @task: address of RPC task that manages the state of an RPC request
@@ -738,25 +729,22 @@ static int xs_tcp_send_request(struct rpc_task *task)
 	switch (status) {
 	case -ENOTSOCK:
 		status = -ENOTCONN;
-		clear_bit(XPRT_CONNECTED, &xprt->state);
+		/* Should we call xs_close() here? */
 		break;
 	case -EAGAIN:
-		return xs_nospace(task);
+		status = xs_nospace(task);
+		break;
 	case -ECONNRESET:
 	case -ECONNREFUSED:
-	case -EADDRINUSE:
-	case -EPIPE:
-		clear_bit(XPRT_CONNECTED, &xprt->state);
-		xs_tcp_force_close(xprt);
-		break;
 	case -ENOTCONN:
+	case -EADDRINUSE:
 	case -ENOBUFS:
+	case -EPIPE:
 		break;
 	default:
 		dprintk("RPC:       sendmsg returned unrecognized error %d\n",
 			-status);
 	}
-	clear_bit(SOCKWQ_ASYNC_NOSPACE, &transport->sock->flags);
 
 	return status;
 }
@@ -1164,6 +1152,15 @@ static void xs_data_ready(struct sock *sk)
 			queue_work(xprtiod_workqueue, &transport->recv_worker);
 	}
 	read_unlock_bh(&sk->sk_callback_lock);
+}
+
+/*
+ * Helper function to force a TCP close if the server is sending
+ * junk and/or it has put us in CLOSE_WAIT
+ */
+static void xs_tcp_force_close(struct rpc_xprt *xprt)
+{
+	xprt_force_disconnect(xprt);
 }
 
 static inline void xs_tcp_read_fraghdr(struct rpc_xprt *xprt, struct xdr_skb_reader *desc)
