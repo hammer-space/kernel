@@ -740,10 +740,7 @@ static int xs_tcp_send_request(struct rpc_task *task)
 		clear_bit(XPRT_CONNECTED, &xprt->state);
 		return -ENOTCONN;
 	case -EAGAIN:
-		if (!sk_stream_is_writeable(transport->inet))
-			return xs_nospace(task);
-		status = -ENOBUFS;
-		break;
+		return xs_nospace(task);
 	case -ECONNRESET:
 	case -ECONNREFUSED:
 	case -EADDRINUSE:
