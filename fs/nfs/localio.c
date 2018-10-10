@@ -478,10 +478,8 @@ nfs_local_doio(struct nfs_client *clp, struct rpc_cred *cred,
 	if (status >= 0) {
 		hdr->res.count = status;
 		hdr->task.tk_status = 0;
-	} else {
-		nfs_local_disable(clp);
+	} else
 		hdr->task.tk_status = status;
-	}
 
 	return status;
 }
@@ -514,10 +512,8 @@ nfs_local_commit(struct nfs_client *clp, struct rpc_cred *cred,
 	if (status >= 0) {
 		nfs_set_local_verifier(data->res.verf, NFS_FILE_SYNC);
 		data->task.tk_status = 0;
-	} else {
-		nfs_local_disable(clp);
+	} else
 		data->task.tk_status = status;
-	}
 
 	return status;
 }
