@@ -2471,10 +2471,7 @@ ff_local_open_fh(struct pnfs_layout_segment *lseg,
 		} else {
 			rcu_read_unlock();
 			new = nfs_local_open_fh(clp, cred, fh, mode);
-			if (IS_ERR_OR_NULL(new)) {
-				filp = new;
-				nfs_local_disable(clp);
-			} else {
+			if (!IS_ERR_OR_NULL(new)) {
 				/* one for local_file slot, one to return */
 				get_file(new);
 
@@ -2492,7 +2489,8 @@ ff_local_open_fh(struct pnfs_layout_segment *lseg,
 					fput(new);
 					fput(new);
 				}
-			}
+			} else
+				filp = new;
 		}
 	} while (filp == NULL);
 	return filp;
