@@ -161,6 +161,7 @@ struct rpc_credops {
 						     struct rpc_cred *,
 						     struct svc_cred *);
 	char *			(*crstringify_acceptor)(struct rpc_cred *);
+	bool			(*crneed_reencode)(struct rpc_task *);
 };
 
 extern const struct rpc_authops	authunix_ops;
@@ -196,6 +197,7 @@ __be32 *		rpcauth_marshcred(struct rpc_task *, __be32 *);
 __be32 *		rpcauth_checkverf(struct rpc_task *, __be32 *);
 int			rpcauth_wrap_req(struct rpc_task *task, kxdreproc_t encode, void *rqstp, __be32 *data, void *obj);
 int			rpcauth_unwrap_resp(struct rpc_task *task, kxdrdproc_t decode, void *rqstp, __be32 *data, void *obj);
+bool			rpcauth_xmit_need_reencode(struct rpc_task *task);
 int			rpcauth_refreshcred(struct rpc_task *);
 void			rpcauth_invalcred(struct rpc_task *);
 int			rpcauth_uptodatecred(struct rpc_task *);
