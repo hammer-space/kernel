@@ -228,9 +228,7 @@ gss_wrap_kerberos_v1(struct krb5_ctx *kctx, int offset,
 
 	memcpy(ptr + GSS_KRB5_TOK_HDR_LEN, md5cksum.data, md5cksum.len);
 
-	spin_lock(&krb5_seq_lock);
-	seq_send = kctx->seq_send++;
-	spin_unlock(&krb5_seq_lock);
+	seq_send = gss_seq_send_fetch_and_inc(kctx);
 
 	/* XXX would probably be more efficient to compute checksum
 	 * and encrypt at the same time: */
@@ -479,9 +477,7 @@ gss_wrap_kerberos_v2(struct krb5_ctx *kctx, u32 offset,
 	*be16ptr++ = 0;
 
 	be64ptr = (__be64 *)be16ptr;
-	spin_lock(&krb5_seq_lock);
-	*be64ptr = cpu_to_be64(kctx->seq_send64++);
-	spin_unlock(&krb5_seq_lock);
+	*be64ptr = cpu_to_be64(gss_seq_send64_fetch_and_inc(kctx));
 
 	err = (*kctx->gk5e->encrypt_v2)(kctx, offset, buf, pages);
 	if (err)
@@ -623,4 +619,3 @@ gss_unwrap_kerberos(struct gss_ctx *gctx, int offset, struct xdr_buf *buf)
 		return gss_unwrap_kerberos_v2(kctx, offset, buf);
 	}
 }
-

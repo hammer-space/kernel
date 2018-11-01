@@ -52,7 +52,6 @@
 #include <linux/slab.h>
 #include <linux/seq_file.h>
 #include <linux/sunrpc/addr.h>
-#include <linux/smp.h>
 
 #include "xprt_rdma.h"
 
@@ -237,8 +236,6 @@ rpcrdma_connect_worker(struct work_struct *work)
 	struct rpc_xprt *xprt = &r_xprt->rx_xprt;
 
 	spin_lock_bh(&xprt->transport_lock);
-	if (++xprt->connect_cookie == 0)	/* maintain a reserved value */
-		++xprt->connect_cookie;
 	if (ep->rep_connected > 0) {
 		if (!xprt_test_and_set_connected(xprt))
 			xprt_wake_pending_tasks(xprt, 0);
@@ -651,8 +648,6 @@ xprt_rdma_allocate(struct rpc_task *task)
 	if (!rpcrdma_get_recvbuf(r_xprt, req, rqst->rq_rcvsize, flags))
 		goto out_fail;
 
-	req->rl_cpu = smp_processor_id();
-	req->rl_connect_cookie = 0;	/* our reserved value */
 	rpcrdma_set_xprtdata(rqst, req);
 	rqst->rq_buffer = req->rl_sendbuf->rg_base;
 	rqst->rq_rbuffer = req->rl_recvbuf->rg_base;
@@ -687,7 +682,7 @@ xprt_rdma_free(struct rpc_task *task)
 
 /**
  * xprt_rdma_send_request - marshal and send an RPC request
- * @task: RPC task with an RPC message in rq_snd_buf
+ * @rqst: RPC message in rq_snd_buf
  *
  * Caller holds the transport's write lock.
  *
@@ -699,9 +694,8 @@ xprt_rdma_free(struct rpc_task *task)
  *		sent. Do not try to send this message again.
  */
 static int
-xprt_rdma_send_request(struct rpc_task *task)
+xprt_rdma_send_request(struct rpc_rqst *rqst)
 {
-	struct rpc_rqst *rqst = task->tk_rqstp;
 	struct rpc_xprt *xprt = rqst->rq_xprt;
 	struct rpcrdma_req *req = rpcr_to_rdmar(rqst);
 	struct rpcrdma_xprt *r_xprt = rpcx_to_rdmax(xprt);
@@ -715,6 +709,9 @@ xprt_rdma_send_request(struct rpc_task *task)
 	if (!xprt_connected(xprt))
 		goto drop_connection;
 
+	if (!xprt_request_get_cong(xprt, rqst))
+		return -EBADSLT;
+
 	rc = rpcrdma_marshal_req(r_xprt, rqst);
 	if (rc < 0)
 		goto failed_marshal;
@@ -723,9 +720,9 @@ xprt_rdma_send_request(struct rpc_task *task)
 		rpcrdma_recv_buffer_get(req);
 
 	/* Must suppress retransmit to maintain credits */
-	if (req->rl_connect_cookie == xprt->connect_cookie)
+	if (rqst->rq_connect_cookie == xprt->connect_cookie)
 		goto drop_connection;
-	req->rl_connect_cookie = xprt->connect_cookie;
+	rqst->rq_xtime = ktime_get();
 
 	__set_bit(RPCRDMA_REQ_F_PENDING, &req->rl_flags);
 	if (rpcrdma_ep_post(&r_xprt->rx_ia, &r_xprt->rx_ep, req))
@@ -733,6 +730,12 @@ xprt_rdma_send_request(struct rpc_task *task)
 
 	rqst->rq_xmit_bytes_sent += rqst->rq_snd_buf.len;
 	rqst->rq_bytes_sent = 0;
+
+	/* An RPC with no reply will throw off credit accounting,
+	 * so drop the connection to reset the credit grant.
+	 */
+	if (!rpc_reply_expected(rqst->rq_task))
+		goto drop_connection;
 	return 0;
 
 failed_marshal:
@@ -803,6 +806,7 @@ static const struct rpc_xprt_ops xprt_rdma_procs = {
 	.reserve_xprt		= xprt_reserve_xprt_cong,
 	.release_xprt		= xprt_release_xprt_cong, /* sunrpc/xprt.c */
 	.alloc_slot		= xprt_alloc_slot,
+	.free_slot		= xprt_free_slot,
 	.release_request	= xprt_release_rqst_cong,       /* ditto */
 	.set_retrans_timeout	= xprt_set_retrans_timeout_def, /* ditto */
 	.timer			= xprt_rdma_timer,

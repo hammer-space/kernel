@@ -1239,7 +1239,7 @@ void rpcrdma_complete_rqst(struct rpcrdma_rep *rep)
 		goto out_badheader;
 
 out:
-	spin_lock(&xprt->recv_lock);
+	spin_lock(&xprt->queue_lock);
 	cwnd = xprt->cwnd;
 	xprt->cwnd = r_xprt->rx_buf.rb_credits << RPC_CWNDSHIFT;
 	if (xprt->cwnd > cwnd)
@@ -1247,7 +1247,7 @@ out:
 
 	xprt_complete_rqst(rqst->rq_task, status);
 	xprt_unpin_rqst(rqst);
-	spin_unlock(&xprt->recv_lock);
+	spin_unlock(&xprt->queue_lock);
 	return;
 
 /* If the incoming reply terminated a pending RPC, the next
@@ -1345,7 +1345,7 @@ void rpcrdma_reply_handler(struct rpcrdma_rep *rep)
 	/* Match incoming rpcrdma_rep to an rpcrdma_req to
 	 * get context for handling any incoming chunks.
 	 */
-	spin_lock(&xprt->recv_lock);
+	spin_lock(&xprt->queue_lock);
 	rqst = xprt_lookup_rqst(xprt, rep->rr_xid);
 	if (!rqst)
 		goto out_norqst;
@@ -1357,7 +1357,7 @@ void rpcrdma_reply_handler(struct rpcrdma_rep *rep)
 		credits = buf->rb_max_requests;
 	buf->rb_credits = credits;
 
-	spin_unlock(&xprt->recv_lock);
+	spin_unlock(&xprt->queue_lock);
 
 	req = rpcr_to_rdmar(rqst);
 	req->rl_reply = rep;
@@ -1366,7 +1366,7 @@ void rpcrdma_reply_handler(struct rpcrdma_rep *rep)
 
 	trace_xprtrdma_reply(rqst->rq_task, rep, req, credits);
 
-	queue_work_on(req->rl_cpu, rpcrdma_receive_wq, &rep->rr_work);
+	queue_work(rpcrdma_receive_wq, &rep->rr_work);
 	return;
 
 out_badstatus:
@@ -1385,7 +1385,7 @@ out_badversion:
  * is corrupt.
  */
 out_norqst:
-	spin_unlock(&xprt->recv_lock);
+	spin_unlock(&xprt->queue_lock);
 	trace_xprtrdma_reply_rqst(rep);
 	goto repost;
 

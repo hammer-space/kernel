@@ -62,6 +62,7 @@ struct nfs_lock_context {
 	struct nfs_open_context *open_context;
 	fl_owner_t lockowner;
 	atomic_t io_count;
+	struct rcu_head	rcu_head;
 };
 
 struct nfs4_state;
@@ -84,6 +85,7 @@ struct nfs_open_context {
 	struct nfs4_threshold	*mdsthreshold;
 
 	struct file *local_filp;
+	struct rcu_head	rcu_head;
 };
 
 struct nfs_open_dir_context {
