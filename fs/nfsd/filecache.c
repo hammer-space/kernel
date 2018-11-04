@@ -115,23 +115,27 @@ nfsd_file_mark_put(struct nfsd_file_mark *nfm)
 }
 
 static struct nfsd_file_mark *
-nfsd_file_mark_find_or_create(struct nfsd_file *nf, struct inode *inode)
+nfsd_file_mark_find_or_create(struct nfsd_file *nf)
 {
 	int			err;
 	struct fsnotify_mark	*mark;
 	struct nfsd_file_mark	*nfm = NULL, *new;
+	struct inode *inode = nf->nf_inode;
 
 	do {
+		mutex_lock(&nfsd_file_fsnotify_group->mark_mutex);
 		mark = fsnotify_find_mark(&inode->i_fsnotify_marks,
 					  nfsd_file_fsnotify_group);
 		if (mark) {
 			nfm = nfsd_file_mark_get(container_of(mark,
 						 struct nfsd_file_mark,
 						 nfm_mark));
+			mutex_unlock(&nfsd_file_fsnotify_group->mark_mutex);
 			fsnotify_put_mark(mark);
 			if (likely(nfm))
 				break;
 		}
+		mutex_unlock(&nfsd_file_fsnotify_group->mark_mutex);
 
 		/* allocate a new nfm */
 		new = kmem_cache_alloc(nfsd_file_mark_slab, GFP_KERNEL);
@@ -141,8 +145,7 @@ nfsd_file_mark_find_or_create(struct nfsd_file *nf, struct inode *inode)
 		new->nfm_mark.mask = FS_ATTRIB|FS_DELETE_SELF;
 		atomic_set(&new->nfm_ref, 1);
 
-		err = fsnotify_add_mark(&new->nfm_mark, nf->nf_inode,
-				NULL, false);
+		err = fsnotify_add_mark(&new->nfm_mark, inode, NULL, false);
 		/*
 		 * If the add was successful, then return the object.
 		 * Otherwise, we need to put the reference we hold on the
@@ -514,7 +517,7 @@ nfsd_file_fsnotify_handle_event(struct fsnotify_group *group,
 }
 
 
-const static struct fsnotify_ops nfsd_file_fsnotify_ops = {
+static  const struct fsnotify_ops nfsd_file_fsnotify_ops = {
 	.handle_event = nfsd_file_fsnotify_handle_event,
 	.free_mark = nfsd_file_mark_free,
 };
@@ -813,7 +816,7 @@ open_file:
 	spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
 	atomic_long_inc(&nfsd_filecache_count);
 
-	nf->nf_mark = nfsd_file_mark_find_or_create(nf, inode);
+	nf->nf_mark = nfsd_file_mark_find_or_create(nf);
 	if (nf->nf_mark)
 		status = nfsd_open_verified(rqstp, fhp, S_IFREG,
 				may_flags, &nf->nf_file);
