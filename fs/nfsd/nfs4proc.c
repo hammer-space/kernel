@@ -1920,6 +1920,7 @@ nfsd4_proc_compound(struct svc_rqst *rqstp)
 	struct nfsd4_compound_state *cstate = &resp->cstate;
 	struct svc_fh *current_fh = &cstate->current_fh;
 	struct svc_fh *save_fh = &cstate->save_fh;
+	size_t starting_len;
 	__be32		status;
 
 	svcxdr_init_encode(rqstp, resp);
@@ -1938,6 +1939,7 @@ nfsd4_proc_compound(struct svc_rqst *rqstp)
 	 */
 	clear_bit(RQ_USEDEFERRAL, &rqstp->rq_flags);
 
+	starting_len = resp->xdr.buf->len;
 	/*
 	 * According to RFC3010, this takes precedence over all other errors.
 	 */
@@ -2024,11 +2026,18 @@ nfsd4_proc_compound(struct svc_rqst *rqstp)
 				op->status = check_nfsd_access(current_fh->fh_export, rqstp);
 		}
 encode_op:
-		if (op->status == nfserr_replay_me) {
+		switch (op->status) {
+		case nfserr_minor_vers_mismatch:
+			xdr_truncate_encode(&resp->xdr, starting_len);
+			resp->opcnt = 0;
+			status = op->status;
+			break;
+		case nfserr_replay_me:
 			op->replay = &cstate->replay_owner->so_replay;
 			nfsd4_encode_replay(&resp->xdr, op);
 			status = op->status = op->replay->rp_status;
-		} else {
+			break;
+		default:
 			nfsd4_encode_operation(resp, op);
 			status = op->status;
 		}
