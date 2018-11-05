@@ -2693,6 +2693,7 @@ static void nfs4_xdr_enc_getacl(struct rpc_rqst *req, struct xdr_stream *xdr,
 				ARRAY_SIZE(nfs4_acl_bitmap), &hdr);
 	xdr_inline_pages(&req->rq_rcv_buf, replen << 2,
 		args->acl_pages, 0, args->acl_len);
+	req->rq_rcv_buf.flags |= XDRBUF_SPARSE_PAGES;
 
 	encode_nops(&hdr);
 }
