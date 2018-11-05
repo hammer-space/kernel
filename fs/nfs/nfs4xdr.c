@@ -2691,6 +2691,7 @@ static void nfs4_xdr_enc_getacl(struct rpc_rqst *req, struct xdr_stream *xdr,
 
 	rpc_prepare_reply_pages(req, args->acl_pages, 0,
 				args->acl_len, replen + 1);
+	req->rq_rcv_buf.flags |= XDRBUF_SPARSE_PAGES;
 	encode_nops(&hdr);
 }
 
