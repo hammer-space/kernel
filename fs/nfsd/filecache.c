@@ -101,7 +101,7 @@ nfsd_file_mark_free(struct fsnotify_mark *mark)
 static struct nfsd_file_mark *
 nfsd_file_mark_get(struct nfsd_file_mark *nfm)
 {
-	if (!atomic_inc_not_zero(&nfm->nfm_ref))
+	if (!refcount_inc_not_zero(&nfm->nfm_ref))
 		return NULL;
 	return nfm;
 }
@@ -109,8 +109,7 @@ nfsd_file_mark_get(struct nfsd_file_mark *nfm)
 static void
 nfsd_file_mark_put(struct nfsd_file_mark *nfm)
 {
-	if (atomic_dec_and_test(&nfm->nfm_ref)) {
-
+	if (refcount_dec_and_test(&nfm->nfm_ref)) {
 		fsnotify_destroy_mark(&nfm->nfm_mark, nfsd_file_fsnotify_group);
 		fsnotify_put_mark(&nfm->nfm_mark);
 	}
@@ -145,7 +144,7 @@ nfsd_file_mark_find_or_create(struct nfsd_file *nf)
 			return NULL;
 		fsnotify_init_mark(&new->nfm_mark, nfsd_file_fsnotify_group);
 		new->nfm_mark.mask = FS_ATTRIB|FS_DELETE_SELF;
-		atomic_set(&new->nfm_ref, 1);
+		refcount_set(&new->nfm_ref, 1);
 
 		err = fsnotify_add_inode_mark(&new->nfm_mark, inode, 0);
 
@@ -181,7 +180,7 @@ nfsd_file_alloc(struct inode *inode, unsigned int may, unsigned int hashval)
 		nf->nf_flags = 0;
 		nf->nf_inode = inode;
 		nf->nf_hashval = hashval;
-		atomic_set(&nf->nf_ref, 1);
+		refcount_set(&nf->nf_ref, 1);
 		nf->nf_may = may & NFSD_FILE_MAY_MASK;
 		if (may & NFSD_MAY_NOT_BREAK_LEASE) {
 			if (may & NFSD_MAY_WRITE)
@@ -249,7 +248,7 @@ nfsd_file_unhash_and_release_locked(struct nfsd_file *nf, struct list_head *disp
 	if (!nfsd_file_unhash(nf))
 		return false;
 	/* keep final reference for nfsd_file_lru_dispose */
-	if (atomic_add_unless(&nf->nf_ref, -1, 1))
+	if (refcount_dec_not_one(&nf->nf_ref))
 		return true;
 
 	list_add(&nf->nf_lru, dispose);
@@ -262,12 +261,13 @@ nfsd_file_put_noref(struct nfsd_file *nf)
 	int count;
 	trace_nfsd_file_put(nf);
 
-	count = atomic_dec_return(&nf->nf_ref);
-	if (!count) {
+	count = refcount_read(&nf->nf_ref);
+	if (refcount_dec_and_test(&nf->nf_ref)) {
 		WARN_ON(test_bit(NFSD_FILE_HASHED, &nf->nf_flags));
 		nfsd_file_free(nf);
+		return 0;
 	}
-	return count;
+	return --count;
 }
 
 void
@@ -283,7 +283,7 @@ nfsd_file_put(struct nfsd_file *nf)
 struct nfsd_file *
 nfsd_file_get(struct nfsd_file *nf)
 {
-	if (likely(atomic_inc_not_zero(&nf->nf_ref)))
+	if (likely(refcount_inc_not_zero(&nf->nf_ref)))
 		return nf;
 	return NULL;
 }
@@ -309,7 +309,7 @@ nfsd_file_dispose_list_sync(struct list_head *dispose)
 	while(!list_empty(dispose)) {
 		nf = list_first_entry(dispose, struct nfsd_file, nf_lru);
 		list_del(&nf->nf_lru);
-		if (!atomic_dec_and_test(&nf->nf_ref))
+		if (!refcount_dec_and_test(&nf->nf_ref))
 			continue;
 		if (nfsd_file_free(nf))
 			flush = true;
@@ -340,10 +340,10 @@ nfsd_file_lru_cb(struct list_head *item, struct list_lru_one *lru,
 	 * counter. Here we check the counter and then test and clear the flag.
 	 * That order is deliberate to ensure that we can do this locklessly.
 	 */
-	if (atomic_read(&nf->nf_ref) > 1)
+	if (refcount_read(&nf->nf_ref) > 1)
 		goto out_skip;
 	if (test_and_clear_bit(NFSD_FILE_REFERENCED, &nf->nf_flags))
-		goto out_rescan;;
+		goto out_rescan;
 
 	if (!test_and_clear_bit(NFSD_FILE_HASHED, &nf->nf_flags))
 		goto out_skip;
@@ -801,7 +801,7 @@ out:
 open_file:
 	nf = new;
 	/* Take reference for the hashtable */
-	atomic_inc(&nf->nf_ref);
+	refcount_inc(&nf->nf_ref);
 	__set_bit(NFSD_FILE_HASHED, &nf->nf_flags);
 	__set_bit(NFSD_FILE_PENDING, &nf->nf_flags);
 	list_lru_add(&nfsd_file_lru, &nf->nf_lru);
