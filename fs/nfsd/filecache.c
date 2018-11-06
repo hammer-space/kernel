@@ -134,8 +134,8 @@ nfsd_file_mark_find_or_create(struct nfsd_file *nf)
 			fsnotify_put_mark(mark);
 			if (likely(nfm))
 				break;
-		}
-		mutex_unlock(&nfsd_file_fsnotify_group->mark_mutex);
+		} else
+			mutex_unlock(&nfsd_file_fsnotify_group->mark_mutex);
 
 		/* allocate a new nfm */
 		new = kmem_cache_alloc(nfsd_file_mark_slab, GFP_KERNEL);
