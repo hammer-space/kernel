@@ -19,7 +19,7 @@
  */
 struct nfsd_file_mark {
 	struct fsnotify_mark	nfm_mark;
-	atomic_t		nfm_ref;
+	refcount_t		nfm_ref;
 };
 
 /*
@@ -42,7 +42,7 @@ struct nfsd_file {
 	unsigned long		nf_flags;
 	struct inode		*nf_inode;
 	unsigned int		nf_hashval;
-	atomic_t		nf_ref;
+	refcount_t		nf_ref;
 	unsigned char		nf_may;
 	struct nfsd_file_mark	*nf_mark;
 };
