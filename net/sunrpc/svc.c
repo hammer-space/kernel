@@ -765,6 +765,7 @@ __svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node,
 	spin_lock_bh(&pool->sp_lock);
 	if (istmp) {
 		__set_bit(RQ_RESCUE, &rqstp->rq_flags);
+		__set_bit(RQ_BUSY, &rqstp->rq_flags);
 		pool->sp_tmpthreads++;
 	}
 	pool->sp_nrthreads++;
