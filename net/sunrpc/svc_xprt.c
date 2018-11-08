@@ -418,6 +418,15 @@ svc_dequeue_xprt_from_pool(struct svc_xprt *xprt, struct svc_pool *pool)
 	}
 }
 
+static bool
+svc_xprt_may_use_rescue_thread(struct svc_xprt *xprt)
+{
+	if (atomic_read(&xprt->xpt_inflight) != 0 &&
+	    !test_bit(XPT_CLOSE, &xprt->xpt_flags))
+		return false;
+	return test_and_set_bit(XPT_RESCUE, &xprt->xpt_flags) == 0;
+}
+
 void svc_xprt_do_enqueue(struct svc_xprt *xprt)
 {
 	struct svc_pool *pool;
@@ -461,10 +470,8 @@ void svc_xprt_do_enqueue(struct svc_xprt *xprt)
 	 * just queue the RPC.
 	 * Only do this for xprt that does not have inflight RPCs.
 	 */
-	if (serv->sv_pool_mgr &&
-	    atomic_read(&xprt->xpt_inflight) == 0 &&
-	    !list_empty(&pool->sp_all_threads) &&
-	    !test_and_set_bit(XPT_RESCUE, &xprt->xpt_flags)) {
+	if (serv->sv_pool_mgr && !list_empty(&pool->sp_all_threads) &&
+	    svc_xprt_may_use_rescue_thread(xprt)) {
 		dprintk("%s: try to wake up pool manager\n",
 			__func__);
 
@@ -508,33 +515,40 @@ static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool, bool rescue)
 		goto out;
 
 	spin_lock_bh(&pool->sp_lock);
-	if (likely(!list_empty(&pool->sp_sockets))) {
-		list_for_each_entry(xprt, &pool->sp_sockets, xpt_ready) {
-			/* Handle transport close and connection first! */
-			if (test_bit(XPT_CLOSE, &xprt->xpt_flags) ||
-			    test_bit(XPT_LISTENER, &xprt->xpt_flags)) {
+	list_for_each_entry(xprt, &pool->sp_sockets, xpt_ready) {
+		/* Handle rescue threads */
+		if (rescue) {
+			if (test_bit(XPT_RESCUE, &xprt->xpt_flags)) {
 				found = xprt;
 				break;
 			}
+			continue;
+		}
 
-			/* Prefer xprts with fewer inflight RPCs */
-			inflight = atomic_read(&xprt->xpt_inflight);
-			if (inflight >= prev_inflight)
-				continue;
-
-			/* Rescue threads service xprts with no inflight RPC */
-			if (rescue && inflight != 0)
-				continue;
-
+		/* Handle transport close and connection first! */
+		if (test_bit(XPT_CLOSE, &xprt->xpt_flags) ||
+		    test_bit(XPT_LISTENER, &xprt->xpt_flags)) {
 			found = xprt;
-			if (!inflight)
-				break;
-			prev_inflight = inflight;
+			break;
 		}
-		if (found) {
-			svc_dequeue_xprt_from_pool(found, pool);
-			svc_xprt_get(found);
-		}
+
+		/* Prefer xprts with fewer inflight RPCs */
+		inflight = atomic_read(&xprt->xpt_inflight);
+		if (inflight >= prev_inflight)
+			continue;
+
+		found = xprt;
+		if (!inflight)
+			break;
+		prev_inflight = inflight;
+	}
+	if (found) {
+		svc_dequeue_xprt_from_pool(found, pool);
+		svc_xprt_get(found);
+
+		dprintk("svc: transport %p dequeued, inuse=%d\n",
+				found,
+				refcount_read(&found->xpt_ref.refcount));
 	}
 	spin_unlock_bh(&pool->sp_lock);
 out:
