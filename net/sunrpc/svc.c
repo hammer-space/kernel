@@ -517,7 +517,7 @@ svc_pool_manager_should_sleep(struct svc_serv *serv, int nthreads)
 	/* did someone want to create new threads? */
 	for (i = 0; i < serv->sv_nrpools; i++) {
 		struct svc_pool *pool = &serv->sv_pools[i];
-		if (pool->sp_tmpthreads < atomic_read(&pool->sp_need_rescue))
+		if (svc_xprt_check_need_rescue(pool))
 			return false;
 	}
 	return true;
@@ -567,7 +567,7 @@ svc_pool_manager(void *data)
 			struct task_struct *task;
 			struct svc_rqst *rqstp;
 
-			if (pool->sp_tmpthreads >= atomic_read(&pool->sp_need_rescue))
+			if (!svc_xprt_check_need_rescue(pool))
 				continue;
 
 			rqstp = __svc_prepare_thread(serv, pool, cpu, true);
@@ -1029,7 +1029,7 @@ svc_exit_thread(struct svc_rqst *rqstp)
 	if (test_bit(RQ_RESCUE, &rqstp->rq_flags)) {
 		pool->sp_tmpthreads--;
 		/* Handle races with svc_xprt_do_enqueue() */
-		if (pool->sp_tmpthreads < atomic_read(&pool->sp_need_rescue))
+		if (svc_xprt_check_need_rescue(pool))
 			wake_up_process(serv->sv_pool_mgr);
 	}
 	if (!test_and_set_bit(RQ_VICTIM, &rqstp->rq_flags))
