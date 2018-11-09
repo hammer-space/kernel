@@ -52,6 +52,7 @@ struct svc_pool {
 	unsigned long		sp_flags;
 	atomic_t		sp_need_rescue;	/* # of queued xprts that
 						 * might need rescuing */
+	atomic_t		sp_rescue_inuse;
 } ____cacheline_aligned_in_smp;
 
 struct svc_serv;
@@ -529,6 +530,12 @@ char		  *svc_fill_symlink_pathname(struct svc_rqst *rqstp,
 static inline void svc_reserve_auth(struct svc_rqst *rqstp, int space)
 {
 	svc_reserve(rqstp, space + rqstp->rq_auth_slack);
+}
+
+static inline bool svc_xprt_check_need_rescue(struct svc_pool *pool)
+{
+	return atomic_read(&pool->sp_need_rescue) > (int)pool->sp_tmpthreads -
+			atomic_read(&pool->sp_rescue_inuse);
 }
 
 #endif /* SUNRPC_SVC_H */

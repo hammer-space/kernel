@@ -418,6 +418,30 @@ svc_dequeue_xprt_from_pool(struct svc_xprt *xprt, struct svc_pool *pool)
 	}
 }
 
+static void
+svc_xprt_rescue_begin(struct svc_rqst *rqstp)
+{
+	if (test_bit(RQ_RESCUE, &rqstp->rq_flags)) {
+		struct svc_serv *serv = rqstp->rq_server;
+		struct svc_pool *pool = rqstp->rq_pool;
+
+		atomic_inc(&pool->sp_rescue_inuse);
+		smp_mb__after_atomic();
+		if (svc_xprt_check_need_rescue(pool))
+			wake_up_process(serv->sv_pool_mgr);
+	}
+}
+
+static void
+svc_xprt_rescue_end(struct svc_rqst *rqstp)
+{
+	if (test_bit(RQ_RESCUE, &rqstp->rq_flags)) {
+		struct svc_pool *pool = rqstp->rq_pool;
+		atomic_dec(&pool->sp_rescue_inuse);
+		smp_mb__after_atomic();
+	}
+}
+
 static bool
 svc_xprt_may_use_rescue_thread(struct svc_xprt *xprt)
 {
@@ -605,6 +629,7 @@ static void svc_xprt_release(struct svc_rqst *rqstp)
 
 	rqstp->rq_res.head[0].iov_len = 0;
 	svc_reserve(rqstp, 0);
+	svc_xprt_rescue_end(rqstp);
 	svc_xprt_release_slot(rqstp);
 	rqstp->rq_xprt = NULL;
 	svc_xprt_put(xprt);
@@ -792,6 +817,7 @@ static struct svc_xprt *svc_assign_xprt(struct svc_rqst *rqstp)
 	if (xprt == NULL)
 		return NULL;
 	rqstp->rq_xprt = xprt;
+	svc_xprt_rescue_begin(rqstp);
 
 	/* As there is a shortage of threads and this request
 	 * had to be queued, don't allow the thread to wait so
