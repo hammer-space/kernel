@@ -404,6 +404,39 @@ svc_dequeue_xprt_from_pool(struct svc_xprt *xprt, struct svc_pool *pool)
 	}
 }
 
+static void
+svc_xprt_rescue_begin(struct svc_rqst *rqstp)
+{
+	if (test_bit(RQ_RESCUE, &rqstp->rq_flags)) {
+		struct svc_serv *serv = rqstp->rq_server;
+		struct svc_pool *pool = rqstp->rq_pool;
+
+		atomic_inc(&pool->sp_rescue_inuse);
+		smp_mb__after_atomic();
+		if (svc_xprt_check_need_rescue(pool))
+			wake_up_process(serv->sv_pool_mgr);
+	}
+}
+
+static void
+svc_xprt_rescue_end(struct svc_rqst *rqstp)
+{
+	if (test_bit(RQ_RESCUE, &rqstp->rq_flags)) {
+		struct svc_pool *pool = rqstp->rq_pool;
+		atomic_dec(&pool->sp_rescue_inuse);
+		smp_mb__after_atomic();
+	}
+}
+
+static bool
+svc_xprt_may_use_rescue_thread(struct svc_xprt *xprt)
+{
+	if (atomic_read(&xprt->xpt_inflight) != 0 &&
+	    !test_bit(XPT_CLOSE, &xprt->xpt_flags))
+		return false;
+	return test_and_set_bit(XPT_RESCUE, &xprt->xpt_flags) == 0;
+}
+
 void svc_xprt_do_enqueue(struct svc_xprt *xprt)
 {
 	struct svc_pool *pool;
@@ -451,10 +484,8 @@ void svc_xprt_do_enqueue(struct svc_xprt *xprt)
 	 * just queue the RPC.
 	 * Only do this for xprt that does not have inflight RPCs.
 	 */
-	if (serv->sv_pool_mgr &&
-	    atomic_read(&xprt->xpt_inflight) == 0 &&
-	    !list_empty(&pool->sp_all_threads) &&
-	    !test_and_set_bit(XPT_RESCUE, &xprt->xpt_flags)) {
+	if (serv->sv_pool_mgr && !list_empty(&pool->sp_all_threads) &&
+	    svc_xprt_may_use_rescue_thread(xprt)) {
 		dprintk("%s: try to wake up pool manager\n",
 			__func__);
 
@@ -499,37 +530,40 @@ static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool, bool rescue)
 		goto out;
 
 	spin_lock_bh(&pool->sp_lock);
-	if (likely(!list_empty(&pool->sp_sockets))) {
-		list_for_each_entry(xprt, &pool->sp_sockets, xpt_ready) {
-			/* Handle transport close and connection first! */
-			if (test_bit(XPT_CLOSE, &xprt->xpt_flags) ||
-			    test_bit(XPT_LISTENER, &xprt->xpt_flags)) {
+	list_for_each_entry(xprt, &pool->sp_sockets, xpt_ready) {
+		/* Handle rescue threads */
+		if (rescue) {
+			if (test_bit(XPT_RESCUE, &xprt->xpt_flags)) {
 				found = xprt;
 				break;
 			}
+			continue;
+		}
 
-			/* Prefer xprts with fewer inflight RPCs */
-			inflight = atomic_read(&xprt->xpt_inflight);
-			if (inflight >= prev_inflight)
-				continue;
-
-			/* Rescue threads service xprts with no inflight RPC */
-			if (rescue && inflight != 0)
-				continue;
-
+		/* Handle transport close and connection first! */
+		if (test_bit(XPT_CLOSE, &xprt->xpt_flags) ||
+		    test_bit(XPT_LISTENER, &xprt->xpt_flags)) {
 			found = xprt;
-			if (!inflight)
-				break;
-			prev_inflight = inflight;
+			break;
 		}
-		if (found) {
-			svc_dequeue_xprt_from_pool(found, pool);
-			svc_xprt_get(found);
 
-			dprintk("svc: transport %p dequeued, inuse=%d\n",
-					found,
-					refcount_read(&found->xpt_ref.refcount));
-		}
+		/* Prefer xprts with fewer inflight RPCs */
+		inflight = atomic_read(&xprt->xpt_inflight);
+		if (inflight >= prev_inflight)
+			continue;
+
+		found = xprt;
+		if (!inflight)
+			break;
+		prev_inflight = inflight;
+	}
+	if (found) {
+		svc_dequeue_xprt_from_pool(found, pool);
+		svc_xprt_get(found);
+
+		dprintk("svc: transport %p dequeued, inuse=%d\n",
+				found,
+				refcount_read(&found->xpt_ref.refcount));
 	}
 	spin_unlock_bh(&pool->sp_lock);
 out:
@@ -586,6 +620,7 @@ static void svc_xprt_release(struct svc_rqst *rqstp)
 
 	rqstp->rq_res.head[0].iov_len = 0;
 	svc_reserve(rqstp, 0);
+	svc_xprt_rescue_end(rqstp);
 	svc_xprt_release_slot(rqstp);
 	rqstp->rq_xprt = NULL;
 	svc_xprt_put(xprt);
@@ -774,6 +809,7 @@ static struct svc_xprt *svc_assign_xprt(struct svc_rqst *rqstp)
 	if (xprt == NULL)
 		return NULL;
 	rqstp->rq_xprt = xprt;
+	svc_xprt_rescue_begin(rqstp);
 
 	/* As there is a shortage of threads and this request
 	 * had to be queued, don't allow the thread to wait so
