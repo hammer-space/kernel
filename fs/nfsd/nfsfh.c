@@ -151,6 +151,7 @@ static inline __be32 check_pseudo_root(struct svc_rqst *rqstp,
  */
 static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp)
 {
+	const struct export_operations *export_ops;
 	struct knfsd_fh	*fh = &fhp->fh_handle;
 	struct fid *fid = NULL, sfid;
 	struct svc_export *exp;
@@ -242,6 +243,25 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp)
 	}
 
 	/*
+	 * Don't allow rescue threads to access certain exports.
+	 * This is mainly to allow them to avoid getting stuck in
+	 * hung NFS filesystems.
+	 */
+	export_ops = exp->ex_path.dentry->d_sb->s_export_op;
+	if (export_ops && export_ops->flags & EXPORT_NO_RESCUE_HACK &&
+	    test_bit(RQ_RESCUE, &rqstp->rq_flags)) {
+		switch (rqstp->rq_vers) {
+		case 3:
+		case 2:
+			error = nfserr_dropit;
+			break;
+		default:
+			error = nfserr_jukebox;
+		}
+		goto out;
+	}
+
+	/*
 	 * Look up the dentry using the NFS file handle.
 	 */
 	error = nfserr_stale;
@@ -287,7 +307,8 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp)
 
 	switch (rqstp->rq_vers) {
 	case 3:
-		if (!(dentry->d_sb->s_export_op->flags & EXPORT_OP_NOWCC))
+		export_ops = dentry->d_sb->s_export_op;
+		if (!(export_ops && export_ops->flags & EXPORT_OP_NOWCC))
 			break;
 		/* Fallthrough */
 	case 2:
