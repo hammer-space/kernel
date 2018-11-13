@@ -41,6 +41,76 @@ struct nfs_local_open_ctx {
 	atomic_t refcount;
 };
 
+/*
+ * We need to translate between nfs status return values and
+ * the local errno values which may not be the same.
+ */
+static struct {
+	__u32 stat;
+	int errno;
+} nfs_errtbl[] = {
+	{ NFS4_OK,		0		},
+	{ NFS4ERR_PERM,		-EPERM		},
+	{ NFS4ERR_NOENT,	-ENOENT		},
+	{ NFS4ERR_IO,		-EIO		},
+	{ NFS4ERR_NXIO,		-ENXIO		},
+	{ NFS4ERR_FBIG,		-E2BIG		},
+	{ NFS4ERR_STALE,	-EBADF		},
+	{ NFS4ERR_ACCESS,	-EACCES		},
+	{ NFS4ERR_EXIST,	-EEXIST		},
+	{ NFS4ERR_XDEV,		-EXDEV		},
+	{ NFS4ERR_MLINK,	-EMLINK		},
+	{ NFS4ERR_NOTDIR,	-ENOTDIR	},
+	{ NFS4ERR_ISDIR,	-EISDIR		},
+	{ NFS4ERR_INVAL,	-EINVAL		},
+	{ NFS4ERR_FBIG,		-EFBIG		},
+	{ NFS4ERR_NOSPC,	-ENOSPC		},
+	{ NFS4ERR_ROFS,		-EROFS		},
+	{ NFS4ERR_NAMETOOLONG,	-ENAMETOOLONG	},
+	{ NFS4ERR_NOTEMPTY,	-ENOTEMPTY	},
+	{ NFS4ERR_DQUOT,	-EDQUOT		},
+	{ NFS4ERR_STALE,	-ESTALE		},
+	{ NFS4ERR_STALE,	-EOPENSTALE	},
+	{ NFS4ERR_DELAY,	-ETIMEDOUT	},
+	{ NFS4ERR_DELAY,	-ERESTARTSYS	},
+	{ NFS4ERR_DELAY,	-EAGAIN		},
+	{ NFS4ERR_DELAY,	-ENOMEM		},
+	{ NFS4ERR_IO,		-ETXTBSY	},
+	{ NFS4ERR_IO,		-EBUSY		},
+	{ NFS4ERR_BADHANDLE,	-EBADHANDLE	},
+	{ NFS4ERR_BAD_COOKIE,	-EBADCOOKIE	},
+	{ NFS4ERR_NOTSUPP,	-EOPNOTSUPP	},
+	{ NFS4ERR_TOOSMALL,	-ETOOSMALL	},
+	{ NFS4ERR_SERVERFAULT,	-ESERVERFAULT	},
+	{ NFS4ERR_SERVERFAULT,	-ENFILE		},
+	{ NFS4ERR_IO,		-EREMOTEIO	},
+	{ NFS4ERR_IO,		-EUCLEAN	},
+	{ NFS4ERR_PERM,		-ENOKEY		},
+	{ NFS4ERR_BADTYPE,	-EBADTYPE	},
+	{ NFS4ERR_SYMLINK,	-ELOOP		},
+	{ NFS4ERR_DEADLOCK,	-EDEADLK	},
+};
+
+/*
+ * Convert an NFS error code to a local one.
+ * This one is used jointly by NFSv2 and NFSv3.
+ */
+static __u32
+nfs4errno(int errno)
+{
+	unsigned int i;
+	for (i = 0; i < ARRAY_SIZE(nfs_errtbl); i++) {
+		if (nfs_errtbl[i].errno == errno)
+			return nfs_errtbl[i].stat;
+	}
+	/* If we cannot translate the error, the recovery routines should
+	 * handle it.
+	 * Note: remaining NFSv4 error codes have values > 10000, so should
+	 * not conflict with native Linux error codes.
+	 */
+	return NFS4ERR_SERVERFAULT;
+}
+
 static struct nfs_local_open_ctx __local_open_ctx __read_mostly;
 
 static bool localio_enabled __read_mostly = true;
@@ -480,9 +550,12 @@ nfs_local_doio(struct nfs_client *clp, const struct cred *cred,
 
 	if (status >= 0) {
 		hdr->res.count = status;
+		hdr->res.op_status = NFS4_OK;
 		hdr->task.tk_status = 0;
-	} else
+	} else {
+		hdr->res.op_status = nfs4errno(status);
 		hdr->task.tk_status = status;
+	}
 
 	return status;
 }
@@ -514,9 +587,12 @@ nfs_local_commit(struct nfs_client *clp, const struct cred *cred,
 	fput(filp);
 	if (status >= 0) {
 		nfs_set_local_verifier(data->res.verf, NFS_FILE_SYNC);
+		data->res.op_status = NFS4_OK;
 		data->task.tk_status = 0;
-	} else
+	} else {
+		data->res.op_status = nfs4errno(status);
 		data->task.tk_status = status;
+	}
 
 	return status;
 }
