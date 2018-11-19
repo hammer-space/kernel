@@ -55,6 +55,7 @@ static struct delayed_work		nfsd_filecache_laundrette;
 
 enum nfsd_file_laundrette_ctl {
 	NFSD_FILE_LAUNDRETTE_NOFLUSH = 0,
+	NFSD_FILE_LAUNDRETTE_MEMORY_PRESSURE,
 	NFSD_FILE_LAUNDRETTE_MAY_FLUSH
 };
 
@@ -67,12 +68,13 @@ nfsd_file_schedule_laundrette(enum nfsd_file_laundrette_ctl ctl)
 		return;
 
 	/* Be more aggressive about scanning if over the threshold */
-	if (count > NFSD_FILE_LRU_THRESHOLD)
+	if (count > NFSD_FILE_LRU_THRESHOLD ||
+	    ctl == NFSD_FILE_LAUNDRETTE_MEMORY_PRESSURE)
 		mod_delayed_work(system_wq, &nfsd_filecache_laundrette, 0);
 	else
 		schedule_delayed_work(&nfsd_filecache_laundrette, NFSD_LAUNDRETTE_DELAY);
 
-	if (ctl == NFSD_FILE_LAUNDRETTE_NOFLUSH)
+	if (ctl != NFSD_FILE_LAUNDRETTE_MAY_FLUSH)
 		return;
 
 	/* ...and don't delay flushing if we're out of control */
@@ -379,12 +381,8 @@ nfsd_file_lru_count(struct shrinker *s, struct shrink_control *sc)
 static unsigned long
 nfsd_file_lru_scan(struct shrinker *s, struct shrink_control *sc)
 {
-	LIST_HEAD(head);
-	unsigned long ret;
-
-	ret = list_lru_shrink_walk(&nfsd_file_lru, sc, nfsd_file_lru_cb, &head);
-	nfsd_file_lru_dispose(&head);
-	return ret;
+	nfsd_file_schedule_laundrette(NFSD_FILE_LAUNDRETTE_MEMORY_PRESSURE);
+	return 0;
 }
 
 static struct shrinker	nfsd_file_shrinker = {
