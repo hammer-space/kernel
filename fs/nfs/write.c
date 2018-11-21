@@ -1687,7 +1687,6 @@ int nfs_initiate_commit(struct nfs_client *clp,
 		NFS_SP4_MACH_CRED_COMMIT, &task_setup_data.rpc_client, &msg);
 
 	if (localio) {
-		set_bit(NFS_IOHDR_LOCALIO, &data->flags);
 		status = nfs_local_commit(clp, data->cred, data);
 		if (status > 0)
 			status = 0;
