@@ -531,6 +531,12 @@ nfs_local_doio(struct nfs_client *clp, const struct cred *cred,
 		return PTR_ERR(filp);
 	if (!filp)
 		return -EBADF;
+	/* Don't support filesystems without read_iter/write_iter */
+	if (!filp->f_op->read_iter || !filp->f_op->write_iter) {
+		nfs_local_disable(clp);
+		status = -EAGAIN;
+		goto out_fput;
+	}
 
 	switch (mode) {
 	case FMODE_READ:
@@ -542,8 +548,8 @@ nfs_local_doio(struct nfs_client *clp, const struct cred *cred,
 	default:
 		dprintk("%s: invalid mode: %d\n", __func__,
 			hdr->rw_mode);
-		fput(filp);
-		return -EINVAL;
+		status = -EINVAL;
+		goto out_fput;
 	}
 
 	fput(filp);
@@ -557,6 +563,9 @@ nfs_local_doio(struct nfs_client *clp, const struct cred *cred,
 		hdr->task.tk_status = status;
 	}
 
+	return status;
+out_fput:
+	fput(filp);
 	return status;
 }
 EXPORT_SYMBOL_GPL(nfs_local_doio);
