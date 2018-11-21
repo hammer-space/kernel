@@ -642,7 +642,6 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 
 	if (localio) {
 		/* mark hdr */
-		set_bit(NFS_IOHDR_LOCALIO, &hdr->flags);
 		ret = nfs_local_doio(clp, cred, hdr);
 
 		if (ret < 0 && !test_and_set_bit(NFS_IOHDR_REDO, &hdr->flags)) {
