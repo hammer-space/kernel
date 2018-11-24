@@ -427,9 +427,6 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp)
 	ppage = &hdr->args.pages[hdr->args.pgbase >> PAGE_SHIFT];
 	pgbase = hdr->args.pgbase & ~PAGE_MASK;
 
-	/* It is always better to defer the commit */
-	hdr->args.stable = NFS_UNSTABLE;
-
 	oldfs = get_fs();
 	set_fs(KERNEL_DS);
 	do {
