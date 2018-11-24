@@ -642,7 +642,9 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 
 	if (localio) {
 		/* mark hdr */
-		ret = nfs_local_doio(clp, cred, hdr);
+		ret = nfs_local_doio(clp, cred, hdr, call_ops);
+		if (ret == -EIOCBQUEUED)
+			return 0;
 
 		if (ret < 0 && !test_and_set_bit(NFS_IOHDR_REDO, &hdr->flags)) {
 			/* local IO fails, resend all pages */

@@ -415,7 +415,7 @@ extern void nfs_local_probe(struct nfs_client *);
 extern struct file *nfs_local_open_fh(struct nfs_client *, const struct cred *,
 				      struct nfs_fh *, const fmode_t);
 extern int nfs_local_doio(struct nfs_client *, const struct cred *,
-			  struct nfs_pgio_header *);
+		struct nfs_pgio_header *, const struct rpc_call_ops *);
 extern int nfs_local_commit(struct nfs_client *, const struct cred *,
 			    struct nfs_commit_data *);
 extern void nfs_probe_local_addr(struct nfs_client *clnt);

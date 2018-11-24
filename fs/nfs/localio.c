@@ -46,6 +46,7 @@ struct nfs_local_kiocb {
 	struct kiocb		kiocb;
 	struct bio_vec		*bvec;
 	struct nfs_pgio_header	*hdr;
+	struct work_struct	work;
 };
 
 /*
@@ -393,8 +394,83 @@ nfs_local_iter_init(struct iov_iter *i, struct nfs_local_kiocb *iocb, int dir)
 				hdr->page_array.npages, hdr->args.count);
 }
 
+static void
+nfs_local_pgio_init(struct nfs_pgio_header *hdr,
+		const struct rpc_call_ops *call_ops)
+{
+	hdr->task.tk_ops = call_ops;
+	if (!hdr->task.tk_start)
+		hdr->task.tk_start = ktime_get();
+}
+
+static void
+nfs_local_pgio_done(struct nfs_pgio_header *hdr, long status)
+{
+	if (status >= 0) {
+		hdr->res.count = status;
+		hdr->res.op_status = NFS4_OK;
+		hdr->task.tk_status = 0;
+	} else {
+		hdr->res.op_status = nfs4errno(status);
+		hdr->task.tk_status = status;
+	}
+}
+
+static void
+nfs_local_pgio_complete_work(struct work_struct *work)
+{
+	struct nfs_local_kiocb *iocb = container_of(work,
+			struct nfs_local_kiocb, work);
+	struct nfs_pgio_header *hdr = iocb->hdr;
+	const struct rpc_call_ops *call_ops = hdr->task.tk_ops;
+
+	fput(iocb->kiocb.ki_filp);
+	nfs_local_iocb_free(iocb);
+	call_ops->rpc_call_done(&hdr->task, hdr);
+	call_ops->rpc_release(hdr);
+}
+
+/*
+ * Complete the I/O from iocb->kiocb.ki_complete()
+ *
+ * Note that this function can be called from a bottom half context,
+ * hence we need to queue the fput() etc to a workqueue
+ */
+static void
+nfs_local_pgio_complete(struct nfs_local_kiocb *iocb)
+{
+	queue_work(nfsiod_workqueue, &iocb->work);
+}
+
+static void
+nfs_local_read_done(struct nfs_local_kiocb *iocb, long status)
+{
+	struct nfs_pgio_header *hdr = iocb->hdr;
+	struct file *filp = iocb->kiocb.ki_filp;
+
+	nfs_local_pgio_done(hdr, status);
+
+	if (hdr->res.count != hdr->args.count ||
+	    hdr->args.offset + hdr->res.count >= i_size_read(file_inode(filp)))
+		hdr->res.eof = true;
+
+	dprintk("%s: read %ld bytes eof %d.\n", __func__,
+			status > 0 ? status : 0, hdr->res.eof);
+}
+
+static void
+nfs_local_read_aio_complete(struct kiocb *kiocb, long ret, long ret2)
+{
+	struct nfs_local_kiocb *iocb = container_of(kiocb,
+			struct nfs_local_kiocb, kiocb);
+
+	nfs_local_read_done(iocb, ret);
+	nfs_local_pgio_complete(iocb);
+}
+
 static int
-nfs_do_local_read(struct nfs_pgio_header *hdr, struct file *filp)
+nfs_do_local_read(struct nfs_pgio_header *hdr, struct file *filp,
+		const struct rpc_call_ops *call_ops)
 {
 	struct nfs_local_kiocb *iocb;
 	struct iov_iter iter;
@@ -408,19 +484,17 @@ nfs_do_local_read(struct nfs_pgio_header *hdr, struct file *filp)
 		return -ENOMEM;
 	nfs_local_iter_init(&iter, iocb, READ);
 
+	nfs_local_pgio_init(hdr, call_ops);
 	hdr->res.eof = false;
 
+	INIT_WORK(&iocb->work, nfs_local_pgio_complete_work);
+	iocb->kiocb.ki_complete = nfs_local_read_aio_complete;
+
 	status = call_read_iter(filp, &iocb->kiocb, &iter);
-	if (status >= 0) {
-		if (status != hdr->args.count ||
-		    hdr->args.offset + status >= i_size_read(file_inode(filp)))
-			hdr->res.eof = true;
+	if (status != -EIOCBQUEUED) {
+		nfs_local_read_done(iocb, status);
+		nfs_local_iocb_free(iocb);
 	}
-
-	dprintk("%s: read %zd bytes eof %d.\n", __func__,
-			status > 0 ? status : 0, hdr->res.eof);
-
-	nfs_local_iocb_free(iocb);
 	return status;
 }
 
@@ -467,8 +541,42 @@ nfs_get_vfs_attr(struct file *filp, struct nfs_fattr *fattr)
 	}
 }
 
+static void
+nfs_local_write_done(struct nfs_local_kiocb *iocb, long status)
+{
+	struct nfs_pgio_header *hdr = iocb->hdr;
+
+	dprintk("%s: wrote %ld bytes.\n", __func__, status > 0 ? status : 0);
+
+	nfs_local_pgio_done(hdr, status);
+
+	nfs_set_local_verifier(hdr->res.verf,
+			nfs_iocb_to_stable_how(&iocb->kiocb));
+}
+
+static void
+nfs_local_write_aio_complete_work(struct work_struct *work)
+{
+	struct nfs_local_kiocb *iocb = container_of(work,
+			struct nfs_local_kiocb, work);
+
+	nfs_get_vfs_attr(iocb->kiocb.ki_filp, iocb->hdr->res.fattr);
+	nfs_local_pgio_complete_work(work);
+}
+
+static void
+nfs_local_write_aio_complete(struct kiocb *kiocb, long ret, long ret2)
+{
+	struct nfs_local_kiocb *iocb = container_of(kiocb,
+			struct nfs_local_kiocb, kiocb);
+
+	nfs_local_write_done(iocb, ret);
+	nfs_local_pgio_complete(iocb);
+}
+
 static int
-nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp)
+nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp,
+		const struct rpc_call_ops *call_ops)
 {
 	struct nfs_local_kiocb *iocb;
 	struct iov_iter iter;
@@ -492,16 +600,17 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp)
 	case NFS_FILE_SYNC:
 		iocb->kiocb.ki_flags |= IOCB_DSYNC|IOCB_SYNC;
 	}
+	nfs_local_pgio_init(hdr, call_ops);
+
+	INIT_WORK(&iocb->work, nfs_local_write_aio_complete_work);
+	iocb->kiocb.ki_complete = nfs_local_write_aio_complete;
 
 	status = call_write_iter(filp, &iocb->kiocb, &iter);
-
-	dprintk("%s: wrote %zd bytes.\n", __func__, status > 0 ? status : 0);
-
-	nfs_set_local_verifier(hdr->res.verf,
-			nfs_iocb_to_stable_how(&iocb->kiocb));
-	nfs_get_vfs_attr(filp, hdr->res.fattr);
-
-	nfs_local_iocb_free(iocb);
+	if (status != -EIOCBQUEUED) {
+		nfs_local_write_done(iocb, status);
+		nfs_get_vfs_attr(filp, hdr->res.fattr);
+		nfs_local_iocb_free(iocb);
+	}
 	return status;
 }
 
@@ -560,7 +669,8 @@ nfs_local_file_open_hdr(struct nfs_client *clp, const struct cred *cred,
 
 int
 nfs_local_doio(struct nfs_client *clp, const struct cred *cred,
-	       struct nfs_pgio_header *hdr)
+	       struct nfs_pgio_header *hdr,
+	       const struct rpc_call_ops *call_ops)
 {
 	struct file *filp;
 	int status = 0;
@@ -584,32 +694,20 @@ nfs_local_doio(struct nfs_client *clp, const struct cred *cred,
 
 	switch (mode) {
 	case FMODE_READ:
-		status = nfs_do_local_read(hdr, filp);
+		status = nfs_do_local_read(hdr, filp, call_ops);
 		break;
 	case FMODE_WRITE:
-		status = nfs_do_local_write(hdr, filp);
+		status = nfs_do_local_write(hdr, filp, call_ops);
 		break;
 	default:
 		dprintk("%s: invalid mode: %d\n", __func__,
 			hdr->rw_mode);
 		status = -EINVAL;
-		goto out_fput;
 	}
-
-	fput(filp);
-
-	if (status >= 0) {
-		hdr->res.count = status;
-		hdr->res.op_status = NFS4_OK;
-		hdr->task.tk_status = 0;
-	} else {
-		hdr->res.op_status = nfs4errno(status);
-		hdr->task.tk_status = status;
-	}
-
-	return status;
 out_fput:
-	fput(filp);
+	if (status != -EIOCBQUEUED)
+		fput(filp);
+
 	return status;
 }
 EXPORT_SYMBOL_GPL(nfs_local_doio);
