@@ -431,6 +431,20 @@ nfs_set_local_verifier(struct nfs_writeverf *verf, enum nfs3_stable_how how)
 	verf->committed = how;
 }
 
+static enum nfs3_stable_how
+nfs_iocb_to_stable_how(struct kiocb *kiocb)
+{
+	switch (kiocb->ki_flags & (IOCB_DSYNC|IOCB_SYNC)) {
+	default:
+		break;
+	case IOCB_DSYNC:
+		return NFS_DATA_SYNC;
+	case IOCB_DSYNC|IOCB_SYNC:
+		return NFS_FILE_SYNC;
+	}
+	return NFS_UNSTABLE;
+}
+
 static void
 nfs_get_vfs_attr(struct file *filp, struct nfs_fattr *fattr)
 {
@@ -483,7 +497,8 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp)
 
 	dprintk("%s: wrote %zd bytes.\n", __func__, status > 0 ? status : 0);
 
-	nfs_set_local_verifier(hdr->res.verf, hdr->args.stable);
+	nfs_set_local_verifier(hdr->res.verf,
+			nfs_iocb_to_stable_how(&iocb->kiocb));
 	nfs_get_vfs_attr(filp, hdr->res.fattr);
 
 	nfs_local_iocb_free(iocb);
