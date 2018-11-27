@@ -414,7 +414,8 @@ extern void nfs_local_disable(struct nfs_client *);
 extern void nfs_local_probe(struct nfs_client *);
 extern struct file *nfs_local_open_fh(struct nfs_client *, struct rpc_cred *,
 				      struct nfs_fh *, const fmode_t);
-extern int nfs_local_doio(struct nfs_client *, struct rpc_cred *, struct nfs_pgio_header *);
+extern int nfs_local_doio(struct nfs_client *, struct rpc_cred *,
+		struct nfs_pgio_header *, const struct rpc_call_ops *);
 extern int nfs_local_commit(struct nfs_client *, struct rpc_cred *, struct nfs_commit_data *);
 extern void nfs_probe_local_addr(struct nfs_client *clnt);
 extern bool nfs_server_is_local(const struct nfs_client *clp);
