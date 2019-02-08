@@ -8286,6 +8286,7 @@ const struct rpc_procinfo nfs4_procedures[] = {
 	PROC42(CLONE,		enc_clone,		dec_clone),
 	PROC42(COPY,		enc_copy,		dec_copy),
 	PROC(LOOKUPP,		enc_lookupp,		dec_lookupp),
+	PROC42(LAYOUTERROR,	enc_layouterror,	dec_layouterror),
 };
 
 static unsigned int nfs_version4_counts[ARRAY_SIZE(nfs4_procedures)];
