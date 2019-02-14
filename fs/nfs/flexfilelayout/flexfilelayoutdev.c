@@ -410,7 +410,7 @@ static bool ff_layout_ds_is_local(struct nfs4_pnfs_ds *ds)
 /**
  * nfs4_ff_layout_prepare_ds - prepare a DS connection for an RPC call
  * @lseg: the layout segment we're operating on
- * @ds_idx: index of the DS to use
+ * @mirror: layout mirror describing the DS to use
  * @fail_return: return layout on connect failure?
  *
  * Try to prepare a DS connection to accept an RPC call. This involves
@@ -425,26 +425,19 @@ static bool ff_layout_ds_is_local(struct nfs4_pnfs_ds *ds)
  * Returns a pointer to a connected DS object on success or NULL on failure.
  */
 struct nfs4_pnfs_ds *
-nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg, u32 ds_idx,
+nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg,
+			  struct nfs4_ff_layout_mirror *mirror,
 			  bool fail_return)
 {
-	struct nfs4_ff_layout_mirror *mirror = FF_LAYOUT_COMP(lseg, ds_idx);
 	struct nfs4_pnfs_ds *ds = NULL;
-	struct nfs4_deviceid_node *devid;
+	struct nfs4_deviceid_node *devid = &mirror->mirror_ds->id_node;
 	struct inode *ino = lseg->pls_layout->plh_inode;
 	struct nfs_server *s = NFS_SERVER(ino);
 	unsigned int max_payload;
 	int status;
 
-	if (!ff_layout_mirror_valid(lseg, mirror, true)) {
-		pr_err_ratelimited("NFS: %s: No data server for offset index %d\n",
-			__func__, ds_idx);
+	if (!ff_layout_mirror_valid(lseg, mirror, true))
 		goto out;
-	}
-
-	devid = &mirror->mirror_ds->id_node;
-	if (ff_layout_test_devid_unavailable(devid))
-		goto out_fail;
 
 	ds = mirror->mirror_ds->ds;
 	/* matching smp_wmb() in _nfs4_pnfs_v3/4_ds_connect */
@@ -481,7 +474,6 @@ nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg, u32 ds_idx,
 			mirror->mirror_ds->ds_versions[0].wsize = max_payload;
 		goto out;
 	}
-out_fail:
 	ff_layout_track_ds_error(FF_LAYOUT_FROM_HDR(lseg->pls_layout),
 				 mirror, lseg->pls_range.offset,
 				 lseg->pls_range.length, NFS4ERR_NXIO,
