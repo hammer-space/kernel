@@ -1117,7 +1117,8 @@ err_ptr:
 	nfs_page_group_unlock(req);
 	return 0;
 out_cleanup_subreq:
-	nfs_pageio_cleanup_request(desc, subreq);
+	if (req != subreq)
+		nfs_pageio_cleanup_request(desc, subreq);
 	return 0;
 }
 
