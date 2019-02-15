@@ -1145,6 +1145,8 @@ static int nfs_do_recoalesce(struct nfs_pageio_descriptor *desc)
 			nfs_list_remove_request(req);
 			if (__nfs_pageio_add_request(desc, req))
 				continue;
+			/* Add request back to the head of the list */
+			list_add(&req->wb_list, &head);
 			if (desc->pg_error < 0) {
 				list_splice_tail(&head, &mirror->pg_list);
 				mirror->pg_recoalesce = 1;
