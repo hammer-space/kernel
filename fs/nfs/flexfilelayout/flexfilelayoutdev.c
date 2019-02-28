@@ -493,15 +493,18 @@ ff_layout_get_ds_cred(struct pnfs_layout_segment *lseg, u32 ds_idx,
 }
 
 /**
-* Find or create a DS rpc client with th MDS server rpc client auth flavor
-* in the nfs_client cl_ds_clients list.
-*/
+ * nfs4_ff_find_or_create_ds_client - Find or create a DS rpc client
+ * @mirror: pointer to the mirror
+ * @ds_clp: nfs_client for the DS
+ * @inode: pointer to inode
+ *
+ * Find or create a DS rpc client with th MDS server rpc client auth flavor
+ * in the nfs_client cl_ds_clients list.
+ */
 struct rpc_clnt *
-nfs4_ff_find_or_create_ds_client(struct pnfs_layout_segment *lseg, u32 ds_idx,
+nfs4_ff_find_or_create_ds_client(struct nfs4_ff_layout_mirror *mirror,
 				 struct nfs_client *ds_clp, struct inode *inode)
 {
-	struct nfs4_ff_layout_mirror *mirror = FF_LAYOUT_COMP(lseg, ds_idx);
-
 	switch (mirror->mirror_ds->ds_versions[0].version) {
 	case 3:
 		/* For NFSv3 DS, flavor is set when creating DS connections */
