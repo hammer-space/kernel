@@ -399,7 +399,6 @@ nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg,
 			  bool fail_return)
 {
 	struct nfs4_pnfs_ds *ds = NULL;
-	struct nfs4_deviceid_node *devid = &mirror->mirror_ds->id_node;
 	struct inode *ino = lseg->pls_layout->plh_inode;
 	struct nfs_server *s = NFS_SERVER(ino);
 	unsigned int max_payload;
@@ -418,8 +417,8 @@ nfs4_ff_layout_prepare_ds(struct pnfs_layout_segment *lseg,
 	/* FIXME: For now we assume the server sent only one version of NFS
 	 * to use for the DS.
 	 */
-	status = nfs4_pnfs_ds_connect(s, ds, devid, dataserver_timeo,
-			     dataserver_retrans,
+	status = nfs4_pnfs_ds_connect(s, ds, &mirror->mirror_ds->id_node,
+			     dataserver_timeo, dataserver_retrans,
 			     mirror->mirror_ds->ds_versions[0].version,
 			     mirror->mirror_ds->ds_versions[0].minor_version);
 
