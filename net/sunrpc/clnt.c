@@ -1779,7 +1779,7 @@ call_encode(struct rpc_task *task)
 		xprt_request_enqueue_receive(task);
 	xprt_request_enqueue_transmit(task);
 out:
-	task->tk_action = call_bind;
+	task->tk_action = call_transmit;
 }
 
 /*
@@ -1975,6 +1975,12 @@ call_transmit(struct rpc_task *task)
 	if (test_bit(RPC_TASK_NEED_XMIT, &task->tk_runstate)) {
 		if (!xprt_prepare_transmit(task))
 			return;
+		/* Check that the connection is OK */
+		if (!xprt_connected(task->tk_xprt) ||
+		    !xprt_bound(task->tk_xprt)) {
+			task->tk_action = call_bind;
+			return;
+		}
 		xprt_transmit(task);
 	}
 	task->tk_action = call_transmit_status;
