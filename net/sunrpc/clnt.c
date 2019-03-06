@@ -2064,18 +2064,13 @@ call_bc_transmit(struct rpc_task *task)
 {
 	struct rpc_rqst *req = task->tk_rqstp;
 
-	task->tk_status = 0;
+	task->tk_action = call_bc_transmit_status;
 	if (test_bit(RPC_TASK_NEED_XMIT, &task->tk_runstate)) {
 		if (!xprt_prepare_transmit(task))
 			return;
-		if (!xprt_connected(req->rq_xprt) ||
-		    !xprt_bound(req->rq_xprt)) {
-			rpc_exit(task, -ENOTCONN);
-			return;
-		}
+		task->tk_status = 0;
 		xprt_transmit(task);
 	}
-	task->tk_action = call_bc_transmit_status;
 	xprt_end_transmit(task);
 }
 
