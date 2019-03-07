@@ -2068,8 +2068,6 @@ call_bc_encode(struct rpc_task *task)
 static void
 call_bc_transmit(struct rpc_task *task)
 {
-	struct rpc_rqst *req = task->tk_rqstp;
-
 	task->tk_action = call_bc_transmit_status;
 	if (test_bit(RPC_TASK_NEED_XMIT, &task->tk_runstate)) {
 		if (!xprt_prepare_transmit(task))
