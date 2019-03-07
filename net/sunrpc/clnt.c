@@ -1975,6 +1975,12 @@ call_transmit(struct rpc_task *task)
 		if (!xprt_prepare_transmit(task))
 			return;
 		task->tk_status = 0;
+		/* Check that the connection is OK */
+		if (!xprt_connected(task->tk_xprt) ||
+		    !xprt_bound(task->tk_xprt)) {
+			task->tk_action = call_bind;
+			return;
+		}
 		xprt_transmit(task);
 	}
 	xprt_end_transmit(task);
