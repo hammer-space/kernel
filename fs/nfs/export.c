@@ -218,5 +218,6 @@ const struct export_operations nfs_export_ops = {
 	.getattr = nfs_exp_getattr,
 	.flags = EXPORT_OP_NOWCC|EXPORT_OP_NOSUBTREECHK|
 		EXPORT_OP_CLOSE_BEFORE_UNLINK|
-		EXPORT_NO_NFS4_HACK|EXPORT_NO_RESCUE_HACK,
+		EXPORT_NO_NFS4_HACK|EXPORT_NO_RESCUE_HACK|
+		EXPORT_NO_READDIRPLUS,
 };

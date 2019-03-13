@@ -7,6 +7,7 @@
 
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
+#include <linux/exportfs.h>
 #include <linux/magic.h>
 
 #include "cache.h"
@@ -529,7 +530,8 @@ nfsd3_proc_readdirplus(struct svc_rqst *rqstp)
 	if (nfserr)
 		RETURN_STATUS(nfserr);
 
-	if (resp->fh.fh_export->ex_flags & NFSEXP_NOREADDIRPLUS)
+	if ((resp->fh.fh_export->ex_flags & NFSEXP_NOREADDIRPLUS) ||
+	    (resp->fh.fh_export->ex_path.mnt->mnt_sb->s_export_op->flags & EXPORT_NO_READDIRPLUS))
 		RETURN_STATUS(nfserr_notsupp);
 
 	nfserr = nfsd_readdir(rqstp, &resp->fh,
