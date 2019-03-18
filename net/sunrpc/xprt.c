@@ -1339,6 +1339,10 @@ xprt_request_transmit(struct rpc_rqst *req, struct rpc_task *snd_task)
 			if (status < 0)
 				goto out_dequeue;
 		}
+		if (RPC_SIGNALLED(task)) {
+			status = -ERESTARTSYS;
+			goto out_dequeue;
+		}
 	}
 
 	/*
