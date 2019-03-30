@@ -306,6 +306,35 @@ static bool nfsd_needs_lockd(void)
 #endif
 }
 
+void nfsd_copy_boot_verifier(__be32 verf[2], struct nfsd_net *nn)
+{
+	int seq;
+
+	do {
+		read_seqbegin_or_lock(&nn->boot_lock, &seq);
+		/*
+		 * This is opaque to client, so no need to byte-swap. Use
+		 * __force to keep sparse happy. y2038 time_t overflow is
+		 * irrelevant in this usage
+		 */
+		verf[0] = (__force __be32)nn->nfssvc_boot.tv_sec;
+		verf[1] = (__force __be32)nn->nfssvc_boot.tv_nsec;
+	} while (need_seqretry(&nn->boot_lock, seq));
+	done_seqretry(&nn->boot_lock, seq);
+}
+
+void nfsd_reset_boot_verifier_locked(struct nfsd_net *nn)
+{
+	ktime_get_real_ts64(&nn->nfssvc_boot);
+}
+
+void nfsd_reset_boot_verifier(struct nfsd_net *nn)
+{
+	write_seqlock(&nn->boot_lock);
+	nfsd_reset_boot_verifier_locked(nn);
+	write_sequnlock(&nn->boot_lock);
+}
+
 static int nfsd_startup_net(int nrservs, struct net *net, const struct cred *cred)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
@@ -558,7 +587,7 @@ int nfsd_create_serv(struct net *net)
 #endif
 	}
 	atomic_inc(&nn->ntf_refcnt);
-	ktime_get_real_ts64(&nn->nfssvc_boot); /* record boot time */
+	nfsd_reset_boot_verifier(nn);
 	return 0;
 }
 

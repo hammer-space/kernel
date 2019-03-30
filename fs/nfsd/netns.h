@@ -109,6 +109,7 @@ struct nfsd_net {
 
 	/* Time of server startup */
 	struct timespec64 nfssvc_boot;
+	seqlock_t boot_lock;
 
 	/*
 	 * Max number of connections this nfsd container will allow. Defaults
@@ -137,4 +138,7 @@ struct nfsd_net {
 #define nfsd_netns_ready(nn) ((nn)->sessionid_hashtbl)
 
 extern unsigned int nfsd_net_id;
+
+void nfsd_copy_boot_verifier(__be32 verf[2], struct nfsd_net *nn);
+void nfsd_reset_boot_verifier(struct nfsd_net *nn);
 #endif /* __NFSD_NETNS_H__ */

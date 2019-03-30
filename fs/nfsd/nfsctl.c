@@ -1252,6 +1252,7 @@ static __net_init int nfsd_init_net(struct net *net)
 
 	atomic_set(&nn->ntf_refcnt, 0);
 	init_waitqueue_head(&nn->ntf_wq);
+	seqlock_init(&nn->boot_lock);
 	return 0;
 
 out_idmap_error:
