@@ -227,7 +227,7 @@ int nfsd_nrthreads(struct net *net)
 	return rv;
 }
 
-static int nfsd_init_socks(struct net *net)
+static int nfsd_init_socks(struct net *net, const struct cred *cred)
 {
 	int error;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
@@ -236,12 +236,12 @@ static int nfsd_init_socks(struct net *net)
 		return 0;
 
 	error = svc_create_xprt(nn->nfsd_serv, "udp", net, PF_INET, NFS_PORT,
-					SVC_SOCK_DEFAULTS);
+					SVC_SOCK_DEFAULTS, cred);
 	if (error < 0)
 		return error;
 
 	error = svc_create_xprt(nn->nfsd_serv, "tcp", net, PF_INET, NFS_PORT,
-					SVC_SOCK_DEFAULTS);
+					SVC_SOCK_DEFAULTS, cred);
 	if (error < 0)
 		return error;
 
@@ -306,7 +306,7 @@ static bool nfsd_needs_lockd(void)
 #endif
 }
 
-static int nfsd_startup_net(int nrservs, struct net *net)
+static int nfsd_startup_net(int nrservs, struct net *net, const struct cred *cred)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 	int ret;
@@ -317,7 +317,7 @@ static int nfsd_startup_net(int nrservs, struct net *net)
 	ret = nfsd_startup_generic(nrservs);
 	if (ret)
 		return ret;
-	ret = nfsd_init_socks(net);
+	ret = nfsd_init_socks(net, cred);
 	if (ret)
 		goto out_socks;
 
@@ -658,7 +658,7 @@ int nfsd_set_nrthreads(int n, int *nthreads, struct net *net)
  * this is the first time nrservs is nonzero.
  */
 int
-nfsd_svc(int nrservs, struct net *net)
+nfsd_svc(int nrservs, struct net *net, const struct cred *cred)
 {
 	int	error;
 	bool	nfsd_up_before;
@@ -680,7 +680,7 @@ nfsd_svc(int nrservs, struct net *net)
 
 	nfsd_up_before = nn->nfsd_net_up;
 
-	error = nfsd_startup_net(nrservs, net);
+	error = nfsd_startup_net(nrservs, net, cred);
 	if (error)
 		goto out_destroy;
 	error = nn->nfsd_serv->sv_ops->svo_setup(nn->nfsd_serv,
