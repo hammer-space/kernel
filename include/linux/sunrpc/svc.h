@@ -422,6 +422,11 @@ struct svc_program {
 	__be32			(*pg_init_request)(struct svc_rqst *,
 						   const struct svc_program *,
 						   struct svc_process_info *);
+	int			(*pg_rpcbind_set)(struct net *net,
+						  const struct svc_program *,
+						  u32 version, int family,
+						  unsigned short proto,
+						  unsigned short port);
 };
 
 /*
@@ -529,6 +534,16 @@ __be32		   svc_return_autherr(struct svc_rqst *rqstp, __be32 auth_err);
 __be32		   svc_generic_init_request(struct svc_rqst *rqstp,
 					    const struct svc_program *progp,
 					    struct svc_process_info *procinfo);
+int		   svc_generic_rpcbind_set(struct net *net,
+					   const struct svc_program *progp,
+					   u32 version, int family,
+					   unsigned short proto,
+					   unsigned short port);
+int		   svc_rpcbind_set_version(struct net *net,
+					   const struct svc_program *progp,
+					   u32 version, int family,
+					   unsigned short proto,
+					   unsigned short port);
 unsigned int	   svc_fill_write_vector(struct svc_rqst *rqstp,
 					 struct page **pages,
 					 struct kvec *first, size_t total);
