@@ -83,6 +83,7 @@ struct nfs_client_initdata {
 	u32 minorversion;
 	struct net *net;
 	const struct rpc_timeout *timeparms;
+	const struct cred *cred;
 };
 
 /*
