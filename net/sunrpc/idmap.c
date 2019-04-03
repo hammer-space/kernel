@@ -69,7 +69,15 @@ struct idmap {
 	struct rpc_pipe		*idmap_pipe;
 	struct sunrpc_idmap_legacy_upcalldata *idmap_upcall_data;
 	struct mutex		idmap_mutex;
+	const struct cred	*cred;
 };
+
+static struct user_namespace *idmap_userns(const struct idmap *idmap)
+{
+	if (idmap && idmap->cred)
+		return idmap->cred->user_ns;
+	return &init_user_ns;
+}
 
 int sunrpc_idmap_string_to_numeric(const char *name, size_t namelen, __u32 *res)
 {
@@ -189,14 +197,15 @@ static struct key *sunrpc_idmap_request_key(const char *name, size_t namelen,
 					 const char *type, struct idmap *idmap)
 {
 	char *desc;
-	struct key *rkey;
+	struct key *rkey = ERR_PTR(-EAGAIN);
 	ssize_t ret;
 
 	ret = sunrpc_idmap_get_desc(name, namelen, type, strlen(type), &desc);
 	if (ret <= 0)
 		return ERR_PTR(ret);
 
-	rkey = request_key(&key_type_id_resolver, desc, "");
+	if (!idmap->cred || idmap->cred->user_ns == &init_user_ns)
+		rkey = request_key(&key_type_id_resolver, desc, "");
 	if (IS_ERR(rkey)) {
 		mutex_lock(&idmap->idmap_mutex);
 		rkey = request_key_with_auxdata(&key_type_id_resolver_legacy,
@@ -379,6 +388,9 @@ sunrpc_idmap_new(struct rpc_clnt *clnt)
 	if (idmap == NULL)
 		return -ENOMEM;
 
+	mutex_init(&idmap->idmap_mutex);
+	idmap->cred = clnt->cl_cred;
+
 	rpc_init_pipe_dir_object(&idmap->idmap_pdo,
 			&sunrpc_idmap_pipe_dir_object_ops,
 			idmap);
@@ -389,7 +401,6 @@ sunrpc_idmap_new(struct rpc_clnt *clnt)
 		goto err;
 	}
 	idmap->idmap_pipe = pipe;
-	mutex_init(&idmap->idmap_mutex);
 
 	error = rpc_add_pipe_dir_object(rpc_net_ns(clnt),
 			&clnt->cl_pipedir_objects,
@@ -677,7 +688,7 @@ int sunrpc_idmap_name_to_uid(struct rpc_clnt *clnt, const char *name, size_t nam
 		}
 	}
 	if (ret == 0 || ret == -ENOENT) {
-		*uid = make_kuid(&init_user_ns, id);
+		*uid = make_kuid(idmap_userns(idmap), id);
 		if (!uid_valid(*uid))
 			ret = -ERANGE;
 	}
@@ -709,7 +720,7 @@ int sunrpc_idmap_group_to_gid(struct rpc_clnt *clnt, const char *name, size_t na
 		}
 	}
 	if (ret == 0 || ret == -ENOENT) {
-		*gid = make_kgid(&init_user_ns, id);
+		*gid = make_kgid(idmap_userns(idmap), id);
 		if (!gid_valid(*gid))
 			ret = -ERANGE;
 	}
@@ -724,7 +735,7 @@ int sunrpc_idmap_uid_to_name(const struct rpc_clnt *clnt, kuid_t uid, char *buf,
 	int ret = -EINVAL;
 	__u32 id;
 
-	id = from_kuid(&init_user_ns, uid);
+	id = from_kuid_munged(idmap_userns(idmap), uid);
 	dprintk("RPC: %s, %u inomap=%d\n", __func__, id, nomap);
 
 	if (!nomap)
@@ -743,7 +754,7 @@ int sunrpc_idmap_gid_to_group(const struct rpc_clnt *clnt, kgid_t gid, char *buf
 	int ret = -EINVAL;
 	__u32 id;
 
-	id = from_kgid(&init_user_ns, gid);
+	id = from_kgid_munged(idmap_userns(idmap), gid);
 	if (!nomap)
 		ret = sunrpc_idmap_lookup_name(id, "group", buf, buflen, idmap);
 	if (ret < 0)
