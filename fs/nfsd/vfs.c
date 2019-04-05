@@ -47,6 +47,7 @@
 #include "vfs.h"
 #include "filecache.h"
 #include "trace.h"
+#include "netns.h"
 
 #define NFSDDBG_FACILITY		NFSDDBG_FILEOP
 
@@ -1003,6 +1004,7 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 				loff_t offset, struct kvec *vec, int vlen,
 				unsigned long *cnt, int stable)
 {
+	struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
 	struct svc_export	*exp;
 	struct iov_iter		iter;
 	__be32			nfserr;
@@ -1043,12 +1045,14 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 		host_err = wait_for_concurrent_writes(file);
 
 out_nfserr:
-	if (host_err >= 0) {
-		trace_nfsd_write_io_done(rqstp, fhp, offset, *cnt);
-		nfserr = nfs_ok;
-	} else {
+	if (host_err < 0) {
 		trace_nfsd_write_err(rqstp, fhp, offset, host_err);
 		nfserr = nfserrno(host_err);
+		if (host_err == -ETIMEDOUT)
+			nfsd_reset_boot_verifier(nn);
+	} else {
+		trace_nfsd_write_io_done(rqstp, fhp, offset, *cnt);
+		nfserr = 0;
 	}
 	if (test_bit(RQ_LOCAL, &rqstp->rq_flags))
 		current_restore_flags(pflags, PF_LESS_THROTTLE);
@@ -1142,6 +1146,7 @@ __be32
 nfsd_commit(struct svc_rqst *rqstp, struct svc_fh *fhp,
                loff_t offset, unsigned long count)
 {
+	struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
 	struct nfsd_file	*nf;
 	loff_t			end = LLONG_MAX;
 	__be32			err = nfserr_inval;
@@ -1170,9 +1175,11 @@ try_again:
 			retry = true;
 			goto try_again;
 		}
-		if (err2 != -EINVAL)
+		if (err2 != -EINVAL) {
 			err = nfserrno(err2);
-		else
+			if (err2 == -ETIMEDOUT)
+				nfsd_reset_boot_verifier(nn);
+		} else
 			err = nfserr_notsupp;
 	}
 
