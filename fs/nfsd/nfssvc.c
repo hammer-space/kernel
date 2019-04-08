@@ -33,19 +33,21 @@
 
 extern struct svc_program	nfsd_program;
 static int			nfsd(void *vrqstp);
+#if defined(CONFIG_NFSD_V2_ACL) || defined(CONFIG_NFSD_V3_ACL)
 static int			nfsd_acl_rpcbind_set(struct net *,
 						     const struct svc_program *,
 						     u32, int,
 						     unsigned short,
 						     unsigned short);
+static __be32			nfsd_acl_init_request(struct svc_rqst *,
+						const struct svc_program *,
+						struct svc_process_info *);
+#endif
 static int			nfsd_rpcbind_set(struct net *,
 						 const struct svc_program *,
 						 u32, int,
 						 unsigned short,
 						 unsigned short);
-static __be32			nfsd_acl_init_request(struct svc_rqst *,
-						const struct svc_program *,
-						struct svc_process_info *);
 static __be32			nfsd_init_request(struct svc_rqst *,
 						const struct svc_program *,
 						struct svc_process_info *);
@@ -139,14 +141,6 @@ struct svc_program		nfsd_program = {
 	.pg_init_request	= nfsd_init_request,
 	.pg_rpcbind_set		= nfsd_rpcbind_set,
 };
-
-static bool
-nfsd_support_acl_version(int vers)
-{
-	if (vers >= NFSD_ACL_MINVERS && vers < NFSD_ACL_NRVERS)
-		return nfsd_acl_version[vers] != NULL;
-	return false;
-}
 
 static bool
 nfsd_support_version(int vers)
@@ -790,6 +784,15 @@ out:
 	return error;
 }
 
+#if defined(CONFIG_NFSD_V2_ACL) || defined(CONFIG_NFSD_V3_ACL)
+static bool
+nfsd_support_acl_version(int vers)
+{
+	if (vers >= NFSD_ACL_MINVERS && vers < NFSD_ACL_NRVERS)
+		return nfsd_acl_version[vers] != NULL;
+	return false;
+}
+
 static int
 nfsd_acl_rpcbind_set(struct net *net, const struct svc_program *progp,
 		     u32 version, int family, unsigned short proto,
@@ -797,17 +800,6 @@ nfsd_acl_rpcbind_set(struct net *net, const struct svc_program *progp,
 {
 	if (!nfsd_support_acl_version(version) ||
 	    !nfsd_vers(net_generic(net, nfsd_net_id), version, NFSD_TEST))
-		return 0;
-	return svc_generic_rpcbind_set(net, progp, version, family,
-			proto, port);
-}
-
-static int
-nfsd_rpcbind_set(struct net *net, const struct svc_program *progp,
-		 u32 version, int family, unsigned short proto,
-		 unsigned short port)
-{
-	if (!nfsd_vers(net_generic(net, nfsd_net_id), version, NFSD_TEST))
 		return 0;
 	return svc_generic_rpcbind_set(net, progp, version, family,
 			proto, port);
@@ -844,6 +836,18 @@ nfsd_acl_init_request(struct svc_rqst *rqstp,
 		}
 	}
 	return rpc_prog_mismatch;
+}
+#endif
+
+static int
+nfsd_rpcbind_set(struct net *net, const struct svc_program *progp,
+		 u32 version, int family, unsigned short proto,
+		 unsigned short port)
+{
+	if (!nfsd_vers(net_generic(net, nfsd_net_id), version, NFSD_TEST))
+		return 0;
+	return svc_generic_rpcbind_set(net, progp, version, family,
+			proto, port);
 }
 
 static __be32
