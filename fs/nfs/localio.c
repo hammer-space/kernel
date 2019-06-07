@@ -605,7 +605,9 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp,
 	INIT_WORK(&iocb->work, nfs_local_write_aio_complete_work);
 	iocb->kiocb.ki_complete = nfs_local_write_aio_complete;
 
+	file_start_write(filp);
 	status = call_write_iter(filp, &iocb->kiocb, &iter);
+	file_end_write(filp);
 	if (status != -EIOCBQUEUED) {
 		nfs_local_write_done(iocb, status);
 		nfs_get_vfs_attr(filp, hdr->res.fattr);
