@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/python
 # SPDX-License-Identifier: GPL-2.0-only
 #
 # Copyright (C) 2018 Netronome Systems, Inc.
