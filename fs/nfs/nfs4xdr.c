@@ -1148,12 +1148,12 @@ static void encode_attrs(struct xdr_stream *xdr, const struct iattr *iap,
 	if (statx && (statx->fa_valid[0] & NFS_FA_VALID_TIME_BACKUP) &&
 	    (attrmask[1] & FATTR4_WORD1_TIME_BACKUP)) {
 		bmval[1] |= FATTR4_WORD1_TIME_BACKUP;
-		len += 12;
+		len += (nfstime4_maxsz << 2);
 	}
 	if (statx && (statx->fa_valid[0] & NFS_FA_VALID_TIME_CREATE) &&
 	    (attrmask[1] & FATTR4_WORD1_TIME_CREATE)) {
 		bmval[1] |= FATTR4_WORD1_TIME_CREATE;
-		len += 12;
+		len += (nfstime4_maxsz << 2);
 	}
 
 	if (statx && (statx->fa_valid[0] & NFS_FA_VALID_ARCHIVE) &&
@@ -1206,14 +1206,10 @@ static void encode_attrs(struct xdr_stream *xdr, const struct iattr *iap,
 		} else
 			*p++ = cpu_to_be32(NFS4_SET_TO_SERVER_TIME);
 	}
-	if (bmval[1] & FATTR4_WORD1_TIME_BACKUP) {
-		p = xdr_encode_hyper(p, (s64)statx->fa_time_backup.tv_sec);
-		*p++ = cpu_to_be32(statx->fa_time_backup.tv_nsec);
-	}
-	if (bmval[1] & FATTR4_WORD1_TIME_CREATE) {
-		p = xdr_encode_hyper(p, (s64)statx->fa_time_create.tv_sec);
-		*p++ = cpu_to_be32(statx->fa_time_create.tv_nsec);
-	}
+	if (bmval[1] & FATTR4_WORD1_TIME_BACKUP)
+		p = xdr_encode_nfstime4(p, &statx->fa_time_backup);
+	if (bmval[1] & FATTR4_WORD1_TIME_CREATE)
+		p = xdr_encode_nfstime4(p, &statx->fa_time_create);
 	if (bmval[1] & FATTR4_WORD1_TIME_MODIFY_SET) {
 		if (iap->ia_valid & ATTR_MTIME_SET) {
 			*p++ = cpu_to_be32(NFS4_SET_TO_CLIENT_TIME);
