@@ -26,7 +26,6 @@
 #include <linux/iversion.h>
 
 #include <linux/uaccess.h>
-#include <linux/sched/mm.h>
 
 #include "delegation.h"
 #include "internal.h"
@@ -719,13 +718,11 @@ int nfs_writepages(struct address_space *mapping, struct writeback_control *wbc)
 {
 	struct inode *inode = mapping->host;
 	struct nfs_pageio_descriptor pgio;
-	struct nfs_io_completion *ioc;
-	unsigned int pflags = memalloc_nofs_save();
+	struct nfs_io_completion *ioc = nfs_io_completion_alloc(GFP_NOFS);
 	int err;
 
 	nfs_inc_stats(inode, NFSIOS_VFSWRITEPAGES);
 
-	ioc = nfs_io_completion_alloc(GFP_NOFS);
 	if (ioc)
 		nfs_io_completion_init(ioc, nfs_io_completion_commit, inode);
 
@@ -735,8 +732,6 @@ int nfs_writepages(struct address_space *mapping, struct writeback_control *wbc)
 	err = write_cache_pages(mapping, wbc, nfs_writepages_callback, &pgio);
 	nfs_pageio_complete(&pgio);
 	nfs_io_completion_put(ioc);
-
-	memalloc_nofs_restore(pflags);
 
 	if (err < 0)
 		goto out_err;
