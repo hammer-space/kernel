@@ -440,6 +440,12 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 	if ((fattr->valid & NFS_ATTR_FATTR_TYPE) == 0)
 		goto out_no_inode;
 
+	if (!fh->size) {
+		WARN_ONCE(1, "NFS (%s): uninitialised filehandle detected",
+				__func__);
+		goto out_no_inode;
+	}
+
 	hash = nfs_fattr_to_ino_t(fattr);
 
 	inode = iget5_locked(sb, hash, nfs_find_actor, nfs_init_locked, &desc);
