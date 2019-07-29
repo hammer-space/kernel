@@ -1941,6 +1941,7 @@ _nfs4_opendata_reclaim_to_nfs4_state(struct nfs4_opendata *data)
 {
 	struct inode *inode = data->state->inode;
 	struct nfs4_state *state = data->state;
+	nfs4_stateid *open_stateid = NULL;
 	int ret;
 
 	if (!data->rpc_done) {
@@ -1960,10 +1961,10 @@ _nfs4_opendata_reclaim_to_nfs4_state(struct nfs4_opendata *data)
 				&data->o_res.delegation);
 update:
 	if (!(data->o_res.rflags & NFS4_OPEN_RESULT_NO_OPEN_STATEID))
-		update_open_stateid(state, &data->o_res.stateid, NULL,
-				data->o_arg.fmode);
-	else
-		update_open_stateid(state, NULL, NULL, data->o_arg.fmode);
+		open_stateid = &data->o_res.stateid;
+	if (!update_open_stateid(state, open_stateid,
+				NULL, data->o_arg.fmode))
+		return ERR_PTR(-EAGAIN);
 	refcount_inc(&state->count);
 
 	return state;
@@ -2015,6 +2016,7 @@ static struct nfs4_state *
 _nfs4_opendata_to_nfs4_state(struct nfs4_opendata *data)
 {
 	struct nfs4_state *state;
+	nfs4_stateid *open_stateid = NULL;
 
 	if (!data->rpc_done) {
 		state = nfs4_try_open_cached(data);
@@ -2031,10 +2033,12 @@ _nfs4_opendata_to_nfs4_state(struct nfs4_opendata *data)
 				data->o_arg.claim,
 				&data->o_res.delegation);
 	if (!(data->o_res.rflags & NFS4_OPEN_RESULT_NO_OPEN_STATEID))
-		update_open_stateid(state, &data->o_res.stateid, NULL,
-				data->o_arg.fmode);
-	else
-		update_open_stateid(state, NULL, NULL, data->o_arg.fmode);
+		open_stateid = &data->o_res.stateid;
+	if (!update_open_stateid(state, open_stateid,
+				NULL, data->o_arg.fmode)) {
+		nfs4_put_open_state(state);
+		state = ERR_PTR(-EAGAIN);
+	}
 out:
 	nfs_release_seqid(data->o_arg.seqid);
 	return state;
