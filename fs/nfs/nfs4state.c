@@ -1498,6 +1498,10 @@ static void nfs4_state_mark_open_context_bad(struct nfs4_state *state, int err)
 static void nfs4_state_mark_recovery_failed(struct nfs4_state *state, int error)
 {
 	set_bit(NFS_STATE_RECOVERY_FAILED, &state->flags);
+	pr_warn("NFSv4: state recovery failed for open inode %s/%Lu, "
+			"error = %d\n", state->inode->i_sb->s_id,
+			(unsigned long long)NFS_FILEID(state->inode),
+			error);
 	nfs4_state_mark_open_context_bad(state, error);
 }
 
