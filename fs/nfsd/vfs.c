@@ -406,9 +406,8 @@ nfsd_cached_files_handle_vfs_error(struct dentry *dentry, int err)
 			nfsd_file_close_inode_sync(inode);
 		if (dentry->d_flags & DCACHE_OP_WEAK_REVALIDATE &&
 		    dentry->d_op->d_weak_revalidate(dentry, LOOKUP_REVAL) > 0) {
-			printk(KERN_NOTICE
-				"%s: file %s still alive!\n", __func__,
-				dentry->d_name.name);
+			pr_notice("%s: file %pd2 error %d, but still alive!\n",
+				__func__, dentry, err);
 			return true;
 		}
 	default:
