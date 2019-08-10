@@ -143,7 +143,7 @@ static int expkey_parse(struct cache_detail *cd, char *mesg, int mlen)
 		if (!ek)
 			err = -ENOMEM;
 	} else {
-		err = kern_path(buf, LOOKUP_AUTOMOUNT, &key.ek_path);
+		err = kern_path(buf, 0, &key.ek_path);
 		if (err) {
 			/*
 			 * Ignore ETIMEDOUT/EAGAIN and just flush the
@@ -577,7 +577,7 @@ static int svc_export_parse(struct cache_detail *cd, char *mesg, int mlen)
 	if ((len = qword_get(&mesg, buf, PAGE_SIZE)) <= 0)
 		goto out1;
 
-	err = kern_path(buf, LOOKUP_AUTOMOUNT, &exp.ex_path);
+	err = kern_path(buf, 0, &exp.ex_path);
 	if (err) {
 		/*
 		 * Ignore ETIMEDOUT/EAGAIN and just flush the
@@ -932,7 +932,7 @@ exp_rootfh(struct net *net, struct auth_domain *clp, char *name,
 
 	err = -EPERM;
 	/* NB: we probably ought to check that it's NUL-terminated */
-	if (kern_path(name, LOOKUP_AUTOMOUNT, &path)) {
+	if (kern_path(name, 0, &path)) {
 		printk("nfsd: exp_rootfh path not found %s", name);
 		return err;
 	}
