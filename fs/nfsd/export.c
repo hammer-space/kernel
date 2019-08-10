@@ -144,8 +144,17 @@ static int expkey_parse(struct cache_detail *cd, char *mesg, int mlen)
 			err = -ENOMEM;
 	} else {
 		err = kern_path(buf, LOOKUP_AUTOMOUNT, &key.ek_path);
-		if (err)
+		if (err) {
+			/*
+			 * Ignore ETIMEDOUT/EAGAIN and just flush the
+			 * cache in order to trigger a retry.
+			 */
+			if (err == -ETIMEDOUT || err == -EAGAIN) {
+				err = 0;
+				goto out_flush;
+			}
 			goto out;
+		}
 
 		dprintk("Found the path %s\n", buf);
 
@@ -154,6 +163,7 @@ static int expkey_parse(struct cache_detail *cd, char *mesg, int mlen)
 			err = -ENOMEM;
 		path_put(&key.ek_path);
 	}
+out_flush:
 	cache_flush();
  out:
 	if (ek)
@@ -568,8 +578,17 @@ static int svc_export_parse(struct cache_detail *cd, char *mesg, int mlen)
 		goto out1;
 
 	err = kern_path(buf, LOOKUP_AUTOMOUNT, &exp.ex_path);
-	if (err)
+	if (err) {
+		/*
+		 * Ignore ETIMEDOUT/EAGAIN and just flush the
+		 * cache in order to trigger a retry.
+		 */
+		if (err == -ETIMEDOUT || err == -EAGAIN) {
+			cache_flush();
+			err = 0;
+		}
 		goto out1;
+	}
 
 	exp.ex_client = dom;
 	exp.cd = cd;
