@@ -216,7 +216,6 @@ struct export_operations {
 #define	EXPORT_OP_CLOSE_BEFORE_UNLINK	(0x4) /* close files before unlink */
 #define	EXPORT_NO_NFS4_HACK		(0x8) /* Don't allow NFSv4 exports */
 #define	EXPORT_NO_RESCUE_HACK		(0x10) /* Deny access to rescue threads */
-#define	EXPORT_NO_READDIRPLUS		(0x20) /* Don't allow readdirplus */
 	unsigned long	flags;
 };
 

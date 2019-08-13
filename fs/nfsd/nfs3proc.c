@@ -530,8 +530,7 @@ nfsd3_proc_readdirplus(struct svc_rqst *rqstp)
 	if (nfserr)
 		RETURN_STATUS(nfserr);
 
-	if ((resp->fh.fh_export->ex_flags & NFSEXP_NOREADDIRPLUS) ||
-	    (resp->fh.fh_export->ex_path.mnt->mnt_sb->s_export_op->flags & EXPORT_NO_READDIRPLUS))
+	if (resp->fh.fh_export->ex_flags & NFSEXP_NOREADDIRPLUS)
 		RETURN_STATUS(nfserr_notsupp);
 
 	nfserr = nfsd_readdir(rqstp, &resp->fh,
