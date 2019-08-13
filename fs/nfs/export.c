@@ -183,11 +183,15 @@ nfs_exp_getattr(struct path *path, struct kstat *stat, bool force)
 					| NFS_INO_INVALID_MTIME
 					| NFS_INO_INVALID_OTHER);
 	bool cache_force_reval = cache_validity & NFS_INO_REVAL_FORCED;
-	int ret;
+	int flags = AT_STATX_DONT_SYNC;
+	int ret, ret2 = 0;
 
 	if (have_delegated_mtime && !(cache_invalid_attr && cache_force_reval))
 		goto out_fillattr;
-	if (!nfs_need_revalidate_inode(inode)) {
+	if (!nfs_check_cache_invalid(inode, NFS_INO_INVALID_ATIME |
+				NFS_INO_INVALID_CTIME |
+				NFS_INO_INVALID_MTIME |
+				NFS_INO_INVALID_OTHER)) {
 		if (!S_ISREG(inode->i_mode))
 			goto out_fillattr;
 		if (!(mapping_tagged(inode->i_mapping, PAGECACHE_TAG_DIRTY) ||
@@ -195,20 +199,18 @@ nfs_exp_getattr(struct path *path, struct kstat *stat, bool force)
 			goto out_fillattr;
 	}
 
-	if (!force)
-		return -EAGAIN;
-	ret = vfs_getattr(path, stat, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
-	if (!ret)
-		stat->blocks = nfs_calc_block_size(stat->size);
-	return ret;
-
+	if (force)
+		flags = AT_STATX_SYNC_AS_STAT;
+	else
+		ret2 = -EAGAIN;
 out_fillattr:
-	generic_fillattr(inode, stat);
-	stat->ino = nfs_compat_user_ino64(NFS_FILEID(inode));
+	ret = vfs_getattr(path, stat, STATX_BASIC_STATS, flags);
+	if (ret < 0)
+		return ret;
 	stat->blocks = nfs_calc_block_size(stat->size);
 	if (S_ISDIR(inode->i_mode))
 		stat->blksize = NFS_SERVER(inode)->dtsize;
-	return 0;
+	return ret2;
 }
 
 const struct export_operations nfs_export_ops = {
