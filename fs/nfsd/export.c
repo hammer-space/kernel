@@ -151,7 +151,8 @@ static int expkey_parse(struct cache_detail *cd, char *mesg, int mlen)
 			 */
 			if (err == -ETIMEDOUT || err == -EAGAIN) {
 				err = 0;
-				goto out_flush;
+				cache_purge(cd);
+				goto out;
 			}
 			goto out;
 		}
@@ -163,7 +164,6 @@ static int expkey_parse(struct cache_detail *cd, char *mesg, int mlen)
 			err = -ENOMEM;
 		path_put(&key.ek_path);
 	}
-out_flush:
 	cache_flush();
  out:
 	if (ek)
@@ -584,7 +584,7 @@ static int svc_export_parse(struct cache_detail *cd, char *mesg, int mlen)
 		 * cache in order to trigger a retry.
 		 */
 		if (err == -ETIMEDOUT || err == -EAGAIN) {
-			cache_flush();
+			cache_purge(cd);
 			err = 0;
 		}
 		goto out1;
