@@ -900,7 +900,7 @@ static void nfs_readdirplus_parent_cache_hit(struct dentry *dentry)
 	dput(parent);
 }
 
-bool nfs_need_revalidate_inode(struct inode *inode)
+static bool nfs_need_revalidate_inode(struct inode *inode)
 {
 	if (NFS_I(inode)->cache_validity &
 			(NFS_INO_INVALID_ATTR|NFS_INO_INVALID_LABEL))
