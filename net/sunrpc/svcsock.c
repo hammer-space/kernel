@@ -315,6 +315,17 @@ static int svc_one_sock_name(struct svc_sock *svsk, char *buf, int remaining)
 	return len;
 }
 
+static char *svc_peer_sock_name(struct svc_sock *svsk, char *buf, size_t bufsz)
+{
+	struct sockaddr_storage address;
+	int err;
+
+	err = kernel_getpeername(svsk->sk_sock, (struct sockaddr *)&address);
+	if (err)
+		return NULL;
+	return __svc_print_addr((struct sockaddr *)&address, buf, bufsz);
+}
+
 /*
  * Generic recvfrom routine.
  */
@@ -1147,12 +1158,17 @@ static int svc_tcp_sendto(struct svc_rqst *rqstp)
 
 	sent = svc_sendto(rqstp, &rqstp->rq_res);
 	if (sent != xbufp->len) {
+		struct svc_sock *svsk = container_of(rqstp->rq_xprt,
+				struct svc_sock, sk_xprt);
+		char name[RPC_MAX_ADDRBUFLEN];
+
 		printk(KERN_NOTICE
 		       "rpc-srv/tcp: %s: %s %d when sending %d bytes "
-		       "- shutting down socket\n",
+		       "- shutting down socket (%s)\n",
 		       rqstp->rq_xprt->xpt_server->sv_name,
 		       (sent<0)?"got error":"sent only",
-		       sent, xbufp->len);
+		       sent, xbufp->len,
+		       svc_peer_sock_name(svsk, name, sizeof(name)));
 		set_bit(XPT_CLOSE, &rqstp->rq_xprt->xpt_flags);
 		svc_xprt_enqueue(rqstp->rq_xprt);
 		sent = -EAGAIN;
