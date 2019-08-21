@@ -268,6 +268,14 @@ static void nfs_readpage_retry(struct rpc_task *task,
 	nfs_inc_stats(hdr->inode, NFSIOS_SHORTREAD);
 	/* Has the server at least made some progress? */
 	if (resp->count == 0) {
+		static unsigned long    complain;
+
+		if (time_before(complain, jiffies)) {
+			printk(KERN_WARNING
+			       "NFS: Server read zero bytes, expected %u.\n",
+			       argp->count);
+			complain = jiffies + 300 * HZ;
+		}
 		nfs_set_pgio_error(hdr, -EIO, argp->offset);
 		return;
 	}
