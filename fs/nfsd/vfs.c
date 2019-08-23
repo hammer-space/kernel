@@ -938,6 +938,7 @@ static __be32 nfsd_finish_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		return 0;
 	} else {
 		trace_nfsd_read_err(rqstp, fhp, offset, host_err);
+		nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, host_err);
 		return nfserrno(host_err);
 	}
 }
@@ -1061,6 +1062,7 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 
 out_nfserr:
 	if (host_err < 0) {
+		nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, host_err);
 		trace_nfsd_write_err(rqstp, fhp, offset, host_err);
 		nfserr = nfserrno(host_err);
 		if (host_err == -ETIMEDOUT)
@@ -1089,9 +1091,7 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct nfsd_file	*nf;
 	struct file *file;
 	__be32 err;
-	int			retry = false;
 
-try_again:
 	trace_nfsd_read_start(rqstp, fhp, offset, *count);
 	err = nfsd_file_acquire(rqstp, fhp, NFSD_MAY_READ, &nf);
 	if (err)
@@ -1105,11 +1105,6 @@ try_again:
 		err = nfsd_readv(rqstp, fhp, file, offset, vec, vlen, count, eof);
 
 	nfsd_file_put(nf);
-	if (nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err) &&
-	    !retry) {
-		retry = true;
-		goto try_again;
-	}
 	trace_nfsd_read_done(rqstp, fhp, offset, *count);
 
 	return err;
@@ -1126,9 +1121,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 {
 	struct nfsd_file *nf;
 	__be32 err;
-	bool			retry = false;
 
-try_again:
 	trace_nfsd_write_start(rqstp, fhp, offset, *cnt);
 
 	err = nfsd_file_acquire(rqstp, fhp, NFSD_MAY_WRITE, &nf);
@@ -1138,11 +1131,6 @@ try_again:
 	err = nfsd_vfs_write(rqstp, fhp, nf->nf_file, offset, vec,
 			vlen, cnt, stable);
 	nfsd_file_put(nf);
-	if (nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err) &&
-	    !retry) {
-		retry = true;
-		goto try_again;
-	}
 out:
 	trace_nfsd_write_done(rqstp, fhp, offset, *cnt);
 	return err;
@@ -1185,7 +1173,7 @@ try_again:
 		int err2 = vfs_fsync_range(nf->nf_file, offset, end,
 				commit_is_datasync);
 
-		if (nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err) &&
+		if (nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, err2) &&
 		    !retry) {
 			nfsd_file_put(nf);
 			retry = true;
