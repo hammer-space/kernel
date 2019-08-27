@@ -2173,9 +2173,9 @@ static int nfs4_open_recover_helper(struct nfs4_opendata *opendata,
 		return 0;
 	opendata->o_arg.open_flags = 0;
 	opendata->o_arg.fmode = fmode;
-	opendata->o_arg.share_access = nfs4_map_atomic_open_share(
-			NFS_SB(opendata->dentry->d_sb),
-			fmode, 0);
+	opendata->o_arg.share_access = nfs4_fmode_to_share_access(fmode);
+	if (opendata->o_arg.server->caps & NFS_CAP_DELEGTIME)
+		opendata->o_arg.share_access |= NFS4_SHARE_WANT_DELEG_TIMESTAMPS;
 	memset(&opendata->o_res, 0, sizeof(opendata->o_res));
 	memset(&opendata->c_res, 0, sizeof(opendata->c_res));
 	nfs4_init_opendata_res(opendata);
