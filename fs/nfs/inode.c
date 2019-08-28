@@ -1540,10 +1540,11 @@ static int nfs_check_inode_attributes(struct inode *inode, struct nfs_fattr *fat
 		return 0;
 
 	/* No fileid? Just exit */
-	if (!(fattr->valid & NFS_ATTR_FATTR_FILEID))
-		return 0;
+	if (!(fattr->valid & NFS_ATTR_FATTR_FILEID)) {
+		if (fattr->valid & NFS_ATTR_FATTR_MOUNTED_ON_FILEID)
+			return 0;
 	/* Has the inode gone and changed behind our back? */
-	if (nfsi->fileid != fattr->fileid) {
+	} else if (nfsi->fileid != fattr->fileid) {
 		/* Is this perhaps the mounted-on fileid? */
 		if ((fattr->valid & NFS_ATTR_FATTR_MOUNTED_ON_FILEID) &&
 		    nfsi->fileid == fattr->mounted_on_fileid)
@@ -1950,10 +1951,11 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 			(unsigned long)fattr->valid);
 
 	/* No fileid? Just exit */
-	if (!(fattr->valid & NFS_ATTR_FATTR_FILEID))
-		return 0;
+	if (!(fattr->valid & NFS_ATTR_FATTR_FILEID)) {
+		if (fattr->valid & NFS_ATTR_FATTR_MOUNTED_ON_FILEID)
+			return 0;
 	/* Has the inode gone and changed behind our back? */
-	if (nfsi->fileid != fattr->fileid) {
+	} else if (nfsi->fileid != fattr->fileid) {
 		/* Is this perhaps the mounted-on fileid? */
 		if ((fattr->valid & NFS_ATTR_FATTR_MOUNTED_ON_FILEID) &&
 		    nfsi->fileid == fattr->mounted_on_fileid)
