@@ -1917,9 +1917,11 @@ call_bind_status(struct rpc_task *task)
 
 	dprint_status(task);
 	trace_rpc_bind_status(task);
-	if (task->tk_status >= 0 || xprt_bound(xprt)) {
-		task->tk_action = call_connect;
-		return;
+	if (task->tk_status >= 0)
+		goto out_next;
+	if (xprt_bound(xprt)) {
+		task->tk_status = 0;
+		goto out_next;
 	}
 
 	switch (task->tk_status) {
@@ -1981,6 +1983,9 @@ call_bind_status(struct rpc_task *task)
 	}
 
 	rpc_call_rpcerror(task, status);
+	return;
+out_next:
+	task->tk_action = call_connect;
 	return;
 retry_timeout:
 	task->tk_status = 0;
@@ -2044,8 +2049,10 @@ call_connect_status(struct rpc_task *task)
 		clnt->cl_stats->netreconn++;
 		goto out_next;
 	}
-	if (xprt_connected(xprt))
+	if (xprt_connected(xprt)) {
+		task->tk_status = 0;
 		goto out_next;
+	}
 
 	task->tk_status = 0;
 	switch (status) {

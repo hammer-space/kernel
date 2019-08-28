@@ -1230,8 +1230,7 @@ static fmode_t _nfs4_ctx_to_openmode(const struct nfs_open_context *ctx)
 }
 
 static u32
-nfs4_map_atomic_open_share(struct nfs_server *server,
-		fmode_t fmode, int openflags)
+nfs4_fmode_to_share_access(fmode_t fmode)
 {
 	u32 res = 0;
 
@@ -1245,6 +1244,15 @@ nfs4_map_atomic_open_share(struct nfs_server *server,
 	case FMODE_READ|FMODE_WRITE:
 		res = NFS4_SHARE_ACCESS_BOTH;
 	}
+	return res;
+}
+
+static u32
+nfs4_map_atomic_open_share(struct nfs_server *server,
+		fmode_t fmode, int openflags)
+{
+	u32 res = nfs4_fmode_to_share_access(fmode);
+
 	if (!(server->caps & NFS_CAP_ATOMIC_OPEN_V1))
 		goto out;
 	/* Want no delegation if we're using O_DIRECT */
@@ -2116,9 +2124,9 @@ static int nfs4_open_recover_helper(struct nfs4_opendata *opendata,
 		return 0;
 	opendata->o_arg.open_flags = 0;
 	opendata->o_arg.fmode = fmode;
-	opendata->o_arg.share_access = nfs4_map_atomic_open_share(
-			NFS_SB(opendata->dentry->d_sb),
-			fmode, 0);
+	opendata->o_arg.share_access = nfs4_fmode_to_share_access(fmode);
+	if (opendata->o_arg.server->caps & NFS_CAP_DELEGTIME)
+		opendata->o_arg.share_access |= NFS4_SHARE_WANT_DELEG_TIMESTAMPS;
 	memset(&opendata->o_res, 0, sizeof(opendata->o_res));
 	memset(&opendata->c_res, 0, sizeof(opendata->c_res));
 	nfs4_init_opendata_res(opendata);
@@ -3572,8 +3580,7 @@ static void nfs4_close_prepare(struct rpc_task *task, void *data)
 	}
 
 	calldata->arg.share_access =
-		nfs4_map_atomic_open_share(NFS_SERVER(inode),
-				calldata->arg.fmode, 0);
+		nfs4_fmode_to_share_access(calldata->arg.fmode);
 
 	if (calldata->res.fattr == NULL)
 		calldata->arg.bitmask = NULL;
