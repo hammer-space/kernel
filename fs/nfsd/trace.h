@@ -127,6 +127,7 @@ DEFINE_EVENT(nfsd_err_class, nfsd_##name,	\
 
 DEFINE_NFSD_ERR_EVENT(read_err);
 DEFINE_NFSD_ERR_EVENT(write_err);
+DEFINE_NFSD_ERR_EVENT(commit_err);
 
 #include "state.h"
 #include "filecache.h"

@@ -937,6 +937,15 @@ static __be32 nfsd_finish_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		trace_nfsd_read_io_done(rqstp, fhp, offset, *count);
 		return 0;
 	} else {
+		switch (host_err) {
+		case -EIO:
+		case -EBADF:
+		case -EOPENSTALE:
+			pr_err_ratelimited("nfsd: underlying filesystem "
+					"returned read error %zd "
+					"for file %pD2\n",
+					host_err, file);
+		}
 		trace_nfsd_read_err(rqstp, fhp, offset, host_err);
 		nfsd_cached_files_handle_vfs_error(fhp->fh_dentry, host_err);
 		return nfserrno(host_err);
@@ -1058,9 +1067,19 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 
 	if (stable && use_wgather) {
 		host_err = wait_for_concurrent_writes(file);
-		if (host_err < 0)
+		if (host_err < 0) {
 			nfsd_reset_boot_verifier(net_generic(SVC_NET(rqstp),
 						 nfsd_net_id));
+			switch (host_err) {
+			case -EIO:
+			case -EBADF:
+			case -EOPENSTALE:
+				pr_err_ratelimited("nfsd: underlying filesystem "
+						"returned write error %d "
+						"for file %pD2\n",
+						host_err, file);
+			}
+		}
 	}
 
 out_nfserr:
@@ -1177,10 +1196,19 @@ nfsd_commit(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		case -EINVAL:
 			err = nfserr_notsupp;
 			break;
+		case -EIO:
+		case -EBADF:
+		case -EOPENSTALE:
+			pr_err_ratelimited("nfsd: underlying filesystem "
+					"returned write error %d "
+					"for file %pD2\n",
+					err2, nf->nf_file);
+			/* Fallthrough */
 		default:
 			err = nfserrno(err2);
 			nfsd_reset_boot_verifier(net_generic(nf->nf_net,
 						 nfsd_net_id));
+			trace_nfsd_commit_err(rqstp, fhp, offset, err2);
 		}
 	}
 
