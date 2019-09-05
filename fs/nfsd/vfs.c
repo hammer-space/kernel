@@ -999,6 +999,15 @@ static __be32 nfsd_finish_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		trace_nfsd_read_io_done(rqstp, fhp, offset, *count);
 		return 0;
 	} else {
+		switch (host_err) {
+		case -EIO:
+		case -EBADF:
+		case -EOPENSTALE:
+			pr_err_ratelimited("nfsd: underlying filesystem "
+					"returned read error %zd "
+					"for file %pD2\n",
+					host_err, file);
+		}
 		trace_nfsd_read_err(rqstp, fhp, offset, host_err);
 		return nfserrno(host_err);
 	}
@@ -1156,6 +1165,15 @@ out_nfserr:
 	} else {
 		trace_nfsd_write_err(rqstp, fhp, offset, host_err);
 		nfserr = nfserrno(host_err);
+		switch (host_err) {
+		case -EIO:
+		case -EBADF:
+		case -EOPENSTALE:
+			pr_err_ratelimited("nfsd: underlying filesystem "
+					"returned write error %d "
+					"for file %pD2\n",
+					host_err, file);
+		}
 	}
 	if (restore_flags)
 		current_restore_flags(pflags, PF_LOCAL_THROTTLE);
@@ -1177,8 +1195,19 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	trace_nfsd_read_start(rqstp, fhp, offset, *count);
 	err = nfsd_file_acquire_gc(rqstp, fhp, NFSD_MAY_READ, &nf);
-	if (err)
+	switch (err) {
+	case nfs_ok:
+		break;
+	case nfserr_acces:
+	case nfserr_jukebox:
 		return err;
+	default:
+		pr_err_ratelimited("nfsd: underlying filesystem "
+				"returned file_acquire error %d "
+				"when reading file %pd2\n",
+				-be32_to_cpu(err), fhp->fh_dentry);
+		return err;
+	}
 
 	file = nf->nf_file;
 	if (file->f_op->splice_read && test_bit(RQ_SPLICE_OK, &rqstp->rq_flags))
@@ -1209,8 +1238,19 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	trace_nfsd_write_start(rqstp, fhp, offset, *cnt);
 
 	err = nfsd_file_acquire_gc(rqstp, fhp, NFSD_MAY_WRITE, &nf);
-	if (err)
+	switch (err) {
+	case nfs_ok:
+		break;
+	case nfserr_acces:
+	case nfserr_jukebox:
 		goto out;
+	default:
+		pr_err_ratelimited("nfsd: underlying filesystem "
+				"returned file_acquire error %d "
+				"when writing file %pd2\n",
+				-be32_to_cpu(err), fhp->fh_dentry);
+		goto out;
+	}
 
 	err = nfsd_vfs_write(rqstp, fhp, nf, offset, vec,
 			vlen, cnt, stable, verf);
@@ -1280,10 +1320,19 @@ nfsd_commit(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 		case -EINVAL:
 			err = nfserr_notsupp;
 			break;
+		case -EIO:
+		case -EBADF:
+		case -EOPENSTALE:
+			pr_err_ratelimited("nfsd: underlying filesystem "
+					"returned write error %d "
+					"for file %pD2\n",
+					err2, nf->nf_file);
+			fallthrough;
 		default:
 			nfsd_reset_write_verifier(nn);
 			trace_nfsd_writeverf_reset(nn, rqstp, err2);
 			err = nfserrno(err2);
+			trace_nfsd_commit_err(rqstp, fhp, offset, err2);
 		}
 	} else
 		nfsd_copy_write_verifier(verf, nn);
