@@ -1038,6 +1038,8 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 
 	trace_nfsd_write_opened(rqstp, fhp, offset, *cnt);
 
+	if (!*cnt)
+		return nfs_ok;
 	if (test_bit(RQ_LOCAL, &rqstp->rq_flags))
 		/*
 		 * We want less throttling in balance_dirty_pages()
