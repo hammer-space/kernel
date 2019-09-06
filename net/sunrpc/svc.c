@@ -1692,7 +1692,7 @@ unsigned int svc_fill_write_vector(struct svc_rqst *rqstp, struct page **pages,
 	 * entirely in rq_arg.pages. In this case, @first is empty.
 	 */
 	i = 0;
-	if (first->iov_len) {
+	if (first->iov_len || !total) {
 		vec[i].iov_base = first->iov_base;
 		vec[i].iov_len = min_t(size_t, total, first->iov_len);
 		total -= vec[i].iov_len;
