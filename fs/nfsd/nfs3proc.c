@@ -204,6 +204,8 @@ nfsd3_proc_write(struct svc_rqst *rqstp)
 	nvecs = svc_fill_write_vector(rqstp, rqstp->rq_arg.pages,
 				      &argp->first, cnt);
 	if (!nvecs) {
+		pr_err_ratelimited("nfsd: %s returned EIO "
+				"for a non-empty request\n", __func__);
 		resp->status = nfserr_io;
 		goto out;
 	}

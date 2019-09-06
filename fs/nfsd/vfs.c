@@ -978,6 +978,9 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 
 	trace_nfsd_write_opened(rqstp, fhp, offset, *cnt);
 
+	if (!*cnt)
+		return nfs_ok;
+
 	if (sb->s_export_op)
 		exp_op_flags = sb->s_export_op->flags;
 
