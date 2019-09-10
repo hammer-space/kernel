@@ -1548,6 +1548,22 @@ const char
 static void
 __rpc_call_rpcerror(struct rpc_task *task, int tk_status, int rpc_status)
 {
+	struct rpc_clnt	*clnt = task->tk_client;
+
+	switch (rpc_status) {
+	case 0:
+	case -ETIMEDOUT:
+		break;
+	default:
+		if (RPC_IS_SOFTCONN(task) || !clnt || !clnt->cl_chatty)
+			break;
+		pr_notice_ratelimited("%s: task fatal RPC error: %d "
+				"on server %s\n",
+				clnt->cl_program->name,
+				rpc_status,
+				task->tk_xprt ? task->tk_xprt->servername :
+				"<unknown>");
+	}
 	task->tk_rpc_status = rpc_status;
 	rpc_exit(task, tk_status);
 }
