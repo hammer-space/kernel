@@ -1548,6 +1548,22 @@ const char
 static void
 __rpc_call_rpcerror(struct rpc_task *task, int tk_status, int rpc_status)
 {
+	struct rpc_clnt	*clnt = task->tk_client;
+
+	switch (rpc_status) {
+	case 0:
+	case -ETIMEDOUT:
+		break;
+	default:
+		if (RPC_IS_SOFTCONN(task) || !clnt || !clnt->cl_chatty)
+			break;
+		pr_notice_ratelimited("%s: task fatal RPC error: %d "
+				"on server %s\n",
+				clnt->cl_program->name,
+				rpc_status,
+				task->tk_xprt ? task->tk_xprt->servername :
+				"<unknown>");
+	}
 	task->tk_rpc_status = rpc_status;
 	rpc_exit(task, tk_status);
 }
@@ -1781,7 +1797,7 @@ call_allocate(struct rpc_task *task)
 		return;
 	}
 
-	rpc_exit(task, -ERESTARTSYS);
+	rpc_call_rpcerror(task, -ERESTARTSYS);
 }
 
 static int
@@ -1806,6 +1822,7 @@ rpc_xdr_encode(struct rpc_task *task)
 		     req->rq_rbuffer,
 		     req->rq_rcvsize);
 
+	req->rq_reply_bytes_recvd = 0;
 	req->rq_snd_buf.head[0].iov_len = 0;
 	xdr_init_encode(&xdr, &req->rq_snd_buf,
 			req->rq_snd_buf.head[0].iov_base, req);
@@ -2457,9 +2474,6 @@ call_decode(struct rpc_task *task)
 		return;
 	case -EAGAIN:
 		task->tk_status = 0;
-		xdr_free_bvec(&req->rq_rcv_buf);
-		req->rq_reply_bytes_recvd = 0;
-		req->rq_rcv_buf.len = 0;
 		if (task->tk_client->cl_discrtry)
 			xprt_conditional_disconnect(req->rq_xprt,
 						    req->rq_connect_cookie);
@@ -2500,7 +2514,7 @@ rpc_encode_header(struct rpc_task *task, struct xdr_stream *xdr)
 	return 0;
 out_fail:
 	trace_rpc_bad_callhdr(task);
-	rpc_exit(task, error);
+	rpc_call_rpcerror(task, error);
 	return error;
 }
 
@@ -2567,7 +2581,7 @@ out_garbage:
 		return -EAGAIN;
 	}
 out_err:
-	rpc_exit(task, error);
+	rpc_call_rpcerror(task, error);
 	return error;
 
 out_unparsable:

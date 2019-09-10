@@ -642,8 +642,12 @@ static int pfifo_fast_enqueue(struct sk_buff *skb, struct Qdisc *qdisc,
 
 	err = skb_array_produce(q, skb);
 
-	if (unlikely(err))
-		return qdisc_drop_cpu(skb, qdisc, to_free);
+	if (unlikely(err)) {
+		if (qdisc_is_percpu_stats(qdisc))
+			return qdisc_drop_cpu(skb, qdisc, to_free);
+		else
+			return qdisc_drop(skb, qdisc, to_free);
+	}
 
 	qdisc_qstats_atomic_qlen_inc(qdisc);
 	/* Note: skb can not be used after skb_array_produce(),
