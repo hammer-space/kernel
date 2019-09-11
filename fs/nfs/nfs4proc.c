@@ -3382,6 +3382,37 @@ nfs4_wait_on_layoutreturn(struct inode *inode, struct rpc_task *task)
 }
 
 /*
+ * Update the seqid of an open stateid
+ */
+static void nfs4_sync_open_stateid(nfs4_stateid *dst,
+		struct nfs4_state *state)
+{
+	__be32 seqid_open;
+	u32 dst_seqid;
+	int seq;
+
+	for (;;) {
+		if (!nfs4_valid_open_stateid(state))
+			break;
+		seq = read_seqbegin(&state->seqlock);
+		if (!nfs4_state_match_open_stateid_other(state, dst)) {
+			nfs4_stateid_copy(dst, &state->open_stateid);
+			if (read_seqretry(&state->seqlock, seq))
+				continue;
+			break;
+		}
+		seqid_open = state->open_stateid.seqid;
+		if (read_seqretry(&state->seqlock, seq))
+			continue;
+
+		dst_seqid = be32_to_cpu(dst->seqid);
+		if ((s32)(dst_seqid - be32_to_cpu(seqid_open)) < 0)
+			dst->seqid = seqid_open;
+		break;
+	}
+}
+
+/*
  * Update the seqid of an open stateid after receiving
  * NFS4ERR_OLD_STATEID
  */
@@ -3395,6 +3426,8 @@ static bool nfs4_refresh_open_old_stateid(nfs4_stateid *dst,
 
 	for (;;) {
 		ret = false;
+		if (!nfs4_valid_open_stateid(state))
+			break;
 		seq = read_seqbegin(&state->seqlock);
 		if (!nfs4_state_match_open_stateid_other(state, dst)) {
 			if (read_seqretry(&state->seqlock, seq))
@@ -3402,10 +3435,10 @@ static bool nfs4_refresh_open_old_stateid(nfs4_stateid *dst,
 			break;
 		}
 		seqid_open = state->open_stateid.seqid;
-		dst_seqid = be32_to_cpu(dst->seqid);
-
 		if (read_seqretry(&state->seqlock, seq))
 			continue;
+
+		dst_seqid = be32_to_cpu(dst->seqid);
 		if ((s32)(dst_seqid - be32_to_cpu(seqid_open)) >= 0)
 			dst->seqid = cpu_to_be32(dst_seqid + 1);
 		else
@@ -3562,6 +3595,7 @@ static void nfs4_close_prepare(struct rpc_task *task, void *data)
 	} else if (is_rdwr)
 		calldata->arg.fmode |= FMODE_READ|FMODE_WRITE;
 
+	nfs4_sync_open_stateid(&calldata->arg.stateid, state);
 	if (!nfs4_valid_open_stateid(state))
 		call_close = 0;
 	spin_unlock(&state->owner->so_lock);
