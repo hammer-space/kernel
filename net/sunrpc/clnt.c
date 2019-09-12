@@ -2531,15 +2531,23 @@ rpc_decode_header(struct rpc_task *task, struct xdr_stream *xdr)
 	 * - if it isn't pointer subtraction in the NFS client may give
 	 *   undefined results
 	 */
-	if (task->tk_rqstp->rq_rcv_buf.len & 3)
+	if (task->tk_rqstp->rq_rcv_buf.len & 3) {
+		pr_notice_ratelimited("%s: RPC reply is not 32-bit aligned "
+				"from server %s\n",
+				clnt->cl_program->name,
+				task->tk_xprt ? task->tk_xprt->servername :
+				"<unknown>");
 		goto out_unparsable;
+	}
 
 	p = xdr_inline_decode(xdr, 3 * sizeof(*p));
 	if (!p)
 		goto out_unparsable;
 	p++;	/* skip XID */
-	if (*p++ != rpc_reply)
+	if (*p++ != rpc_reply) {
+		WARN_ON_ONCE(1);
 		goto out_unparsable;
+	}
 	if (*p++ != rpc_msg_accepted)
 		goto out_msg_denied;
 
