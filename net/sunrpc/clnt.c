@@ -2436,6 +2436,7 @@ call_decode(struct rpc_task *task)
 	struct rpc_clnt	*clnt = task->tk_client;
 	struct rpc_rqst	*req = task->tk_rqstp;
 	struct xdr_stream xdr;
+	int err;
 
 	dprint_status(task);
 
@@ -2458,6 +2459,15 @@ call_decode(struct rpc_task *task)
 	 * before it changed req->rq_reply_bytes_recvd.
 	 */
 	smp_rmb();
+
+	/*
+	 * Did we ever call xprt_complete_rqst()? If not, we should assume
+	 * the message is incomplete.
+	 */
+	err = -EAGAIN;
+	if (!req->rq_reply_bytes_recvd)
+		goto out;
+
 	req->rq_rcv_buf.len = req->rq_private_buf.len;
 
 	/* Check that the softirq receive buffer is valid */
@@ -2466,7 +2476,9 @@ call_decode(struct rpc_task *task)
 
 	xdr_init_decode(&xdr, &req->rq_rcv_buf,
 			req->rq_rcv_buf.head[0].iov_base, req);
-	switch (rpc_decode_header(task, &xdr)) {
+	err = rpc_decode_header(task, &xdr);
+out:
+	switch (err) {
 	case 0:
 		task->tk_action = rpc_exit_task;
 		task->tk_status = rpcauth_unwrap_resp(task, &xdr);
@@ -2531,15 +2543,23 @@ rpc_decode_header(struct rpc_task *task, struct xdr_stream *xdr)
 	 * - if it isn't pointer subtraction in the NFS client may give
 	 *   undefined results
 	 */
-	if (task->tk_rqstp->rq_rcv_buf.len & 3)
+	if (task->tk_rqstp->rq_rcv_buf.len & 3) {
+		pr_notice_ratelimited("%s: RPC reply is not 32-bit aligned "
+				"from server %s\n",
+				clnt->cl_program->name,
+				task->tk_xprt ? task->tk_xprt->servername :
+				"<unknown>");
 		goto out_unparsable;
+	}
 
 	p = xdr_inline_decode(xdr, 3 * sizeof(*p));
 	if (!p)
 		goto out_unparsable;
 	p++;	/* skip XID */
-	if (*p++ != rpc_reply)
+	if (*p++ != rpc_reply) {
+		WARN_ON_ONCE(1);
 		goto out_unparsable;
+	}
 	if (*p++ != rpc_msg_accepted)
 		goto out_msg_denied;
 
