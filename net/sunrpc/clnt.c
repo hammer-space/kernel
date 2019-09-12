@@ -1557,6 +1557,7 @@ __rpc_call_rpcerror(struct rpc_task *task, int tk_status, int rpc_status)
 	default:
 		if (RPC_IS_SOFTCONN(task) || !clnt || !clnt->cl_chatty)
 			break;
+		WARN_ON(rpc_status == -EIO);
 		pr_notice_ratelimited("%s: task fatal RPC error: %d "
 				"on server %s\n",
 				clnt->cl_program->name,
