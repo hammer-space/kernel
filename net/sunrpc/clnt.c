@@ -2494,9 +2494,11 @@ out:
 		rpc_check_timeout(task);
 		break;
 	case -EKEYREJECTED:
+		rpcauth_invalcred(task);
+		/* Fallthrough */
+	case -EBADMSG:
 		task->tk_action = call_reserve;
 		rpc_check_timeout(task);
-		rpcauth_invalcred(task);
 		/* Ensure we obtain a new XID if we retry! */
 		xprt_release(task);
 	}
@@ -2553,8 +2555,11 @@ rpc_decode_header(struct rpc_task *task, struct xdr_stream *xdr)
 	}
 
 	p = xdr_inline_decode(xdr, 3 * sizeof(*p));
-	if (!p)
+	if (!p) {
+		pr_warn_ratelimited("RPC: server %s returned short msg.\n",
+			task->tk_xprt->servername);
 		goto out_unparsable;
+	}
 	p++;	/* skip XID */
 	if (*p++ != rpc_reply) {
 		WARN_ON_ONCE(1);
@@ -2564,12 +2569,18 @@ rpc_decode_header(struct rpc_task *task, struct xdr_stream *xdr)
 		goto out_msg_denied;
 
 	error = rpcauth_checkverf(task, xdr);
-	if (error)
+	if (error) {
+		pr_warn_ratelimited("RPC: server %s declared bad verifier.\n",
+			task->tk_xprt->servername);
 		goto out_verifier;
+	}
 
 	p = xdr_inline_decode(xdr, sizeof(*p));
-	if (!p)
+	if (!p) {
+		pr_warn_ratelimited("RPC: server %s returned short RPC status.\n",
+			task->tk_xprt->servername);
 		goto out_unparsable;
+	}
 	switch (*p) {
 	case rpc_success:
 		return 0;
@@ -2586,20 +2597,28 @@ rpc_decode_header(struct rpc_task *task, struct xdr_stream *xdr)
 		error = -EOPNOTSUPP;
 		goto out_err;
 	case rpc_garbage_args:
-	case rpc_system_err:
+		clnt->cl_stats->rpcgarbage++;
+		pr_warn_ratelimited("RPC: server %s declared RPC garbage args.\n",
+			task->tk_xprt->servername);
 		trace_rpc__garbage_args(task);
 		error = -EIO;
 		break;
+	case rpc_system_err:
+		pr_warn_ratelimited("RPC: server %s declared RPC system err.\n",
+			task->tk_xprt->servername);
+		trace_rpc__system_err(task);
+		error = -EIO;
+		break;
 	default:
-		goto out_unparsable;
+		pr_warn_ratelimited("RPC: server %s returned bad status %d.\n",
+			task->tk_xprt->servername, be32_to_cpup(p));
+		goto out_badxdr;
 	}
 
 out_garbage:
-	clnt->cl_stats->rpcgarbage++;
 	if (task->tk_garb_retry) {
 		task->tk_garb_retry--;
-		task->tk_action = call_encode;
-		return -EAGAIN;
+		return -EBADMSG;
 	}
 out_err:
 	rpc_call_rpcerror(task, error);
@@ -2607,6 +2626,15 @@ out_err:
 
 out_unparsable:
 	trace_rpc__unparsable(task);
+	if (task->tk_garb_retry) {
+		task->tk_garb_retry--;
+		return -EAGAIN;
+	}
+	error = -EIO;
+	goto out_err;
+
+out_badxdr:
+	trace_rpc__badxdr(task);
 	error = -EIO;
 	goto out_garbage;
 
@@ -2617,9 +2645,12 @@ out_verifier:
 out_msg_denied:
 	error = -EACCES;
 	p = xdr_inline_decode(xdr, sizeof(*p));
-	if (!p)
+	if (!p) {
+		pr_warn_ratelimited("RPC: server %s returned short denied msg.\n",
+			task->tk_xprt->servername);
 		goto out_unparsable;
-	switch (*p++) {
+	}
+	switch (*p) {
 	case rpc_auth_error:
 		break;
 	case rpc_mismatch:
@@ -2627,13 +2658,18 @@ out_msg_denied:
 		error = -EPROTONOSUPPORT;
 		goto out_err;
 	default:
-		goto out_unparsable;
+		pr_warn_ratelimited("RPC: server %s returned bad denied status %d.\n",
+			task->tk_xprt->servername, be32_to_cpup(p));
+		goto out_badxdr;
 	}
 
 	p = xdr_inline_decode(xdr, sizeof(*p));
-	if (!p)
+	if (!p) {
+		pr_warn_ratelimited("RPC: server %s returned short auth stat.\n",
+			task->tk_xprt->servername);
 		goto out_unparsable;
-	switch (*p++) {
+	}
+	switch (*p) {
 	case rpc_autherr_rejectedcred:
 	case rpc_autherr_rejectedverf:
 	case rpcsec_gsserr_credproblem:
@@ -2650,15 +2686,16 @@ out_msg_denied:
 			break;
 		task->tk_garb_retry--;
 		trace_rpc__bad_creds(task);
-		task->tk_action = call_encode;
-		return -EAGAIN;
+		return -EBADMSG;
 	case rpc_autherr_tooweak:
 		trace_rpc__auth_tooweak(task);
 		pr_warn("RPC: server %s requires stronger authentication.\n",
 			task->tk_xprt->servername);
 		break;
 	default:
-		goto out_unparsable;
+		pr_warn_ratelimited("RPC: server %s returned bad auth err %d.\n",
+			task->tk_xprt->servername, be32_to_cpup(p));
+		goto out_badxdr;
 	}
 	goto out_err;
 }
