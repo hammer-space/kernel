@@ -6689,7 +6689,8 @@ static struct nfs4_unlockdata *nfs4_alloc_unlockdata(struct file_lock *fl,
 		struct nfs_seqid *seqid)
 {
 	struct nfs4_unlockdata *p;
-	struct inode *inode = lsp->ls_state->inode;
+	struct nfs4_state *state = lsp->ls_state;
+	struct inode *inode = state->inode;
 
 	p = kzalloc(sizeof(*p), GFP_NOFS);
 	if (p == NULL)
@@ -6705,6 +6706,9 @@ static struct nfs4_unlockdata *nfs4_alloc_unlockdata(struct file_lock *fl,
 	locks_init_lock(&p->fl);
 	locks_copy_lock(&p->fl, fl);
 	p->server = NFS_SERVER(inode);
+	spin_lock(&state->state_lock);
+	nfs4_stateid_copy(&p->arg.stateid, &lsp->ls_stateid);
+	spin_unlock(&state->state_lock);
 	return p;
 }
 
