@@ -636,8 +636,8 @@ struct nfs_release_lockowner_res {
 };
 
 struct nfs4_delegattr {
-	struct timespec		atime;
-	struct timespec		mtime;
+	struct timespec64	atime;
+	struct timespec64	mtime;
 	bool			atime_set;
 	bool			mtime_set;
 };
