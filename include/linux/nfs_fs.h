@@ -128,8 +128,8 @@ struct nfs_inode {
 	 * NFS Attributes not included in struct inode
 	 */
 
-	struct timespec		timecreate;
-	struct timespec		timebackup;
+	struct timespec64	timecreate;
+	struct timespec64	timebackup;
 	unsigned int		archive : 1,
 				hidden : 1,
 				system : 1,

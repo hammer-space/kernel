@@ -221,9 +221,8 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	}
 
 	if (fattr_supported & NFS_ATTR_FATTR_TIME_BACKUP) {
-		struct timespec ts = timespec64_to_timespec(inode->i_mtime);
 		args.fa_valid[0] |= NFS_FA_VALID_ARCHIVE;
-		if (timespec_compare(&nfsi->timebackup, &ts) >= 0)
+		if (timespec64_compare(&nfsi->timebackup, &inode->i_mtime) >= 0)
 			args.fa_flags |= NFS_FA_FLAG_ARCHIVE;
 	}
 
