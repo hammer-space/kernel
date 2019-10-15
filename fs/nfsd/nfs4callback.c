@@ -980,9 +980,12 @@ void nfsd4_change_callback(struct nfs4_client *clp, struct nfs4_cb_conn *conn)
  * If the slot is available, then mark it busy.  Otherwise, set the
  * thread for sleeping on the callback RPC wait queue.
  */
-static bool nfsd41_cb_get_slot(struct nfs4_client *clp, struct rpc_task *task)
+static bool nfsd41_cb_get_slot(struct nfsd4_callback *cb, struct rpc_task *task)
 {
-	if (test_and_set_bit(0, &clp->cl_cb_slot_busy) != 0) {
+	struct nfs4_client *clp = cb->cb_clp;
+
+	if (!cb->cb_holds_slot &&
+	    test_and_set_bit(0, &clp->cl_cb_slot_busy) != 0) {
 		rpc_sleep_on(&clp->cl_cb_waitq, task, NULL);
 		/* Race breaker */
 		if (test_and_set_bit(0, &clp->cl_cb_slot_busy) != 0) {
@@ -990,8 +993,55 @@ static bool nfsd41_cb_get_slot(struct nfs4_client *clp, struct rpc_task *task)
 			return false;
 		}
 		rpc_wake_up_queued_task(&clp->cl_cb_waitq, task);
+		cb->cb_holds_slot = true;
 	}
 	return true;
+}
+
+static void nfsd41_cb_release_slot(struct nfsd4_callback *cb)
+{
+	struct nfs4_client *clp = cb->cb_clp;
+
+	if (cb->cb_holds_slot) {
+		cb->cb_holds_slot = false;
+		clear_bit(0, &clp->cl_cb_slot_busy);
+		rpc_wake_up_next(&clp->cl_cb_waitq);
+	}
+}
+
+static void nfs41_cb_inflight_begin(struct nfsd4_callback *cb)
+{
+	struct nfs4_client *clp = cb->cb_clp;
+
+	if (!cb->cb_inflight) {
+		atomic_inc(&clp->cl_cb_inflight);
+		cb->cb_inflight = true;
+	}
+}
+
+static void nfsd41_cb_inflight_end(struct nfs4_client *clp)
+{
+
+	if (atomic_dec_and_test(&clp->cl_cb_inflight))
+		wake_up_var(&clp->cl_cb_inflight);
+}
+
+static void nfsd41_cb_inflight_wait_complete(struct nfs4_client *clp)
+{
+	wait_var_event(&clp->cl_cb_inflight,
+			!atomic_read(&clp->cl_cb_inflight));
+}
+
+static void nfsd41_destroy_cb(struct nfsd4_callback *cb)
+{
+	struct nfs4_client *clp = cb->cb_clp;
+	bool clear_inflight = cb->cb_inflight;
+
+	nfsd41_cb_release_slot(cb);
+	if (cb->cb_ops && cb->cb_ops->release)
+		cb->cb_ops->release(cb);
+	if (clear_inflight)
+		nfsd41_cb_inflight_end(clp);
 }
 
 /*
@@ -1010,11 +1060,8 @@ static void nfsd4_cb_prepare(struct rpc_task *task, void *calldata)
 	 */
 	cb->cb_seq_status = 1;
 	cb->cb_status = 0;
-	if (minorversion) {
-		if (!cb->cb_holds_slot && !nfsd41_cb_get_slot(clp, task))
-			return;
-		cb->cb_holds_slot = true;
-	}
+	if (minorversion && !nfsd41_cb_get_slot(cb, task))
+		return;
 	rpc_call_start(task);
 }
 
@@ -1081,9 +1128,7 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 			cb->cb_seq_status);
 	}
 
-	cb->cb_holds_slot = false;
-	clear_bit(0, &clp->cl_cb_slot_busy);
-	rpc_wake_up_next(&clp->cl_cb_waitq);
+	nfsd41_cb_release_slot(cb);
 	dprintk("%s: freed slot, new seqid=%d\n", __func__,
 		clp->cl_cb_session->se_cb_seq_nr);
 
@@ -1096,8 +1141,10 @@ retry_nowait:
 		ret = false;
 	goto out;
 need_restart:
-	task->tk_status = 0;
-	cb->cb_need_restart = true;
+	if (!test_bit(NFSD4_CLIENT_CB_KILL, &clp->cl_flags)) {
+		task->tk_status = 0;
+		cb->cb_need_restart = true;
+	}
 	return false;
 }
 
@@ -1140,7 +1187,7 @@ static void nfsd4_cb_release(void *calldata)
 	if (cb->cb_need_restart)
 		nfsd4_run_cb(cb);
 	else
-		cb->cb_ops->release(cb);
+		nfsd41_destroy_cb(cb);
 
 }
 
@@ -1174,6 +1221,7 @@ void nfsd4_shutdown_callback(struct nfs4_client *clp)
 	 */
 	nfsd4_run_cb(&clp->cl_cb_null);
 	flush_workqueue(callback_wq);
+	nfsd41_cb_inflight_wait_complete(clp);
 }
 
 /* requires cl_lock: */
@@ -1259,8 +1307,7 @@ nfsd4_run_cb_work(struct work_struct *work)
 	clnt = clp->cl_cb_client;
 	if (!clnt) {
 		/* Callback channel broken, or client killed; give up: */
-		if (cb->cb_ops && cb->cb_ops->release)
-			cb->cb_ops->release(cb);
+		nfsd41_destroy_cb(cb);
 		return;
 	}
 
@@ -1269,6 +1316,7 @@ nfsd4_run_cb_work(struct work_struct *work)
 	 */
 	if (!cb->cb_ops && clp->cl_minorversion) {
 		clp->cl_cb_state = NFSD4_CB_UP;
+		nfsd41_destroy_cb(cb);
 		return;
 	}
 
@@ -1290,9 +1338,11 @@ void nfsd4_init_cb(struct nfsd4_callback *cb, struct nfs4_client *clp,
 	cb->cb_status = 0;
 	cb->cb_need_restart = false;
 	cb->cb_holds_slot = false;
+	cb->cb_inflight = false;
 }
 
 void nfsd4_run_cb(struct nfsd4_callback *cb)
 {
+	nfs41_cb_inflight_begin(cb);
 	queue_work(callback_wq, &cb->cb_work);
 }
