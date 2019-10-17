@@ -536,6 +536,8 @@ int nfs_create_rpc_client(struct nfs_client *clp,
 		args.flags |= RPC_CLNT_CREATE_NONPRIVPORT;
 	if (test_bit(NFS_CS_INFINITE_SLOTS, &clp->cl_flags))
 		args.flags |= RPC_CLNT_CREATE_INFINITE_SLOTS;
+	if (test_bit(NFS_CS_REUSEPORT, &clp->cl_flags))
+		args.flags |= RPC_CLNT_CREATE_REUSEPORT;
 	if (test_bit(NFS_CS_NOPING, &clp->cl_flags))
 		args.flags |= RPC_CLNT_CREATE_NOPING;
 
@@ -685,6 +687,7 @@ static int nfs_init_server(struct nfs_server *server,
 		.timeparms = &timeparms,
 		.cred = server->cred,
 		.nconnect = data->nfs_server.nconnect,
+		.init_flags = (1UL << NFS_CS_REUSEPORT),
 	};
 	struct nfs_client *clp;
 	int error;
