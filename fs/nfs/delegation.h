@@ -48,7 +48,7 @@ void nfs_inode_reclaim_delegation(struct inode *inode, const struct cred *cred,
 		u32 deleg_type);
 int nfs4_inode_return_delegation(struct inode *inode);
 int nfs_async_inode_return_delegation(struct inode *inode, const nfs4_stateid *stateid);
-void nfs_inode_return_delegation_noreclaim(struct inode *inode);
+void nfs_inode_evict_delegation(struct inode *inode);
 
 struct inode *nfs_delegation_find_inode(struct nfs_client *clp, const struct nfs_fh *fhandle);
 void nfs_server_return_all_delegations(struct nfs_server *);
