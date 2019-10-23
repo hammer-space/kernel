@@ -831,6 +831,31 @@ static int max_cb_time(struct net *net)
 	return max(nn->nfsd4_lease/10, (time_t)1) * HZ;
 }
 
+static struct workqueue_struct *callback_wq;
+
+static bool nfsd4_queue_cb(struct nfsd4_callback *cb)
+{
+	return queue_work(callback_wq, &cb->cb_work);
+}
+
+static void nfsd41_cb_inflight_begin(struct nfs4_client *clp)
+{
+	atomic_inc(&clp->cl_cb_inflight);
+}
+
+static void nfsd41_cb_inflight_end(struct nfs4_client *clp)
+{
+
+	if (atomic_dec_and_test(&clp->cl_cb_inflight))
+		wake_up_var(&clp->cl_cb_inflight);
+}
+
+static void nfsd41_cb_inflight_wait_complete(struct nfs4_client *clp)
+{
+	wait_var_event(&clp->cl_cb_inflight,
+			!atomic_read(&clp->cl_cb_inflight));
+}
+
 static const struct cred *get_backchannel_cred(struct nfs4_client *clp, struct rpc_clnt *client, struct nfsd4_session *ses)
 {
 	if (clp->cl_minorversion == 0) {
@@ -942,13 +967,20 @@ static void nfsd4_cb_probe_done(struct rpc_task *task, void *calldata)
 		clp->cl_cb_state = NFSD4_CB_UP;
 }
 
+static void nfsd4_cb_probe_release(void *calldata)
+{
+	struct nfs4_client *clp = container_of(calldata, struct nfs4_client, cl_cb_null);
+
+	nfsd41_cb_inflight_end(clp);
+
+}
+
 static const struct rpc_call_ops nfsd4_cb_probe_ops = {
 	/* XXX: release method to ensure we set the cb channel down if
 	 * necessary on early failure? */
 	.rpc_call_done = nfsd4_cb_probe_done,
+	.rpc_release = nfsd4_cb_probe_release,
 };
-
-static struct workqueue_struct *callback_wq;
 
 /*
  * Poke the callback thread to process any updates to the callback
@@ -1009,39 +1041,14 @@ static void nfsd41_cb_release_slot(struct nfsd4_callback *cb)
 	}
 }
 
-static void nfs41_cb_inflight_begin(struct nfsd4_callback *cb)
-{
-	struct nfs4_client *clp = cb->cb_clp;
-
-	if (!cb->cb_inflight) {
-		atomic_inc(&clp->cl_cb_inflight);
-		cb->cb_inflight = true;
-	}
-}
-
-static void nfsd41_cb_inflight_end(struct nfs4_client *clp)
-{
-
-	if (atomic_dec_and_test(&clp->cl_cb_inflight))
-		wake_up_var(&clp->cl_cb_inflight);
-}
-
-static void nfsd41_cb_inflight_wait_complete(struct nfs4_client *clp)
-{
-	wait_var_event(&clp->cl_cb_inflight,
-			!atomic_read(&clp->cl_cb_inflight));
-}
-
 static void nfsd41_destroy_cb(struct nfsd4_callback *cb)
 {
 	struct nfs4_client *clp = cb->cb_clp;
-	bool clear_inflight = cb->cb_inflight;
 
 	nfsd41_cb_release_slot(cb);
 	if (cb->cb_ops && cb->cb_ops->release)
 		cb->cb_ops->release(cb);
-	if (clear_inflight)
-		nfsd41_cb_inflight_end(clp);
+	nfsd41_cb_inflight_end(clp);
 }
 
 /*
@@ -1185,7 +1192,7 @@ static void nfsd4_cb_release(void *calldata)
 	struct nfsd4_callback *cb = calldata;
 
 	if (cb->cb_need_restart)
-		nfsd4_run_cb(cb);
+		nfsd4_queue_cb(cb);
 	else
 		nfsd41_destroy_cb(cb);
 
@@ -1338,11 +1345,13 @@ void nfsd4_init_cb(struct nfsd4_callback *cb, struct nfs4_client *clp,
 	cb->cb_status = 0;
 	cb->cb_need_restart = false;
 	cb->cb_holds_slot = false;
-	cb->cb_inflight = false;
 }
 
 void nfsd4_run_cb(struct nfsd4_callback *cb)
 {
-	nfs41_cb_inflight_begin(cb);
-	queue_work(callback_wq, &cb->cb_work);
+	struct nfs4_client *clp = cb->cb_clp;
+
+	nfsd41_cb_inflight_begin(clp);
+	if (!nfsd4_queue_cb(cb))
+		nfsd41_cb_inflight_end(clp);
 }
