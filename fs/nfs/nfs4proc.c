@@ -6355,10 +6355,10 @@ static void nfs4_delegreturn_done(struct rpc_task *task, void *calldata)
 			/* Let the main handler below do stateid recovery */
 			break;
 		case -NFS4ERR_OLD_STATEID:
-			if (nfs4_refresh_delegation_stateid(&data->stateid,
+			if (!nfs4_refresh_delegation_stateid(&data->stateid,
 						data->inode))
-				goto out_restart;
-			/* Fallthrough */
+				nfs4_stateid_seqid_inc(&data->stateid);
+			goto out_restart;
 		default:
 			data->args.sattr_args = NULL;
 			data->res.sattr_res = false;
