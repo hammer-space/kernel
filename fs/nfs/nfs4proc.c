@@ -6360,8 +6360,13 @@ static void nfs4_delegreturn_done(struct rpc_task *task, void *calldata)
 				nfs4_stateid_seqid_inc(&data->stateid);
 			goto out_restart;
 		default:
-			data->args.sattr_args = NULL;
-			data->res.sattr_res = false;
+			task->tk_status = nfs4_async_handle_exception(task,
+					data->res.server, data->res.sattr_ret,
+					&exception);
+			if (!exception.retry) {
+				data->args.sattr_args = NULL;
+				data->res.sattr_res = false;
+			}
 			goto out_restart;
 		}
 	}
