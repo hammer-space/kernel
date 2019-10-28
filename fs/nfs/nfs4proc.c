@@ -1487,8 +1487,6 @@ static int can_open_delegated(struct nfs_delegation *delegation, fmode_t fmode,
 		return 0;
 	if ((delegation->type & fmode) != fmode)
 		return 0;
-	if (test_bit(NFS_DELEGATION_RETURNING, &delegation->flags))
-		return 0;
 	switch (claim) {
 	case NFS4_OPEN_CLAIM_NULL:
 	case NFS4_OPEN_CLAIM_FH:
@@ -1786,7 +1784,7 @@ static int update_open_stateid(struct nfs4_state *state,
 		ret = 1;
 	}
 
-	deleg_cur = rcu_dereference(nfsi->delegation);
+	deleg_cur = nfs4_get_valid_delegation(state->inode);
 	if (deleg_cur == NULL)
 		goto no_delegation;
 
@@ -1798,7 +1796,7 @@ static int update_open_stateid(struct nfs4_state *state,
 
 	if (delegation == NULL)
 		delegation = &deleg_cur->stateid;
-	else if (!nfs4_stateid_match(&deleg_cur->stateid, delegation))
+	else if (!nfs4_stateid_match_other(&deleg_cur->stateid, delegation))
 		goto no_delegation_unlock;
 
 	nfs_mark_delegation_referenced(deleg_cur);
@@ -1845,7 +1843,7 @@ static void nfs4_return_incompatible_delegation(struct inode *inode, fmode_t fmo
 
 	fmode &= FMODE_READ|FMODE_WRITE;
 	rcu_read_lock();
-	delegation = rcu_dereference(NFS_I(inode)->delegation);
+	delegation = nfs4_get_valid_delegation(inode);
 	if (delegation == NULL || (delegation->type & fmode) == fmode) {
 		rcu_read_unlock();
 		return;
@@ -1857,7 +1855,6 @@ static void nfs4_return_incompatible_delegation(struct inode *inode, fmode_t fmo
 static struct nfs4_state *nfs4_try_open_cached(struct nfs4_opendata *opendata)
 {
 	struct nfs4_state *state = opendata->state;
-	struct nfs_inode *nfsi = NFS_I(state->inode);
 	struct nfs_delegation *delegation;
 	int open_mode = opendata->o_arg.open_flags;
 	fmode_t fmode = opendata->o_arg.fmode;
@@ -1874,7 +1871,7 @@ static struct nfs4_state *nfs4_try_open_cached(struct nfs4_opendata *opendata)
 		}
 		spin_unlock(&state->owner->so_lock);
 		rcu_read_lock();
-		delegation = rcu_dereference(nfsi->delegation);
+		delegation = nfs4_get_valid_delegation(state->inode);
 		if (!can_open_delegated(delegation, fmode, claim)) {
 			rcu_read_unlock();
 			break;
@@ -2438,7 +2435,7 @@ static void nfs4_open_prepare(struct rpc_task *task, void *calldata)
 					data->o_arg.open_flags, claim))
 			goto out_no_action;
 		rcu_read_lock();
-		delegation = rcu_dereference(NFS_I(data->state->inode)->delegation);
+		delegation = nfs4_get_valid_delegation(data->state->inode);
 		if (can_open_delegated(delegation, data->o_arg.fmode, claim))
 			goto unlock_no_action;
 		rcu_read_unlock();
@@ -6358,13 +6355,18 @@ static void nfs4_delegreturn_done(struct rpc_task *task, void *calldata)
 			/* Let the main handler below do stateid recovery */
 			break;
 		case -NFS4ERR_OLD_STATEID:
-			if (nfs4_refresh_delegation_stateid(&data->stateid,
+			if (!nfs4_refresh_delegation_stateid(&data->stateid,
 						data->inode))
-				goto out_restart;
-			/* Fallthrough */
+				nfs4_stateid_seqid_inc(&data->stateid);
+			goto out_restart;
 		default:
-			data->args.sattr_args = NULL;
-			data->res.sattr_res = false;
+			task->tk_status = nfs4_async_handle_exception(task,
+					data->res.server, data->res.sattr_ret,
+					&exception);
+			if (!exception.retry) {
+				data->args.sattr_args = NULL;
+				data->res.sattr_res = false;
+			}
 			goto out_restart;
 		}
 	}
@@ -6385,10 +6387,13 @@ static void nfs4_delegreturn_done(struct rpc_task *task, void *calldata)
 		task->tk_status = 0;
 		break;
 	case -NFS4ERR_OLD_STATEID:
-		if (nfs4_refresh_delegation_stateid(&data->stateid, data->inode))
-			goto out_restart;
-		task->tk_status = 0;
-		break;
+		if (!nfs4_refresh_delegation_stateid(&data->stateid, data->inode))
+			nfs4_stateid_seqid_inc(&data->stateid);
+		if (data->args.bitmask) {
+			data->args.bitmask = NULL;
+			data->res.fattr = NULL;
+		}
+		goto out_restart;
 	case -NFS4ERR_ACCESS:
 		if (data->args.bitmask) {
 			data->args.bitmask = NULL;
@@ -6403,6 +6408,7 @@ static void nfs4_delegreturn_done(struct rpc_task *task, void *calldata)
 		if (exception.retry)
 			goto out_restart;
 	}
+	nfs_delegation_mark_returned(data->inode, data->args.stateid);
 	data->rpc_status = task->tk_status;
 	return;
 out_restart:
