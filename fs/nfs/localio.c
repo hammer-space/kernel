@@ -488,8 +488,10 @@ nfs_do_local_read(struct nfs_pgio_header *hdr, struct file *filp,
 	nfs_local_pgio_init(hdr, call_ops);
 	hdr->res.eof = false;
 
-	INIT_WORK(&iocb->work, nfs_local_pgio_complete_work);
-	iocb->kiocb.ki_complete = nfs_local_read_aio_complete;
+	if (iocb->kiocb.ki_flags & IOCB_DIRECT) {
+		INIT_WORK(&iocb->work, nfs_local_pgio_complete_work);
+		iocb->kiocb.ki_complete = nfs_local_read_aio_complete;
+	}
 
 	status = call_read_iter(filp, &iocb->kiocb, &iter);
 	if (status != -EIOCBQUEUED) {
@@ -603,8 +605,10 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp,
 	}
 	nfs_local_pgio_init(hdr, call_ops);
 
-	INIT_WORK(&iocb->work, nfs_local_write_aio_complete_work);
-	iocb->kiocb.ki_complete = nfs_local_write_aio_complete;
+	if (iocb->kiocb.ki_flags & IOCB_DIRECT) {
+		INIT_WORK(&iocb->work, nfs_local_write_aio_complete_work);
+		iocb->kiocb.ki_complete = nfs_local_write_aio_complete;
+	}
 
 	file_start_write(filp);
 	status = call_write_iter(filp, &iocb->kiocb, &iter);
