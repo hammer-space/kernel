@@ -252,8 +252,6 @@ nfs_local_probe(struct nfs_client *clp)
 	switch (clp->cl_addr.ss_family) {
 	case AF_INET:
 		sin = (struct sockaddr_in *)&clp->cl_addr;
-		if (ntohs(sin->sin_port) != NFS_PORT)
-			goto out;
 		if (ipv4_is_loopback(sin->sin_addr.s_addr)) {
 			dprintk("%s: detected IPv4 loopback address\n",
 				__func__);
@@ -262,8 +260,6 @@ nfs_local_probe(struct nfs_client *clp)
 		break;
 	case AF_INET6:
 		sin6 = (struct sockaddr_in6 *)&clp->cl_addr;
-		if (ntohs(sin6->sin6_port) != NFS_PORT)
-			goto out;
 		if (memcmp(&sin6->sin6_addr, &in6addr_loopback,
 		    sizeof(struct in6_addr)) == 0) {
 			dprintk("%s: detected IPv6 loopback address\n",
