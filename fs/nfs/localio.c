@@ -392,6 +392,7 @@ nfs_local_iter_init(struct iov_iter *i, struct nfs_local_kiocb *iocb, int dir)
 	} else
 		iov_iter_bvec(i, dir, iocb->bvec,
 				hdr->page_array.npages, hdr->args.count);
+	i->type |= ITER_BVEC_FLAG_NO_REF;
 }
 
 static void
