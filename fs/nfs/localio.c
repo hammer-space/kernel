@@ -318,11 +318,18 @@ nfs_local_open_fh(struct nfs_client *clp, const struct cred *cred,
 	}
 
 	status = ctx->open_f(clp->cl_rpcclient, cred, fh, mode, &filp);
-	if (status < 0)
+	if (status < 0) {
+		dprintk("%s: open local file failed error=%d\n",
+				__func__, status);
+		switch (status) {
+		case -ENXIO:
+			nfs_local_disable(clp);
+			/* Fallthrough */
+		case -ETIMEDOUT:
+			status = -EAGAIN;
+		}
 		filp = ERR_PTR(status);
-
-
-	dprintk("%s: open local file %p", __func__, filp);
+	}
 	return filp;
 }
 EXPORT_SYMBOL_GPL(nfs_local_open_fh);
