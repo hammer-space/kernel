@@ -38,6 +38,11 @@ nfsd_local_fakerqst_create(struct rpc_clnt *rpc_clnt, const struct cred *cred)
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 	int status;
 
+	if (!nn->nfsd_serv) {
+		dprintk("%s: localio denied. Server not running\n", __func__);
+		return ERR_PTR(-ENXIO);
+	}
+
 	rqstp = kzalloc(sizeof(*rqstp), GFP_KERNEL);
 	if (!rqstp)
 		return ERR_PTR(-ENOMEM);
@@ -77,8 +82,18 @@ nfsd_local_fakerqst_create(struct rpc_clnt *rpc_clnt, const struct cred *cred)
 	rqstp->rq_chandle.thread_wait = 5 * HZ;
 
 	status = svcauth_unix_set_client(rqstp);
-	if (status != SVC_OK) {
+	switch (status) {
+	case SVC_OK:
+		break;
+	case SVC_DENIED:
+		status = -ENXIO;
+		dprintk("%s: client %pISpc denied localio access\n",
+				__func__, (struct sockaddr *)&rqstp->rq_addr);
+		goto out_err;
+	default:
 		status = -ETIMEDOUT;
+		dprintk("%s: client %pISpc temporarily denied localio access\n",
+				__func__, (struct sockaddr *)&rqstp->rq_addr);
 		goto out_err;
 	}
 

@@ -252,8 +252,6 @@ nfs_local_probe(struct nfs_client *clp)
 	switch (clp->cl_addr.ss_family) {
 	case AF_INET:
 		sin = (struct sockaddr_in *)&clp->cl_addr;
-		if (ntohs(sin->sin_port) != NFS_PORT)
-			goto out;
 		if (ipv4_is_loopback(sin->sin_addr.s_addr)) {
 			dprintk("%s: detected IPv4 loopback address\n",
 				__func__);
@@ -262,8 +260,6 @@ nfs_local_probe(struct nfs_client *clp)
 		break;
 	case AF_INET6:
 		sin6 = (struct sockaddr_in6 *)&clp->cl_addr;
-		if (ntohs(sin6->sin6_port) != NFS_PORT)
-			goto out;
 		if (memcmp(&sin6->sin6_addr, &in6addr_loopback,
 		    sizeof(struct in6_addr)) == 0) {
 			dprintk("%s: detected IPv6 loopback address\n",
@@ -322,11 +318,18 @@ nfs_local_open_fh(struct nfs_client *clp, const struct cred *cred,
 	}
 
 	status = ctx->open_f(clp->cl_rpcclient, cred, fh, mode, &filp);
-	if (status < 0)
+	if (status < 0) {
+		dprintk("%s: open local file failed error=%d\n",
+				__func__, status);
+		switch (status) {
+		case -ENXIO:
+			nfs_local_disable(clp);
+			/* Fallthrough */
+		case -ETIMEDOUT:
+			status = -EAGAIN;
+		}
 		filp = ERR_PTR(status);
-
-
-	dprintk("%s: open local file %p", __func__, filp);
+	}
 	return filp;
 }
 EXPORT_SYMBOL_GPL(nfs_local_open_fh);
@@ -392,6 +395,7 @@ nfs_local_iter_init(struct iov_iter *i, struct nfs_local_kiocb *iocb, int dir)
 	} else
 		iov_iter_bvec(i, dir, iocb->bvec,
 				hdr->page_array.npages, hdr->args.count);
+	i->type |= ITER_BVEC_FLAG_NO_REF;
 }
 
 static void
@@ -487,8 +491,10 @@ nfs_do_local_read(struct nfs_pgio_header *hdr, struct file *filp,
 	nfs_local_pgio_init(hdr, call_ops);
 	hdr->res.eof = false;
 
-	INIT_WORK(&iocb->work, nfs_local_pgio_complete_work);
-	iocb->kiocb.ki_complete = nfs_local_read_aio_complete;
+	if (iocb->kiocb.ki_flags & IOCB_DIRECT) {
+		INIT_WORK(&iocb->work, nfs_local_pgio_complete_work);
+		iocb->kiocb.ki_complete = nfs_local_read_aio_complete;
+	}
 
 	status = call_read_iter(filp, &iocb->kiocb, &iter);
 	if (status != -EIOCBQUEUED) {
@@ -602,8 +608,10 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp,
 	}
 	nfs_local_pgio_init(hdr, call_ops);
 
-	INIT_WORK(&iocb->work, nfs_local_write_aio_complete_work);
-	iocb->kiocb.ki_complete = nfs_local_write_aio_complete;
+	if (iocb->kiocb.ki_flags & IOCB_DIRECT) {
+		INIT_WORK(&iocb->work, nfs_local_write_aio_complete_work);
+		iocb->kiocb.ki_complete = nfs_local_write_aio_complete;
+	}
 
 	file_start_write(filp);
 	status = call_write_iter(filp, &iocb->kiocb, &iter);
