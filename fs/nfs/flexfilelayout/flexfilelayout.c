@@ -1992,12 +1992,12 @@ static int ff_layout_initiate_commit(struct nfs_commit_data *data, int how)
 	struct pnfs_layout_segment *lseg = data->lseg;
 	struct nfs4_pnfs_ds *ds;
 	struct rpc_clnt *ds_clnt;
+	struct file *filp;
 	struct nfs4_ff_layout_mirror *mirror;
 	const struct cred *ds_cred;
 	u32 idx;
 	int vers, ret;
 	struct nfs_fh *fh;
-	bool localcommit = false;
 
 	if (!lseg || !(pnfs_is_valid_lseg(lseg) ||
 	    test_bit(NFS_LSEG_LAYOUTRETURN, &lseg->pls_flags)))
@@ -2032,24 +2032,18 @@ static int ff_layout_initiate_commit(struct nfs_commit_data *data, int how)
 		data->args.fh = fh;
 
 	/* Start IO accounting for local commit */
-	if (nfs_server_is_local(ds->ds_clp)) {
-		struct file *filp;
-
-		filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,
-					FMODE_READ|FMODE_WRITE);
-		if (!IS_ERR_OR_NULL(filp)) {
-			/* FIXME: we should pass this to the initiate func */
-			fput(filp);
-			localcommit = true;
-			data->task.tk_start = ktime_get();
-			ff_layout_commit_record_layoutstats_start(&data->task, data);
-		}
-	}
+	filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,
+				FMODE_READ|FMODE_WRITE);
+	if (!IS_ERR_OR_NULL(filp)) {
+		data->task.tk_start = ktime_get();
+		ff_layout_commit_record_layoutstats_start(&data->task, data);
+	} else
+		filp = NULL;
 
 	ret = nfs_initiate_commit(ds->ds_clp, ds_clnt, data, ds->ds_clp->rpc_ops,
 				   vers == 3 ? &ff_layout_commit_call_ops_v3 :
 					       &ff_layout_commit_call_ops_v4,
-				   how, RPC_TASK_SOFTCONN, localcommit);
+				   how, RPC_TASK_SOFTCONN, filp);
 	put_cred(ds_cred);
 	return ret;
 out_err:

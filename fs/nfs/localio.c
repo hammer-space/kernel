@@ -663,15 +663,6 @@ nfs_local_file_open(struct nfs_client *clp, const struct cred *cred,
 		return nfs_local_file_open_cached(clp, cred, fh, mode, ctx);
 }
 
-static struct file *
-nfs_local_file_open_cdata(struct nfs_client *clp, const struct cred *cred,
-			  struct nfs_fh *fh, const fmode_t mode,
-			  struct nfs_commit_data *cdata)
-{
-        return nfs_local_file_open(clp, cred, fh, mode, cdata->context,
-				   cdata->lseg, cdata->ds_commit_index);
-}
-
 int
 nfs_local_doio(struct nfs_client *clp, struct file *filp,
 	       struct nfs_pgio_header *hdr,
@@ -709,22 +700,11 @@ out_fput:
 EXPORT_SYMBOL_GPL(nfs_local_doio);
 
 int
-nfs_local_commit(struct nfs_client *clp, const struct cred *cred,
+nfs_local_commit(struct nfs_client *clp, struct file *filp,
 		 struct nfs_commit_data *data)
 {
-	struct file *filp;
 	loff_t end;
-	int status = 0;
-	fmode_t mode;
-
-	mode = FMODE_WRITE;
-
-	filp = nfs_local_file_open_cdata(clp, cred, data->args.fh, mode, data);
-
-	if (IS_ERR(filp))
-		return PTR_ERR(filp);
-	if (!filp)
-		return -EBADF;
+	int status;
 
 	dprintk("%s: commit %llu - %u\n", __func__,
 		data->args.offset, data->args.count);

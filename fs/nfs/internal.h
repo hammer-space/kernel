@@ -417,7 +417,7 @@ extern struct file *nfs_local_file_open(struct nfs_client *clp,
 					u32 ds_idx);
 extern int nfs_local_doio(struct nfs_client *, struct file *,
 		struct nfs_pgio_header *, const struct rpc_call_ops *);
-extern int nfs_local_commit(struct nfs_client *, const struct cred *,
+extern int nfs_local_commit(struct nfs_client *, struct file *,
 			    struct nfs_commit_data *);
 extern void nfs_probe_local_addr(struct nfs_client *clnt);
 extern bool nfs_server_is_local(const struct nfs_client *clp);
@@ -513,7 +513,7 @@ extern int nfs_initiate_commit(struct nfs_client *clp,
 			       struct nfs_commit_data *data,
 			       const struct nfs_rpc_ops *nfs_ops,
 			       const struct rpc_call_ops *call_ops,
-			       int how, int flags, bool localio);
+			       int how, int flags, struct file *localio);
 extern void nfs_init_commit(struct nfs_commit_data *data,
 			    struct list_head *head,
 			    struct pnfs_layout_segment *lseg,
