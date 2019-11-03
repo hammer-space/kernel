@@ -347,26 +347,6 @@ outerr:
 	return false;
 }
 
-/* check to see if @sap is using @port */
-static bool ff_layout_addr_filter_port(struct sockaddr *sap, short port)
-{
-	struct sockaddr_in *sin = (struct sockaddr_in *)sap;
-	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)sap;
-
-	switch (sap->sa_family) {
-	case AF_INET:
-		if (port == ntohs(sin->sin_port))
-			return true;
-		break;
-	case AF_INET6:
-		if (port == ntohs(sin6->sin6_port))
-			return true;
-		break;
-	}
-
-	return false;
-}
-
 static bool ff_layout_ds_is_local(struct nfs4_pnfs_ds *ds)
 {
 	struct nfs_local_addr *addr;
@@ -375,8 +355,6 @@ static bool ff_layout_ds_is_local(struct nfs4_pnfs_ds *ds)
 
 	list_for_each_entry(da, &ds->ds_addrs, da_node) {
 		sap = (struct sockaddr *)&da->da_addr;
-		if (!ff_layout_addr_filter_port(sap, NFS_PORT))
-			continue;
 		list_for_each_entry(addr, &ds->ds_clp->cl_local_addrs, cl_addrs)
 			if (rpc_cmp_addr((struct sockaddr *)&addr->address, sap))
 				return true;
