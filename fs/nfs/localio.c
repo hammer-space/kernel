@@ -647,7 +647,7 @@ nfs_local_file_open_cached(struct nfs_client *clp, const struct cred *cred,
 	return get_file(filp);
 }
 
-static struct file *
+struct file *
 nfs_local_file_open(struct nfs_client *clp, const struct cred *cred,
 		    struct nfs_fh *fh, const fmode_t mode,
 		    struct nfs_open_context *ctx,
@@ -655,6 +655,8 @@ nfs_local_file_open(struct nfs_client *clp, const struct cred *cred,
 {
 	struct nfs_server *s = NFS_SERVER(ctx->dentry->d_inode);
 
+	if (!nfs_server_is_local(clp))
+		return NULL;
 	if (lseg)
 		return pnfs_local_open_fh(s, lseg, ds_idx, clp, cred, fh, mode);
 	else
@@ -670,31 +672,13 @@ nfs_local_file_open_cdata(struct nfs_client *clp, const struct cred *cred,
 				   cdata->lseg, cdata->ds_commit_index);
 }
 
-static struct file *
-nfs_local_file_open_hdr(struct nfs_client *clp, const struct cred *cred,
-			struct nfs_fh *fh, const fmode_t mode,
-			struct nfs_pgio_header *hdr)
-{
-        return nfs_local_file_open(clp, cred, fh, mode, hdr->args.context,
-				   hdr->lseg, hdr->ds_commit_idx);
-}
-
 int
-nfs_local_doio(struct nfs_client *clp, const struct cred *cred,
+nfs_local_doio(struct nfs_client *clp, struct file *filp,
 	       struct nfs_pgio_header *hdr,
 	       const struct rpc_call_ops *call_ops)
 {
-	struct file *filp;
 	int status = 0;
-	fmode_t mode;
 
-	mode = hdr->rw_mode;
-
-	filp = nfs_local_file_open_hdr(clp, cred, hdr->args.fh, mode, hdr);
-	if (IS_ERR(filp))
-		return PTR_ERR(filp);
-	if (!filp)
-		return -EBADF;
 	if (!hdr->args.count)
 		goto out_fput;
 	/* Don't support filesystems without read_iter/write_iter */
@@ -704,7 +688,7 @@ nfs_local_doio(struct nfs_client *clp, const struct cred *cred,
 		goto out_fput;
 	}
 
-	switch (mode) {
+	switch (hdr->rw_mode) {
 	case FMODE_READ:
 		status = nfs_do_local_read(hdr, filp, call_ops);
 		break;

@@ -635,7 +635,7 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 		      struct nfs_pgio_header *hdr, const struct cred *cred,
 		      const struct nfs_rpc_ops *rpc_ops,
 		      const struct rpc_call_ops *call_ops, int how, int flags,
-		      bool localio)
+		      struct file *localio)
 {
 	struct nfs_pgio_mirror *mirror = nfs_pgio_current_mirror(desc);
 	struct rpc_task *task;
@@ -665,8 +665,7 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 		(unsigned long long)hdr->args.offset);
 
 	if (localio) {
-		/* mark hdr */
-		ret = nfs_local_doio(clp, cred, hdr, call_ops);
+		ret = nfs_local_doio(clp, localio, hdr, call_ops);
 		if (ret == -EIOCBQUEUED)
 			return 0;
 
@@ -860,7 +859,7 @@ EXPORT_SYMBOL_GPL(nfs_generic_pgio);
 static int nfs_generic_pg_pgios(struct nfs_pageio_descriptor *desc)
 {
 	struct nfs_pgio_header *hdr;
-	bool localio;
+	struct file *filp;
 	int ret;
 
 	hdr = nfs_pgio_header_alloc(desc->pg_rw_ops);
@@ -871,15 +870,25 @@ static int nfs_generic_pg_pgios(struct nfs_pageio_descriptor *desc)
 	nfs_pgheader_init(desc, hdr, nfs_pgio_header_free);
 	ret = nfs_generic_pgio(desc, hdr);
 	if (ret == 0) {
-		localio = nfs_server_is_local(NFS_SERVER(hdr->inode)->nfs_client);
-		ret = nfs_initiate_pgio(desc,
-					NFS_SERVER(hdr->inode)->nfs_client,
+		struct nfs_client *clp = NFS_SERVER(hdr->inode)->nfs_client;
+
+		filp = nfs_local_file_open(clp, hdr->cred,
+					   hdr->args.fh,
+					   hdr->rw_mode,
+					   hdr->args.context,
+					   hdr->lseg,
+					   hdr->ds_commit_idx);
+		if (IS_ERR(filp))
+			filp = NULL;
+
+		ret = nfs_initiate_pgio(desc, clp,
 					NFS_CLIENT(hdr->inode),
 					hdr,
 					hdr->cred,
 					NFS_PROTO(hdr->inode),
 					desc->pg_rpc_callops,
-					desc->pg_ioflags, 0, localio);
+					desc->pg_ioflags, 0,
+					filp);
 	}
 	return ret;
 }

@@ -1817,13 +1817,13 @@ ff_layout_read_pagelist(struct nfs_pageio_descriptor *desc,
 	struct pnfs_layout_segment *lseg = hdr->lseg;
 	struct nfs4_pnfs_ds *ds;
 	struct rpc_clnt *ds_clnt;
+	struct file *filp;
 	struct nfs4_ff_layout_mirror *mirror;
 	const struct cred *ds_cred;
 	loff_t offset = hdr->args.offset;
 	u32 idx = hdr->pgio_mirror_idx;
 	int vers;
 	struct nfs_fh *fh;
-	bool localread = false;
 
 	dprintk("--> %s ino %lu pgbase %u req %zu@%llu\n",
 		__func__, hdr->inode->i_ino,
@@ -1865,26 +1865,20 @@ ff_layout_read_pagelist(struct nfs_pageio_descriptor *desc,
 	hdr->mds_offset = offset;
 
 	/* Start IO accounting for local read */
-	if (nfs_server_is_local(ds->ds_clp)) {
-		struct file *filp;
-
-		filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,
-					FMODE_READ);
-		if (!IS_ERR_OR_NULL(filp)) {
-			/* FIXME: we should pass this to the initiate func */
-			fput(filp);
-			localread = true;
-			hdr->task.tk_start = ktime_get();
-			ff_layout_read_record_layoutstats_start(&hdr->task, hdr);
-		}
-	}
+	filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,
+				FMODE_READ);
+	if (!IS_ERR_OR_NULL(filp)) {
+		hdr->task.tk_start = ktime_get();
+		ff_layout_read_record_layoutstats_start(&hdr->task, hdr);
+	} else
+		filp = NULL;
 
 	/* Perform an asynchronous read to ds */
 	nfs_initiate_pgio(desc, ds->ds_clp, ds_clnt, hdr, ds_cred,
 			  ds->ds_clp->rpc_ops,
 			  vers == 3 ? &ff_layout_read_call_ops_v3 :
 				      &ff_layout_read_call_ops_v4,
-			  0, RPC_TASK_SOFTCONN, localread);
+			  0, RPC_TASK_SOFTCONN, filp);
 	put_cred(ds_cred);
 	return PNFS_ATTEMPTED;
 
@@ -1905,13 +1899,13 @@ ff_layout_write_pagelist(struct nfs_pageio_descriptor *desc,
 	struct pnfs_layout_segment *lseg = hdr->lseg;
 	struct nfs4_pnfs_ds *ds;
 	struct rpc_clnt *ds_clnt;
+	struct file *filp;
 	struct nfs4_ff_layout_mirror *mirror;
 	const struct cred *ds_cred;
 	loff_t offset = hdr->args.offset;
 	int vers;
 	struct nfs_fh *fh;
 	int idx = hdr->pgio_mirror_idx;
-	bool localwrite = false;
 
 	mirror = FF_LAYOUT_COMP(lseg, idx);
 	ds = nfs4_ff_layout_prepare_ds(lseg, mirror, true);
@@ -1951,26 +1945,20 @@ ff_layout_write_pagelist(struct nfs_pageio_descriptor *desc,
 	hdr->args.offset = offset;
 
 	/* Start IO accounting for local write */
-	if (nfs_server_is_local(ds->ds_clp)) {
-		struct file *filp;
-
-		filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,
-					FMODE_READ|FMODE_WRITE);
-		if (!IS_ERR_OR_NULL(filp)) {
-			/* FIXME: we should pass this to the initiate func */
-			fput(filp);
-			localwrite = true;
-			hdr->task.tk_start = ktime_get();
-			ff_layout_write_record_layoutstats_start(&hdr->task, hdr);
-		}
-	}
+	filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,
+				FMODE_READ|FMODE_WRITE);
+	if (!IS_ERR_OR_NULL(filp)) {
+		hdr->task.tk_start = ktime_get();
+		ff_layout_write_record_layoutstats_start(&hdr->task, hdr);
+	} else
+		filp = NULL;
 
 	/* Perform an asynchronous write */
 	nfs_initiate_pgio(desc, ds->ds_clp, ds_clnt, hdr, ds_cred,
 			  ds->ds_clp->rpc_ops,
 			  vers == 3 ? &ff_layout_write_call_ops_v3 :
 				      &ff_layout_write_call_ops_v4,
-			  sync, RPC_TASK_SOFTCONN, localwrite);
+			  sync, RPC_TASK_SOFTCONN, filp);
 	put_cred(ds_cred);
 	return PNFS_ATTEMPTED;
 
@@ -2556,6 +2544,8 @@ ff_local_open_fh(struct pnfs_layout_segment *lseg,
 	struct nfs4_ff_layout_mirror *mirror = FF_LAYOUT_COMP(lseg, ds_idx);
 	struct file *filp, *new, __rcu **pfile;
 
+	if (!nfs_server_is_local(clp))
+		return NULL;
 	if (mode & FMODE_WRITE) {
 		/*
 		 * Always request read and write access since this corresponds
