@@ -875,9 +875,6 @@ static int nfs_generic_pg_pgios(struct nfs_pageio_descriptor *desc)
 		filp = nfs_local_file_open(clp, hdr->cred,
 					   hdr->args.fh,
 					   hdr->args.context);
-		if (IS_ERR(filp))
-			filp = NULL;
-
 		ret = nfs_initiate_pgio(desc, clp,
 					NFS_CLIENT(hdr->inode),
 					hdr,

@@ -635,7 +635,7 @@ nfs_local_file_open_cached(struct nfs_client *clp, const struct cred *cred,
 	if (!filp) {
 		struct file *new = nfs_local_open_fh(clp, cred, fh, ctx->mode);
 		if (IS_ERR_OR_NULL(new))
-			return new;
+			return NULL;
 		/* try to put this one in the slot */
 		filp = cmpxchg(&ctx->local_filp, NULL, new);
 		if (filp != NULL)
