@@ -22,6 +22,7 @@
 
 #include "internal.h"
 #include "pnfs.h"
+#include "nfstrace.h"
 
 #define NFSDBG_FACILITY		NFSDBG_VFS
 
@@ -321,6 +322,7 @@ nfs_local_open_fh(struct nfs_client *clp, const struct cred *cred,
 	if (status < 0) {
 		dprintk("%s: open local file failed error=%d\n",
 				__func__, status);
+		trace_nfs_local_open_fh(fh, mode, status);
 		switch (status) {
 		case -ENXIO:
 			nfs_local_disable(clp);
