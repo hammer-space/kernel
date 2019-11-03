@@ -154,6 +154,53 @@ decode_name(struct xdr_stream *xdr, u32 *id)
 	return 0;
 }
 
+static struct file *
+ff_local_open_fh(struct pnfs_layout_segment *lseg,
+		 u32 ds_idx,
+		 struct nfs_client *clp,
+		 const struct cred *cred,
+		 struct nfs_fh *fh,
+		 fmode_t mode)
+{
+	struct nfs4_ff_layout_mirror *mirror = FF_LAYOUT_COMP(lseg, ds_idx);
+	struct file *filp, *new, __rcu **pfile;
+
+	if (!nfs_server_is_local(clp))
+		return NULL;
+	if (mode & FMODE_WRITE) {
+		/*
+		 * Always request read and write access since this corresponds
+		 * to a rw layout.
+		 */
+		mode |= FMODE_READ;
+		pfile = &mirror->rw_file;
+	} else
+		pfile = &mirror->ro_file;
+
+	new = NULL;
+	rcu_read_lock();
+	filp = rcu_dereference(*pfile);
+	if (!filp) {
+		rcu_read_unlock();
+		new = nfs_local_open_fh(clp, cred, fh, mode);
+		if (IS_ERR(new))
+			return NULL;
+		rcu_read_lock();
+		/* try to swap in the pointer */
+		filp = cmpxchg(pfile, NULL, new);
+		if (!filp) {
+			filp = new;
+			new = NULL;
+		}
+	}
+	if (!get_file_rcu(filp))
+		filp = NULL;
+	rcu_read_unlock();
+	if (new)
+		fput(new);
+	return filp;
+}
+
 static bool ff_mirror_match_fh(const struct nfs4_ff_layout_mirror *m1,
 		const struct nfs4_ff_layout_mirror *m2)
 {
@@ -1867,11 +1914,10 @@ ff_layout_read_pagelist(struct nfs_pageio_descriptor *desc,
 	/* Start IO accounting for local read */
 	filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,
 				FMODE_READ);
-	if (!IS_ERR_OR_NULL(filp)) {
+	if (filp) {
 		hdr->task.tk_start = ktime_get();
 		ff_layout_read_record_layoutstats_start(&hdr->task, hdr);
-	} else
-		filp = NULL;
+	}
 
 	/* Perform an asynchronous read to ds */
 	nfs_initiate_pgio(desc, ds->ds_clp, ds_clnt, hdr, ds_cred,
@@ -1947,11 +1993,10 @@ ff_layout_write_pagelist(struct nfs_pageio_descriptor *desc,
 	/* Start IO accounting for local write */
 	filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,
 				FMODE_READ|FMODE_WRITE);
-	if (!IS_ERR_OR_NULL(filp)) {
+	if (filp) {
 		hdr->task.tk_start = ktime_get();
 		ff_layout_write_record_layoutstats_start(&hdr->task, hdr);
-	} else
-		filp = NULL;
+	}
 
 	/* Perform an asynchronous write */
 	nfs_initiate_pgio(desc, ds->ds_clp, ds_clnt, hdr, ds_cred,
@@ -2034,11 +2079,10 @@ static int ff_layout_initiate_commit(struct nfs_commit_data *data, int how)
 	/* Start IO accounting for local commit */
 	filp = ff_local_open_fh(lseg, idx, ds->ds_clp, ds_cred, fh,
 				FMODE_READ|FMODE_WRITE);
-	if (!IS_ERR_OR_NULL(filp)) {
+	if (filp) {
 		data->task.tk_start = ktime_get();
 		ff_layout_commit_record_layoutstats_start(&data->task, data);
-	} else
-		filp = NULL;
+	}
 
 	ret = nfs_initiate_commit(ds->ds_clp, ds_clnt, data, ds->ds_clp->rpc_ops,
 				   vers == 3 ? &ff_layout_commit_call_ops_v3 :
@@ -2525,65 +2569,6 @@ ff_layout_set_layoutdriver(struct nfs_server *server,
 	server->caps |= NFS_CAP_LAYOUTSTATS;
 #endif
 	return 0;
-}
-
-struct file *
-ff_local_open_fh(struct pnfs_layout_segment *lseg,
-		 u32 ds_idx,
-		 struct nfs_client *clp,
-		 const struct cred *cred,
-		 struct nfs_fh *fh,
-		 fmode_t mode)
-{
-	struct nfs4_ff_layout_mirror *mirror = FF_LAYOUT_COMP(lseg, ds_idx);
-	struct file *filp, *new, __rcu **pfile;
-
-	if (!nfs_server_is_local(clp))
-		return NULL;
-	if (mode & FMODE_WRITE) {
-		/*
-		 * Always request read and write access since this corresponds
-		 * to a rw layout.
-		 */
-		mode |= FMODE_READ;
-		pfile = &mirror->rw_file;
-	} else {
-		pfile = &mirror->ro_file;
-	}
-
-	do {
-		rcu_read_lock();
-		filp = rcu_dereference(*pfile);
-		if (filp) {
-			if (!get_file_rcu(filp))
-				filp = NULL;
-			rcu_read_unlock();
-		} else {
-			rcu_read_unlock();
-			new = nfs_local_open_fh(clp, cred, fh, mode);
-			if (!IS_ERR_OR_NULL(new)) {
-				/* one for local_file slot, one to return */
-				get_file(new);
-
-				/* try to swap in the pointer */
-				rcu_read_lock();
-				filp = cmpxchg(pfile, NULL, new);
-				if (likely(!filp)) {
-					rcu_read_unlock();
-					filp = new;
-				} else {
-					/* already one there, get ref to it */
-					if (!get_file_rcu(filp))
-						filp = NULL;
-					rcu_read_unlock();
-					fput(new);
-					fput(new);
-				}
-			} else
-				filp = new;
-		}
-	} while (filp == NULL);
-	return filp;
 }
 
 static struct nfs_client *
