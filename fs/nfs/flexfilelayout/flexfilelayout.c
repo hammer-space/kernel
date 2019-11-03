@@ -2623,7 +2623,6 @@ static struct pnfs_layoutdriver_type flexfilelayout_type = {
 	.write_pagelist		= ff_layout_write_pagelist,
 	.alloc_deviceid_node    = ff_layout_alloc_deviceid_node,
 	.prepare_layoutreturn   = ff_layout_prepare_layoutreturn,
-	.local_open_fh		= ff_local_open_fh,
 	.get_nfs_client		= ff_get_nfs_client,
 	.sync			= pnfs_nfs_generic_sync,
 	.prepare_layoutstats	= ff_layout_prepare_layoutstats,

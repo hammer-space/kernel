@@ -628,8 +628,7 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp,
 
 static struct file *
 nfs_local_file_open_cached(struct nfs_client *clp, const struct cred *cred,
-			   struct nfs_fh *fh, const fmode_t mode,
-			   struct nfs_open_context *ctx)
+			   struct nfs_fh *fh, struct nfs_open_context *ctx)
 {
 	struct file *filp = ctx->local_filp;
 
@@ -649,18 +648,11 @@ nfs_local_file_open_cached(struct nfs_client *clp, const struct cred *cred,
 
 struct file *
 nfs_local_file_open(struct nfs_client *clp, const struct cred *cred,
-		    struct nfs_fh *fh, const fmode_t mode,
-		    struct nfs_open_context *ctx,
-		    struct pnfs_layout_segment *lseg, u32 ds_idx)
+		    struct nfs_fh *fh, struct nfs_open_context *ctx)
 {
-	struct nfs_server *s = NFS_SERVER(ctx->dentry->d_inode);
-
 	if (!nfs_server_is_local(clp))
 		return NULL;
-	if (lseg)
-		return pnfs_local_open_fh(s, lseg, ds_idx, clp, cred, fh, mode);
-	else
-		return nfs_local_file_open_cached(clp, cred, fh, mode, ctx);
+	return nfs_local_file_open_cached(clp, cred, fh, ctx);
 }
 
 int

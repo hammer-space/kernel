@@ -1823,8 +1823,7 @@ nfs_commit_list(struct inode *inode, struct list_head *head, int how,
 	atomic_inc(&cinfo->mds->rpcs_out);
 
 	filp = nfs_local_file_open(clp, data->cred, data->args.fh,
-				   FMODE_WRITE, data->context,
-				   data->lseg, data->ds_commit_index);
+				   data->context);
 	if (IS_ERR(filp))
 		filp = NULL;
 	return nfs_initiate_commit(clp, NFS_CLIENT(inode), data,

@@ -411,10 +411,7 @@ extern struct file *nfs_local_open_fh(struct nfs_client *, const struct cred *,
 extern struct file *nfs_local_file_open(struct nfs_client *clp,
 					const struct cred *cred,
 					struct nfs_fh *fh,
-					const fmode_t mode,
-					struct nfs_open_context *ctx,
-					struct pnfs_layout_segment *lseg,
-					u32 ds_idx);
+					struct nfs_open_context *ctx);
 extern int nfs_local_doio(struct nfs_client *, struct file *,
 		struct nfs_pgio_header *, const struct rpc_call_ops *);
 extern int nfs_local_commit(struct nfs_client *, struct file *,
