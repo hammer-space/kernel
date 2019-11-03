@@ -258,7 +258,7 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *, struct nfs_client *clp,
 		      struct rpc_clnt *rpc_clnt, struct nfs_pgio_header *hdr,
 		      const struct cred *cred, const struct nfs_rpc_ops *rpc_ops,
 		      const struct rpc_call_ops *call_ops, int how, int flags,
-		      bool localio);
+		      struct file *localio);
 void nfs_free_request(struct nfs_page *req);
 struct nfs_pgio_mirror *
 nfs_pgio_current_mirror(struct nfs_pageio_descriptor *desc);
@@ -408,9 +408,13 @@ extern void nfs_local_disable(struct nfs_client *);
 extern void nfs_local_probe(struct nfs_client *);
 extern struct file *nfs_local_open_fh(struct nfs_client *, const struct cred *,
 				      struct nfs_fh *, const fmode_t);
-extern int nfs_local_doio(struct nfs_client *, const struct cred *,
+extern struct file *nfs_local_file_open(struct nfs_client *clp,
+					const struct cred *cred,
+					struct nfs_fh *fh,
+					struct nfs_open_context *ctx);
+extern int nfs_local_doio(struct nfs_client *, struct file *,
 		struct nfs_pgio_header *, const struct rpc_call_ops *);
-extern int nfs_local_commit(struct nfs_client *, const struct cred *,
+extern int nfs_local_commit(struct nfs_client *, struct file *,
 			    struct nfs_commit_data *);
 extern void nfs_probe_local_addr(struct nfs_client *clnt);
 extern bool nfs_server_is_local(const struct nfs_client *clp);
@@ -506,7 +510,7 @@ extern int nfs_initiate_commit(struct nfs_client *clp,
 			       struct nfs_commit_data *data,
 			       const struct nfs_rpc_ops *nfs_ops,
 			       const struct rpc_call_ops *call_ops,
-			       int how, int flags, bool localio);
+			       int how, int flags, struct file *localio);
 extern void nfs_init_commit(struct nfs_commit_data *data,
 			    struct list_head *head,
 			    struct pnfs_layout_segment *lseg,

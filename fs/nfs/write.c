@@ -1679,7 +1679,8 @@ int nfs_initiate_commit(struct nfs_client *clp,
 			struct nfs_commit_data *data,
 			const struct nfs_rpc_ops *nfs_ops,
 			const struct rpc_call_ops *call_ops,
-			int how, int flags, bool localio)
+			int how, int flags,
+			struct file *localio)
 {
 	struct rpc_task *task;
 	int priority = flush_task_priority(how);
@@ -1707,7 +1708,7 @@ int nfs_initiate_commit(struct nfs_client *clp,
 	dprintk("NFS: initiated commit call\n");
 
 	if (localio) {
-		status = nfs_local_commit(clp, data->cred, data);
+		status = nfs_local_commit(clp, localio, data);
 		if (status > 0)
 			status = 0;
 
@@ -1809,6 +1810,7 @@ nfs_commit_list(struct inode *inode, struct list_head *head, int how,
 {
 	struct nfs_commit_data	*data;
 	struct nfs_client *clp = NFS_SERVER(inode)->nfs_client;
+	struct file *filp;
 
 	/* another commit raced with us */
 	if (list_empty(head))
@@ -1819,9 +1821,12 @@ nfs_commit_list(struct inode *inode, struct list_head *head, int how,
 	/* Set up the argument struct */
 	nfs_init_commit(data, head, NULL, cinfo);
 	atomic_inc(&cinfo->mds->rpcs_out);
+
+	filp = nfs_local_file_open(clp, data->cred, data->args.fh,
+				   data->context);
 	return nfs_initiate_commit(clp, NFS_CLIENT(inode), data,
 				   NFS_PROTO(inode), data->mds_ops, how, 0,
-				   nfs_server_is_local(clp));
+				   filp);
 }
 
 /*
