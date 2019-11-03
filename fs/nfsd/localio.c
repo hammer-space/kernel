@@ -54,8 +54,10 @@ nfsd_local_fakerqst_create(struct rpc_clnt *rpc_clnt, const struct cred *cred)
 	}
 
 	rqstp->rq_xprt->xpt_net = net;
-	set_bit(RQ_SECURE, &rqstp->rq_flags);
+	__set_bit(RQ_SECURE, &rqstp->rq_flags);
 	rqstp->rq_proc = 1;	/* XXX just can't be zero! */
+	rqstp->rq_vers = 3;
+	rqstp->rq_prot = IPPROTO_TCP;
 	rqstp->rq_server = nn->nfsd_serv;
 
 	/* Note: we're connecting to ourself, so source addr == peer addr */
