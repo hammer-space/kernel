@@ -449,10 +449,14 @@ svc_xprt_rescue_end(struct svc_rqst *rqstp)
 static bool
 svc_xprt_may_use_rescue_thread(struct svc_xprt *xprt)
 {
+#if 0 /* FIXME: remove once containerised knfsd is stable */
 	if (atomic_read(&xprt->xpt_inflight) != 0 &&
 	    !test_bit(XPT_CLOSE, &xprt->xpt_flags))
 		return false;
 	return test_and_set_bit(XPT_RESCUE, &xprt->xpt_flags) == 0;
+#else
+	return false;
+#endif
 }
 
 void svc_xprt_do_enqueue(struct svc_xprt *xprt)
@@ -803,10 +807,6 @@ rqst_should_sleep(struct svc_rqst *rqstp)
 	if (signalled() || kthread_should_stop())
 		return false;
 
-	/* are we freezing? */
-	if (freezing(current))
-		return false;
-
 	return true;
 }
 
@@ -862,7 +862,7 @@ static struct svc_xprt *svc_get_next_xprt(struct svc_rqst *rqstp, long timeout)
 	smp_mb__after_atomic();
 
 	if (likely(rqst_should_sleep(rqstp)))
-		time_left = schedule_timeout(timeout);
+		time_left = freezable_schedule_timeout(timeout);
 	else
 		__set_current_state(TASK_RUNNING);
 

@@ -506,10 +506,6 @@ svc_pool_manager_should_sleep(struct svc_serv *serv, int nthreads)
 	if (kthread_should_stop())
 		return false;
 
-	/* are we freezing? */
-	if (freezing(current))
-		return false;
-
 	/* are we shutting down? */
 	if (nthreads == 0)
 		return true;
@@ -540,7 +536,7 @@ svc_pool_manager(void *data)
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (svc_pool_manager_should_sleep(serv, nthreads)) {
 			mutex_unlock(&serv->sv_pool_mutex);
-			schedule();
+			freezable_schedule();
 			mutex_lock(&serv->sv_pool_mutex);
 		} else
 			__set_current_state(TASK_RUNNING);
@@ -984,6 +980,7 @@ svc_stop_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 		if (task == NULL)
 			break;
 		kthread_stop(task);
+		put_task_struct(task);
 		nrservs++;
 	} while (nrservs < 0);
 	return 0;
