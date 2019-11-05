@@ -449,10 +449,14 @@ svc_xprt_rescue_end(struct svc_rqst *rqstp)
 static bool
 svc_xprt_may_use_rescue_thread(struct svc_xprt *xprt)
 {
+#if 0 /* FIXME: remove once containerised knfsd is stable */
 	if (atomic_read(&xprt->xpt_inflight) != 0 &&
 	    !test_bit(XPT_CLOSE, &xprt->xpt_flags))
 		return false;
 	return test_and_set_bit(XPT_RESCUE, &xprt->xpt_flags) == 0;
+#else
+	return false;
+#endif
 }
 
 void svc_xprt_do_enqueue(struct svc_xprt *xprt)

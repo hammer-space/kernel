@@ -567,8 +567,12 @@ static inline void svc_reserve_auth(struct svc_rqst *rqstp, int space)
 
 static inline bool svc_xprt_check_need_rescue(struct svc_pool *pool)
 {
+#if 0 /* FIXME: remove when containerised knfsd is stable */
 	return atomic_read(&pool->sp_need_rescue) > (int)pool->sp_tmpthreads -
 			atomic_read(&pool->sp_rescue_inuse);
+#else
+	return false;
+#endif
 }
 
 #endif /* SUNRPC_SVC_H */
