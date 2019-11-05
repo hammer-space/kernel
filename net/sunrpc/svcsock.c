@@ -58,6 +58,12 @@
 
 #define RPCDBG_FACILITY	RPCDBG_SVCXPRT
 
+#define SVC_TCP_KEEPIDLE (60)
+#define SVC_TCP_KEEPINTVL (60)
+#define SVC_TCP_KEEPCNT 5
+#define SVC_TCP_USER_TIMEO (SVC_TCP_KEEPINTVL* SVC_TCP_KEEPCNT + \
+			SVC_TCP_KEEPIDLE - 1)
+
 
 static struct svc_sock *svc_setup_socket(struct svc_serv *, struct socket *,
 					 int flags);
@@ -809,6 +815,7 @@ static struct svc_xprt *svc_tcp_accept(struct svc_xprt *xprt)
 					     serv->sv_name, -err);
 		return NULL;
 	}
+
 	set_bit(XPT_CONN, &svsk->sk_xprt.xpt_flags);
 
 	err = kernel_getpeername(newsock, sin);
@@ -1225,13 +1232,24 @@ static void svc_tcp_init(struct svc_sock *svsk, struct svc_serv *serv)
 		      &svsk->sk_xprt, serv);
 	set_bit(XPT_CACHE_AUTH, &svsk->sk_xprt.xpt_flags);
 	set_bit(XPT_CONG_CTRL, &svsk->sk_xprt.xpt_flags);
+
 	if (sk->sk_state == TCP_LISTEN) {
+		unsigned int timeo = SVC_TCP_USER_TIMEO * 1000; /* ms */
+
 		dprintk("setting up TCP socket for listening\n");
 		strcpy(svsk->sk_xprt.xpt_remotebuf, "listener");
 		set_bit(XPT_LISTENER, &svsk->sk_xprt.xpt_flags);
 		sk->sk_data_ready = svc_tcp_listen_data_ready;
 		set_bit(XPT_CONN, &svsk->sk_xprt.xpt_flags);
+
+		kernel_setsockopt(svsk->sk_sock, SOL_TCP, TCP_USER_TIMEOUT,
+				(char *)&timeo, sizeof(timeo));
 	} else {
+		unsigned int keepidle = SVC_TCP_KEEPIDLE;
+		unsigned int keepintvl = SVC_TCP_KEEPINTVL;
+		unsigned int keepcnt = SVC_TCP_KEEPCNT;
+		unsigned int opt_on = 1;
+
 		dprintk("setting up TCP socket for reading\n");
 		sk->sk_state_change = svc_tcp_state_change;
 		sk->sk_data_ready = svc_data_ready;
@@ -1243,6 +1261,15 @@ static void svc_tcp_init(struct svc_sock *svsk, struct svc_serv *serv)
 		memset(&svsk->sk_pages[0], 0, sizeof(svsk->sk_pages));
 
 		tcp_sk(sk)->nonagle |= TCP_NAGLE_OFF;
+
+		kernel_setsockopt(svsk->sk_sock, SOL_TCP, TCP_KEEPIDLE,
+				(char *)&keepidle, sizeof(keepidle));
+		kernel_setsockopt(svsk->sk_sock, SOL_TCP, TCP_KEEPINTVL,
+				(char *)&keepintvl, sizeof(keepintvl));
+		kernel_setsockopt(svsk->sk_sock, SOL_TCP, TCP_KEEPCNT,
+				(char *)&keepcnt, sizeof(keepcnt));
+		kernel_setsockopt(svsk->sk_sock, SOL_SOCKET, SO_KEEPALIVE,
+				(char *)&opt_on, sizeof(opt_on));
 
 		set_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
 		switch (sk->sk_state) {
