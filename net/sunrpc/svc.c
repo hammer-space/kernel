@@ -984,6 +984,7 @@ svc_stop_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 		if (task == NULL)
 			break;
 		kthread_stop(task);
+		put_task_struct(task);
 		nrservs++;
 	} while (nrservs < 0);
 	return 0;
