@@ -1068,6 +1068,8 @@ static int svc_tcp_recvfrom(struct svc_rqst *rqstp)
 	len = svc_tcp_recv_record(svsk, rqstp);
 	if (len < 0)
 		goto error;
+	if (len == 0)
+		goto err_delete;
 
 	base = svc_tcp_restore_pages(svsk, rqstp);
 	want = svc_sock_reclen(svsk) - (svsk->sk_tcplen - sizeof(rpc_fraghdr));
