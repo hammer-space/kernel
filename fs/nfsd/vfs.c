@@ -1021,6 +1021,7 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 				loff_t offset, struct kvec *vec, int vlen,
 				unsigned long *cnt, int stable)
 {
+	struct super_block	*sb = file_inode(file)->i_sb;
 	struct svc_export	*exp;
 	struct iov_iter		iter;
 	__be32			nfserr;
@@ -1029,12 +1030,14 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 	loff_t			pos = offset;
 	unsigned int		pflags = current->flags;
 	rwf_t			flags = 0;
+	bool			restore_flags = false;
 
 	trace_nfsd_write_opened(rqstp, fhp, offset, *cnt);
 
 	if (!*cnt)
 		return nfs_ok;
-	if (test_bit(RQ_LOCAL, &rqstp->rq_flags))
+	if (!sb->s_export_op ||
+	    !(sb->s_export_op->flags & EXPORT_OP_REMOTE_FS)) {
 		/*
 		 * We want less throttling in balance_dirty_pages()
 		 * and shrink_inactive_list() so that nfs to
@@ -1042,6 +1045,8 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 		 * the client's dirty pages or its congested queue.
 		 */
 		current->flags |= PF_LESS_THROTTLE;
+		restore_flags = true;
+	}
 
 	exp = fhp->fh_export;
 	use_wgather = (rqstp->rq_vers == 2) && EX_WGATHER(exp);
@@ -1087,7 +1092,7 @@ out_nfserr:
 					host_err, file);
 		}
 	}
-	if (test_bit(RQ_LOCAL, &rqstp->rq_flags))
+	if (restore_flags)
 		current_restore_flags(pflags, PF_LESS_THROTTLE);
 	return nfserr;
 }
