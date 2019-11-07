@@ -233,12 +233,6 @@ nfsd_lookup_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp,
 				dput(dentry);
 				goto out_nfserr;
 			}
-			if (nfsd_v4client(rqstp) &&
-			    dentry->d_sb->s_export_op &&
-			    dentry->d_sb->s_export_op->flags & EXPORT_NO_NFS4_HACK) {
-				dput(dentry);
-				return nfserr_minor_vers_mismatch;
-			}
 		}
 	}
 	*dentry_ret = dentry;
