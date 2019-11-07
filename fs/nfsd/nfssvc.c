@@ -891,6 +891,7 @@ nfsd(void *vrqstp)
 	struct svc_xprt *perm_sock = list_entry(rqstp->rq_server->sv_permsocks.next, typeof(struct svc_xprt), xpt_list);
 	struct net *net = perm_sock->xpt_net;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	sigset_t mask;
 	int err;
 
 	/* Lock module and set up kernel thread */
@@ -920,6 +921,8 @@ nfsd(void *vrqstp)
 
 	set_freezable();
 
+	siginitset(&mask, sigmask(SIGHUP)|sigmask(SIGINT)|sigmask(SIGQUIT));
+
 	/*
 	 * The main request loop
 	 */
@@ -936,9 +939,11 @@ nfsd(void *vrqstp)
 			;
 		if (err == -EINTR)
 			break;
+		sigprocmask(SIG_BLOCK, &mask, NULL);
 		validate_process_creds();
 		svc_process(rqstp);
 		validate_process_creds();
+		sigprocmask(SIG_UNBLOCK, &mask, NULL);
 	}
 
 	/* Clear signals before calling svc_exit_thread() */
