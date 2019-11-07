@@ -1119,14 +1119,17 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	switch (err) {
 	case nfs_ok:
 		break;
-	case nfserr_acces:
-	case nfserr_jukebox:
-		return err;
 	default:
 		pr_err_ratelimited("nfsd: underlying filesystem "
 				"returned file_acquire error %d "
 				"when reading file %pd2\n",
-				-be32_to_cpu(err), fhp->fh_dentry);
+				nfs_stat_to_errno(be32_to_cpu(err)),
+				fhp->fh_dentry);
+		/* Fallthrough */
+	case nfserr_acces:
+	case nfserr_jukebox:
+		trace_nfsd_read_err(rqstp, fhp, offset,
+				nfs_stat_to_errno(be32_to_cpu(err)));
 		return err;
 	}
 
@@ -1161,14 +1164,16 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	switch (err) {
 	case nfs_ok:
 		break;
-	case nfserr_acces:
-	case nfserr_jukebox:
-		goto out;
 	default:
 		pr_err_ratelimited("nfsd: underlying filesystem "
 				"returned file_acquire error %d "
 				"when writing file %pd2\n",
-				-be32_to_cpu(err), fhp->fh_dentry);
+				nfs_stat_to_errno(be32_to_cpu(err)),
+				fhp->fh_dentry);
+	case nfserr_acces:
+	case nfserr_jukebox:
+		trace_nfsd_write_err(rqstp, fhp, offset,
+				nfs_stat_to_errno(be32_to_cpu(err)));
 		goto out;
 	}
 
@@ -1211,14 +1216,17 @@ nfsd_commit(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	switch (err) {
 	case nfs_ok:
 		break;
-	case nfserr_acces:
-	case nfserr_jukebox:
-		goto out;
 	default:
 		pr_err_ratelimited("nfsd: underlying filesystem "
 				"returned file_acquire error %d "
 				"when committing file %pd2\n",
-				-be32_to_cpu(err), fhp->fh_dentry);
+				nfs_stat_to_errno(be32_to_cpu(err)),
+				fhp->fh_dentry);
+		/* Fallthrough */
+	case nfserr_acces:
+	case nfserr_jukebox:
+		trace_nfsd_commit_err(rqstp, fhp, offset,
+				nfs_stat_to_errno(be32_to_cpu(err)));
 		goto out;
 	}
 	if (EX_ISSYNC(fhp->fh_export)) {
