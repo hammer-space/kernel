@@ -355,7 +355,7 @@ static ssize_t svc_recvfrom(struct svc_rqst *rqstp, struct kvec *iov,
 	/* If we read a full record, then assume there may be more
 	 * data to read (stream based sockets only!)
 	 */
-	if (len == buflen)
+	if (len > 0)
 		set_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
 
 	dprintk("svc: socket %p recvfrom(%p, %zu) = %zd\n",
