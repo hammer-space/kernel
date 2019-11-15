@@ -355,7 +355,7 @@ static ssize_t svc_recvfrom(struct svc_rqst *rqstp, struct kvec *iov,
 	/* If we read a full record, then assume there may be more
 	 * data to read (stream based sockets only!)
 	 */
-	if (len == buflen)
+	if (len > 0)
 		set_bit(XPT_DATA, &svsk->sk_xprt.xpt_flags);
 
 	dprintk("svc: socket %p recvfrom(%p, %zu) = %zd\n",
@@ -946,6 +946,8 @@ static int svc_tcp_recv_record(struct svc_sock *svsk, struct svc_rqst *rqstp)
 		iov.iov_base = ((char *) &svsk->sk_reclen) + svsk->sk_tcplen;
 		iov.iov_len  = want;
 		len = svc_recvfrom(rqstp, &iov, 1, want, 0);
+		if (len == 0)
+			goto err_delete;
 		if (len < 0)
 			goto error;
 		svsk->sk_tcplen += len;
@@ -1066,6 +1068,8 @@ static int svc_tcp_recvfrom(struct svc_rqst *rqstp)
 	len = svc_tcp_recv_record(svsk, rqstp);
 	if (len < 0)
 		goto error;
+	if (len == 0)
+		goto err_delete;
 
 	base = svc_tcp_restore_pages(svsk, rqstp);
 	want = svc_sock_reclen(svsk) - (svsk->sk_tcplen - sizeof(rpc_fraghdr));
@@ -1079,13 +1083,13 @@ static int svc_tcp_recvfrom(struct svc_rqst *rqstp)
 
 	/* Now receive data */
 	len = svc_recvfrom(rqstp, vec, pnum, base + want, base);
-	if (len >= 0) {
+	if (len > 0) {
 		svsk->sk_tcplen += len;
 		svsk->sk_datalen += len;
 	}
-	if (len != want || !svc_sock_final_rec(svsk)) {
+	if (!len || len != want || !svc_sock_final_rec(svsk)) {
 		svc_tcp_save_pages(svsk, rqstp);
-		if (len < 0 && len != -EAGAIN)
+		if (len <= 0 && len != -EAGAIN)
 			goto err_delete;
 		if (len == want)
 			svc_tcp_fragment_received(svsk);

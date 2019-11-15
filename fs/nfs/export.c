@@ -220,5 +220,5 @@ const struct export_operations nfs_export_ops = {
 	.get_parent = nfs_get_parent,
 	.getattr = nfs_exp_getattr,
 	.flags = EXPORT_OP_NOWCC|EXPORT_OP_NOSUBTREECHK|
-		EXPORT_OP_CLOSE_BEFORE_UNLINK|EXPORT_NO_NFS4_HACK,
+		EXPORT_OP_CLOSE_BEFORE_UNLINK|EXPORT_OP_REMOTE_FS,
 };

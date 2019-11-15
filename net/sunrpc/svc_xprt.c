@@ -41,6 +41,13 @@ static int svc_conn_age_period = 6*60;
 static DEFINE_SPINLOCK(svc_xprt_class_lock);
 static LIST_HEAD(svc_xprt_class_list);
 
+static bool
+svc_rqstp_is_dead(const struct svc_rqst *rqstp)
+{
+	return test_bit(RQ_VICTIM, &rqstp->rq_flags) ||
+		signalled() || kthread_should_stop();
+}
+
 /* SMP locking strategy:
  *
  *	svc_pool->sp_lock protects most of the fields of that pool.
@@ -766,7 +773,7 @@ static int svc_alloc_arg(struct svc_rqst *rqstp)
 			struct page *p = alloc_page(GFP_KERNEL);
 			if (!p) {
 				set_current_state(TASK_INTERRUPTIBLE);
-				if (signalled() || kthread_should_stop()) {
+				if (svc_rqstp_is_dead(rqstp)) {
 					set_current_state(TASK_RUNNING);
 					return -EINTR;
 				}
@@ -804,7 +811,7 @@ rqst_should_sleep(struct svc_rqst *rqstp)
 		return false;
 
 	/* are we shutting down? */
-	if (signalled() || kthread_should_stop())
+	if (svc_rqstp_is_dead(rqstp))
 		return false;
 
 	return true;
@@ -871,6 +878,9 @@ static struct svc_xprt *svc_get_next_xprt(struct svc_rqst *rqstp, long timeout)
 	set_bit(RQ_BUSY, &rqstp->rq_flags);
 	smp_mb__after_atomic();
 
+	if (svc_rqstp_is_dead(rqstp))
+		return ERR_PTR(-EINTR);
+
 	xprt = svc_assign_xprt(rqstp);
 	if (xprt)
 		goto out_found;
@@ -878,8 +888,6 @@ static struct svc_xprt *svc_get_next_xprt(struct svc_rqst *rqstp, long timeout)
 	if (!time_left)
 		atomic_long_inc(&pool->sp_stats.threads_timedout);
 
-	if (signalled() || kthread_should_stop())
-		return ERR_PTR(-EINTR);
 	return ERR_PTR(-EAGAIN);
 out_found:
 	/* Normally we will wait up to 5 seconds for any required
@@ -982,8 +990,9 @@ int svc_recv(struct svc_rqst *rqstp, long timeout)
 
 	try_to_freeze();
 	cond_resched();
+
 	err = -EINTR;
-	if (signalled() || kthread_should_stop())
+	if (svc_rqstp_is_dead(rqstp))
 		goto out;
 
 	xprt = svc_get_next_xprt(rqstp, timeout);

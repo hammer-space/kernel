@@ -410,13 +410,18 @@ static int nfsd_startup_net(int nrservs, struct net *net, const struct cred *cre
 		nn->lockd_up = 1;
 	}
 
-	ret = nfs4_state_start_net(net);
+	ret = nfsd_file_cache_start_net(net);
 	if (ret)
 		goto out_lockd;
+	ret = nfs4_state_start_net(net);
+	if (ret)
+		goto out_filecache;
 
 	nn->nfsd_net_up = true;
 	return 0;
 
+out_filecache:
+	nfsd_file_cache_shutdown_net(net);
 out_lockd:
 	if (nn->lockd_up) {
 		lockd_down(net);
@@ -431,7 +436,7 @@ static void nfsd_shutdown_net(struct net *net)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
 
-	nfsd_file_cache_purge(net);
+	nfsd_file_cache_shutdown_net(net);
 	nfs4_state_shutdown_net(net);
 	if (nn->lockd_up) {
 		lockd_down(net);
@@ -891,6 +896,7 @@ nfsd(void *vrqstp)
 	struct svc_xprt *perm_sock = list_entry(rqstp->rq_server->sv_permsocks.next, typeof(struct svc_xprt), xpt_list);
 	struct net *net = perm_sock->xpt_net;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	sigset_t mask;
 	int err;
 
 	/* Lock module and set up kernel thread */
@@ -920,6 +926,8 @@ nfsd(void *vrqstp)
 
 	set_freezable();
 
+	siginitset(&mask, sigmask(SIGHUP)|sigmask(SIGINT)|sigmask(SIGQUIT));
+
 	/*
 	 * The main request loop
 	 */
@@ -936,9 +944,11 @@ nfsd(void *vrqstp)
 			;
 		if (err == -EINTR)
 			break;
+		sigprocmask(SIG_BLOCK, &mask, NULL);
 		validate_process_creds();
 		svc_process(rqstp);
 		validate_process_creds();
+		sigprocmask(SIG_UNBLOCK, &mask, NULL);
 	}
 
 	/* Clear signals before calling svc_exit_thread() */

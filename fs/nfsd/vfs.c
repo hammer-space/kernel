@@ -233,12 +233,6 @@ nfsd_lookup_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp,
 				dput(dentry);
 				goto out_nfserr;
 			}
-			if (nfsd_v4client(rqstp) &&
-			    dentry->d_sb->s_export_op &&
-			    dentry->d_sb->s_export_op->flags & EXPORT_NO_NFS4_HACK) {
-				dput(dentry);
-				return nfserr_minor_vers_mismatch;
-			}
 		}
 	}
 	*dentry_ret = dentry;
@@ -1027,6 +1021,7 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 				loff_t offset, struct kvec *vec, int vlen,
 				unsigned long *cnt, int stable)
 {
+	struct super_block	*sb = file_inode(file)->i_sb;
 	struct svc_export	*exp;
 	struct iov_iter		iter;
 	__be32			nfserr;
@@ -1035,12 +1030,14 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 	loff_t			pos = offset;
 	unsigned int		pflags = current->flags;
 	rwf_t			flags = 0;
+	bool			restore_flags = false;
 
 	trace_nfsd_write_opened(rqstp, fhp, offset, *cnt);
 
 	if (!*cnt)
 		return nfs_ok;
-	if (test_bit(RQ_LOCAL, &rqstp->rq_flags))
+	if (!sb->s_export_op ||
+	    !(sb->s_export_op->flags & EXPORT_OP_REMOTE_FS)) {
 		/*
 		 * We want less throttling in balance_dirty_pages()
 		 * and shrink_inactive_list() so that nfs to
@@ -1048,6 +1045,8 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct file *file,
 		 * the client's dirty pages or its congested queue.
 		 */
 		current->flags |= PF_LESS_THROTTLE;
+		restore_flags = true;
+	}
 
 	exp = fhp->fh_export;
 	use_wgather = (rqstp->rq_vers == 2) && EX_WGATHER(exp);
@@ -1093,7 +1092,7 @@ out_nfserr:
 					host_err, file);
 		}
 	}
-	if (test_bit(RQ_LOCAL, &rqstp->rq_flags))
+	if (restore_flags)
 		current_restore_flags(pflags, PF_LESS_THROTTLE);
 	return nfserr;
 }
@@ -1119,14 +1118,17 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	switch (err) {
 	case nfs_ok:
 		break;
-	case nfserr_acces:
-	case nfserr_jukebox:
-		return err;
 	default:
 		pr_err_ratelimited("nfsd: underlying filesystem "
 				"returned file_acquire error %d "
 				"when reading file %pd2\n",
-				-be32_to_cpu(err), fhp->fh_dentry);
+				nfs_stat_to_errno(be32_to_cpu(err)),
+				fhp->fh_dentry);
+		/* Fallthrough */
+	case nfserr_acces:
+	case nfserr_jukebox:
+		trace_nfsd_read_err(rqstp, fhp, offset,
+				nfs_stat_to_errno(be32_to_cpu(err)));
 		return err;
 	}
 
@@ -1161,14 +1163,16 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	switch (err) {
 	case nfs_ok:
 		break;
-	case nfserr_acces:
-	case nfserr_jukebox:
-		goto out;
 	default:
 		pr_err_ratelimited("nfsd: underlying filesystem "
 				"returned file_acquire error %d "
 				"when writing file %pd2\n",
-				-be32_to_cpu(err), fhp->fh_dentry);
+				nfs_stat_to_errno(be32_to_cpu(err)),
+				fhp->fh_dentry);
+	case nfserr_acces:
+	case nfserr_jukebox:
+		trace_nfsd_write_err(rqstp, fhp, offset,
+				nfs_stat_to_errno(be32_to_cpu(err)));
 		goto out;
 	}
 
@@ -1211,14 +1215,17 @@ nfsd_commit(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	switch (err) {
 	case nfs_ok:
 		break;
-	case nfserr_acces:
-	case nfserr_jukebox:
-		goto out;
 	default:
 		pr_err_ratelimited("nfsd: underlying filesystem "
 				"returned file_acquire error %d "
 				"when committing file %pd2\n",
-				-be32_to_cpu(err), fhp->fh_dentry);
+				nfs_stat_to_errno(be32_to_cpu(err)),
+				fhp->fh_dentry);
+		/* Fallthrough */
+	case nfserr_acces:
+	case nfserr_jukebox:
+		trace_nfsd_commit_err(rqstp, fhp, offset,
+				nfs_stat_to_errno(be32_to_cpu(err)));
 		goto out;
 	}
 	if (EX_ISSYNC(fhp->fh_export)) {
