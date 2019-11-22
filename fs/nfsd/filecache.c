@@ -299,7 +299,7 @@ nfsd_file_put(struct nfsd_file *nf)
 	bool is_hashed;
 
 	set_bit(NFSD_FILE_REFERENCED, &nf->nf_flags);
-	if (refcount_read(&nf->nf_ref) > 2) {
+	if (refcount_read(&nf->nf_ref) > 2 || !nf->nf_file) {
 		nfsd_file_put_noref(nf);
 		return;
 	}
