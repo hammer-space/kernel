@@ -120,6 +120,9 @@ nfs_fh_to_dentry(struct super_block *sb, struct fid *fid,
 
 out_found:
 	dentry = d_obtain_alias(inode);
+	if (IS_ERR(dentry))
+		trace_nfs_fh_to_dentry(sb, server_fh, fattr->fileid,
+				PTR_ERR(dentry));
 
 out_free_label:
 	nfs4_label_free(label);
@@ -160,11 +163,15 @@ nfs_get_parent(struct dentry *dentry)
 	ret = ops->lookupp(inode, &fh, fattr, label);
 	if (ret) {
 		parent = ERR_PTR(ret);
+		trace_nfs_get_parent(sb, NFS_FH(inode), NFS_FILEID(inode), ret);
 		goto out_free_label;
 	}
 
 	pinode = nfs_fhget(sb, &fh, fattr, label);
 	parent = d_obtain_alias(pinode);
+	if (IS_ERR(parent))
+		trace_nfs_get_parent(sb, NFS_FH(inode), NFS_FILEID(inode),
+				PTR_ERR(parent));
 out_free_label:
 	nfs4_label_free(label);
 out_free_fattr:
