@@ -969,7 +969,7 @@ TRACE_EVENT(nfs_commit_done,
 		)
 );
 
-TRACE_EVENT(nfs_fh_to_dentry,
+DECLARE_EVENT_CLASS(nfs_lookup_by_fh,
 		TP_PROTO(
 			const struct super_block *sb,
 			const struct nfs_fh *fh,
@@ -1001,6 +1001,19 @@ TRACE_EVENT(nfs_fh_to_dentry,
 			__entry->fhandle
 		)
 );
+
+#define DEFINE_NFS_LOOKUP_BY_FH(name) \
+	DEFINE_EVENT(nfs_lookup_by_fh, name, \
+			TP_PROTO ( \
+				const struct super_block *sb, \
+				const struct nfs_fh *fh, \
+				u64 fileid, \
+				int error \
+			), \
+			TP_ARGS(sb, fh, fileid, error))
+
+DEFINE_NFS_LOOKUP_BY_FH(nfs_fh_to_dentry);
+DEFINE_NFS_LOOKUP_BY_FH(nfs_get_parent);
 
 TRACE_EVENT(nfs_local_open_fh,
 		TP_PROTO(
