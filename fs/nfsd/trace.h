@@ -9,6 +9,7 @@
 #define _NFSD_TRACE_H
 
 #include <linux/tracepoint.h>
+#include "export.h"
 #include "nfsfh.h"
 
 TRACE_EVENT(nfsd_compound,
@@ -79,6 +80,45 @@ DEFINE_EVENT(nfsd_fh_err_class, nfsd_##name,	\
 
 DEFINE_NFSD_FH_ERR_EVENT(set_fh_dentry_badexport);
 DEFINE_NFSD_FH_ERR_EVENT(set_fh_dentry_badhandle);
+
+TRACE_EVENT(nfsd_exp_find_key,
+	TP_PROTO(const struct svc_expkey *key,
+		 int status),
+	TP_ARGS(key, status),
+	TP_STRUCT__entry(
+		__field(int, fsidtype)
+		__array(u32, fsid, 6)
+		__field(int, status)
+	),
+	TP_fast_assign(
+		__entry->fsidtype = key->ek_fsidtype;
+		memcpy(__entry->fsid, key->ek_fsid, sizeof(u32)*6);
+		__entry->status = status;
+	),
+	TP_printk("fsid=%x::%s status=%d",
+		__entry->fsidtype,
+		__print_array(__entry->fsid, 6, sizeof(u32)),
+		__entry->status
+	)
+);
+
+TRACE_EVENT(nfsd_exp_get_by_name,
+	TP_PROTO(const struct svc_export *key,
+		 int status),
+	TP_ARGS(key, status),
+	TP_STRUCT__entry(
+		__string(path, key->ex_path.dentry->d_name.name)
+		__field(int, status)
+	),
+	TP_fast_assign(
+		__assign_str(path, key->ex_path.dentry->d_name.name);
+		__entry->status = status;
+	),
+	TP_printk("path=%s status=%d",
+		__get_str(path),
+		__entry->status
+	)
+);
 
 DECLARE_EVENT_CLASS(nfsd_io_class,
 	TP_PROTO(struct svc_rqst *rqstp,
