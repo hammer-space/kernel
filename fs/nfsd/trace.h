@@ -92,12 +92,12 @@ TRACE_EVENT(nfsd_exp_find_key,
 	),
 	TP_fast_assign(
 		__entry->fsidtype = key->ek_fsidtype;
-		memcpy(__entry->fsid, key->ek_fsid, sizeof(u32)*6);
+		memcpy(__entry->fsid, key->ek_fsid, 4*6);
 		__entry->status = status;
 	),
 	TP_printk("fsid=%x::%s status=%d",
 		__entry->fsidtype,
-		__print_array(__entry->fsid, 6, sizeof(u32)),
+		__print_array(__entry->fsid, 6, 4),
 		__entry->status
 	)
 );
