@@ -241,13 +241,24 @@ out:
 /* A writeback failed: mark the page as bad, and invalidate the page cache */
 static void nfs_set_pageerror(struct address_space *mapping)
 {
+	struct inode *inode = mapping->host;
+
 	nfs_zap_mapping(mapping->host, mapping);
+	/* Force file size revalidation */
+	spin_lock(&inode->i_lock);
+	NFS_I(inode)->cache_validity |= NFS_INO_REVAL_FORCED |
+					NFS_INO_REVAL_PAGECACHE |
+					NFS_INO_INVALID_SIZE;
+	spin_unlock(&inode->i_lock);
 }
 
 static void nfs_mapping_set_error(struct page *page, int error)
 {
+	struct address_space *mapping = page_file_mapping(page);
+
 	SetPageError(page);
-	mapping_set_error(page_file_mapping(page), error);
+	mapping_set_error(mapping, error);
+	nfs_set_pageerror(mapping);
 }
 
 /*
@@ -590,7 +601,6 @@ release_request:
 
 static void nfs_write_error(struct nfs_page *req, int error)
 {
-	nfs_set_pageerror(page_file_mapping(req->wb_page));
 	nfs_mapping_set_error(req->wb_page, error);
 	nfs_inode_remove_request(req);
 	nfs_end_page_writeback(req);
@@ -993,7 +1003,6 @@ static void nfs_write_completion(struct nfs_pgio_header *hdr)
 		nfs_list_remove_request(req);
 		if (test_bit(NFS_IOHDR_ERROR, &hdr->flags) &&
 		    (hdr->good_bytes < bytes)) {
-			nfs_set_pageerror(page_file_mapping(req->wb_page));
 			nfs_mapping_set_error(req->wb_page, hdr->error);
 			goto remove_req;
 		}
