@@ -6367,6 +6367,7 @@ static void nfs4_delegreturn_done(struct rpc_task *task, void *calldata)
 			if (!nfs4_refresh_delegation_stateid(&data->stateid,
 						data->inode))
 				nfs4_stateid_seqid_inc(&data->stateid);
+			data->res.sattr_ret = 0;
 			goto out_restart;
 		default:
 			task->tk_status = nfs4_async_handle_exception(task,
@@ -6375,7 +6376,8 @@ static void nfs4_delegreturn_done(struct rpc_task *task, void *calldata)
 			if (!exception.retry) {
 				data->args.sattr_args = NULL;
 				data->res.sattr_res = false;
-			}
+			} else
+				data->res.sattr_ret = 0;
 			goto out_restart;
 		}
 	}
