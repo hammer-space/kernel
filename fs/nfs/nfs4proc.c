@@ -3769,6 +3769,7 @@ static void nfs4_close_context(struct nfs_open_context *ctx, int is_sync)
 		nfs4_close_sync(ctx->state, _nfs4_ctx_to_openmode(ctx));
 	else
 		nfs4_close_state(ctx->state, _nfs4_ctx_to_openmode(ctx));
+	nfs4_inode_return_delegation_on_close(d_inode(ctx->dentry));
 }
 
 #define FATTR4_WORD1_NFS40_MASK (2*FATTR4_WORD1_MOUNTED_ON_FILEID - 1UL)
@@ -6367,6 +6368,7 @@ static void nfs4_delegreturn_done(struct rpc_task *task, void *calldata)
 			if (!nfs4_refresh_delegation_stateid(&data->stateid,
 						data->inode))
 				nfs4_stateid_seqid_inc(&data->stateid);
+			data->res.sattr_ret = 0;
 			goto out_restart;
 		default:
 			task->tk_status = nfs4_async_handle_exception(task,
@@ -6375,7 +6377,8 @@ static void nfs4_delegreturn_done(struct rpc_task *task, void *calldata)
 			if (!exception.retry) {
 				data->args.sattr_args = NULL;
 				data->res.sattr_res = false;
-			}
+			} else
+				data->res.sattr_ret = 0;
 			goto out_restart;
 		}
 	}
@@ -6393,6 +6396,7 @@ static void nfs4_delegreturn_done(struct rpc_task *task, void *calldata)
 		/* Fallthrough */
 	case -NFS4ERR_BAD_STATEID:
 	case -NFS4ERR_STALE_STATEID:
+	case -ETIMEDOUT:
 		task->tk_status = 0;
 		break;
 	case -NFS4ERR_OLD_STATEID:
@@ -6486,7 +6490,7 @@ static int _nfs4_proc_delegreturn(struct inode *inode, const struct cred *cred,
 		.rpc_client = server->client,
 		.rpc_message = &msg,
 		.callback_ops = &nfs4_delegreturn_ops,
-		.flags = RPC_TASK_ASYNC,
+		.flags = RPC_TASK_ASYNC | RPC_TASK_TIMEOUT,
 	};
 	int status = 0;
 

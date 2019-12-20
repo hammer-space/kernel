@@ -499,7 +499,7 @@ static bool nfs_delegation_need_return(struct nfs_delegation *delegation)
 
 	if (test_and_clear_bit(NFS_DELEGATION_RETURN, &delegation->flags))
 		ret = true;
-	if (test_and_clear_bit(NFS_DELEGATION_RETURN_IF_CLOSED, &delegation->flags) && !ret) {
+	else if (test_bit(NFS_DELEGATION_RETURN_IF_CLOSED, &delegation->flags)) {
 		struct inode *inode;
 
 		spin_lock(&delegation->lock);
@@ -508,6 +508,8 @@ static bool nfs_delegation_need_return(struct nfs_delegation *delegation)
 			ret = true;
 		spin_unlock(&delegation->lock);
 	}
+	if (ret)
+		clear_bit(NFS_DELEGATION_RETURN_IF_CLOSED, &delegation->flags);
 	if (test_bit(NFS_DELEGATION_RETURNING, &delegation->flags) ||
 	    test_bit(NFS_DELEGATION_REVOKED, &delegation->flags))
 		ret = false;
@@ -654,6 +656,39 @@ int nfs4_inode_return_delegation(struct inode *inode)
 	if (delegation != NULL)
 		err = nfs_end_delegation_return(inode, delegation, 1);
 	return err;
+}
+
+/**
+ * nfs_inode_return_delegation_on_close - asynchronously return a delegation
+ * @inode: inode to process
+ *
+ * This routine is called on file close in order to determine if the
+ * inode delegation needs to be returned immediately.
+ */
+void nfs4_inode_return_delegation_on_close(struct inode *inode)
+{
+	struct nfs_delegation *delegation;
+	struct nfs_delegation *ret = NULL;
+
+	if (!inode)
+		return;
+	rcu_read_lock();
+	delegation = nfs4_get_valid_delegation(inode);
+	if (!delegation)
+		goto out;
+	if (test_bit(NFS_DELEGATION_RETURN_IF_CLOSED, &delegation->flags)) {
+		spin_lock(&delegation->lock);
+		if (delegation->inode &&
+		    list_empty(&NFS_I(inode)->open_files) &&
+		    !test_and_set_bit(NFS_DELEGATION_RETURNING, &delegation->flags)) {
+			clear_bit(NFS_DELEGATION_RETURN_IF_CLOSED, &delegation->flags);
+			ret = delegation;
+		}
+		spin_unlock(&delegation->lock);
+	}
+out:
+	rcu_read_unlock();
+	nfs_end_delegation_return(inode, ret, 0);
 }
 
 /**
