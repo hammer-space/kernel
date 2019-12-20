@@ -3769,6 +3769,7 @@ static void nfs4_close_context(struct nfs_open_context *ctx, int is_sync)
 		nfs4_close_sync(ctx->state, _nfs4_ctx_to_openmode(ctx));
 	else
 		nfs4_close_state(ctx->state, _nfs4_ctx_to_openmode(ctx));
+	nfs4_inode_return_delegation_on_close(d_inode(ctx->dentry));
 }
 
 #define FATTR4_WORD1_NFS40_MASK (2*FATTR4_WORD1_MOUNTED_ON_FILEID - 1UL)
