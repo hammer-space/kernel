@@ -51,10 +51,6 @@
 
 #define NFSDDBG_FACILITY		NFSDDBG_FILEOP
 
-static bool commit_is_datasync __read_mostly;
-module_param(commit_is_datasync, bool, 0644);
-
-
 /* 
  * Called from nfsd_lookup and encode_dirent. Check if we have crossed 
  * a mount point.
@@ -595,27 +591,39 @@ __be32 nfsd4_set_nfs4_label(struct svc_rqst *rqstp, struct svc_fh *fhp,
 }
 #endif
 
-__be32 nfsd4_clone_file_range(struct file *src, u64 src_pos, struct file *dst,
-		u64 dst_pos, u64 count, bool sync)
+__be32 nfsd4_clone_file_range(struct nfsd_file *nf_src, u64 src_pos,
+		struct nfsd_file *nf_dst, u64 dst_pos, u64 count, bool sync)
 {
+	struct file *src = nf_src->nf_file;
+	struct file *dst = nf_dst->nf_file;
 	loff_t cloned;
+	__be32 ret = 0;
 
+	down_write(&nf_dst->nf_rwsem);
 	cloned = vfs_clone_file_range(src, src_pos, dst, dst_pos, count, 0);
-	if (cloned < 0)
-		return nfserrno(cloned);
-	if (count && cloned != count)
-		return nfserrno(-EINVAL);
+	if (cloned < 0) {
+		ret = nfserrno(cloned);
+		goto out_err;
+	}
+	if (count && cloned != count) {
+		ret = nfserrno(-EINVAL);
+		goto out_err;
+	}
 	if (sync) {
 		loff_t dst_end = count ? dst_pos + count - 1 : LLONG_MAX;
-		int status = commit_inode_metadata(file_inode(src));
+		int status = vfs_fsync_range(dst, dst_pos, dst_end, 0);
 
 		if (!status)
-			status = vfs_fsync_range(dst, dst_pos, dst_end,
-					commit_is_datasync);
-		if (status < 0)
-			return nfserrno(status);
+			status = commit_inode_metadata(file_inode(src));
+		if (status < 0) {
+			nfsd_reset_boot_verifier(net_generic(nf_dst->nf_net,
+						 nfsd_net_id));
+			ret = nfserrno(status);
+		}
 	}
-	return 0;
+out_err:
+	up_write(&nf_dst->nf_rwsem);
+	return ret;
 }
 
 ssize_t nfsd_copy_file_range(struct file *src, u64 src_pos, struct file *dst,
@@ -1025,7 +1033,7 @@ static int wait_for_concurrent_writes(struct file *file)
 
 	if (inode->i_state & I_DIRTY) {
 		dprintk("nfsd: write sync %d\n", task_pid_nr(current));
-		err = vfs_fsync(file, commit_is_datasync);
+		err = vfs_fsync(file, 0);
 	}
 	last_ino = inode->i_ino;
 	last_dev = inode->i_sb->s_dev;
@@ -1079,6 +1087,9 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 	if (flags & RWF_SYNC) {
 		down_write(&nf->nf_rwsem);
 		host_err = vfs_iter_write(file, &iter, &pos, flags);
+		if (host_err < 0)
+			nfsd_reset_boot_verifier(net_generic(SVC_NET(rqstp),
+						 nfsd_net_id));
 		up_write(&nf->nf_rwsem);
 	} else {
 		down_read(&nf->nf_rwsem);
@@ -1086,11 +1097,8 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 		up_read(&nf->nf_rwsem);
 	}
 	file_end_write(file);
-	if (host_err < 0) {
-		nfsd_reset_boot_verifier(net_generic(SVC_NET(rqstp),
-					 nfsd_net_id));
+	if (host_err < 0)
 		goto out_nfserr;
-	}
 	*cnt = host_err;
 	nfsdstats.io_write += *cnt;
 	fsnotify_modify(file);
@@ -1258,9 +1266,10 @@ nfsd_commit(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		goto out;
 	}
 	if (EX_ISSYNC(fhp->fh_export)) {
-		int err2 = vfs_fsync_range(nf->nf_file, offset, end,
-				commit_is_datasync);
+		int err2;
 
+		down_write(&nf->nf_rwsem);
+		err2 = vfs_fsync_range(nf->nf_file, offset, end, 0);
 		switch (err2) {
 		case 0:
 			break;
@@ -1281,6 +1290,7 @@ nfsd_commit(struct svc_rqst *rqstp, struct svc_fh *fhp,
 						 nfsd_net_id));
 			trace_nfsd_commit_err(rqstp, fhp, offset, err2);
 		}
+		up_write(&nf->nf_rwsem);
 	}
 
 	nfsd_file_put(nf);
