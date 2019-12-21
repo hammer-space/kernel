@@ -603,10 +603,10 @@ __be32 nfsd4_clone_file_range(struct file *src, u64 src_pos, struct file *dst,
 		return nfserrno(-EINVAL);
 	if (sync) {
 		loff_t dst_end = count ? dst_pos + count - 1 : LLONG_MAX;
-		int status = commit_inode_metadata(file_inode(src));
+		int status = vfs_fsync_range(dst, dst_pos, dst_end, 0);
 
 		if (!status)
-			status = vfs_fsync_range(dst, dst_pos, dst_end, 0);
+			status = commit_inode_metadata(file_inode(src));
 		if (status < 0)
 			return nfserrno(status);
 	}
