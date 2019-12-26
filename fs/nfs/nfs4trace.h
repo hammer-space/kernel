@@ -1492,7 +1492,8 @@ DECLARE_EVENT_CLASS(nfs4_read_event,
 			__field(u32, fhandle)
 			__field(u64, fileid)
 			__field(loff_t, offset)
-			__field(size_t, count)
+			__field(u32, arg_count)
+			__field(u32, res_count)
 			__field(int, error)
 			__field(int, stateid_seq)
 			__field(u32, stateid_hash)
@@ -1500,13 +1501,18 @@ DECLARE_EVENT_CLASS(nfs4_read_event,
 
 		TP_fast_assign(
 			const struct inode *inode = hdr->inode;
+			const struct nfs_inode *nfsi = NFS_I(inode);
+			const struct nfs_fh *fh = hdr->args.fh ?
+						  hdr->args.fh : &nfsi->fh;
 			const struct nfs4_state *state =
 				hdr->args.context->state;
+
 			__entry->dev = inode->i_sb->s_dev;
-			__entry->fileid = NFS_FILEID(inode);
-			__entry->fhandle = nfs_fhandle_hash(NFS_FH(inode));
+			__entry->fileid = nfsi->fileid;
+			__entry->fhandle = nfs_fhandle_hash(fh);
 			__entry->offset = hdr->args.offset;
-			__entry->count = hdr->args.count;
+			__entry->arg_count = hdr->args.count;
+			__entry->res_count = hdr->res.count;
 			__entry->error = error;
 			__entry->stateid_seq =
 				be32_to_cpu(state->stateid.seqid);
@@ -1516,14 +1522,14 @@ DECLARE_EVENT_CLASS(nfs4_read_event,
 
 		TP_printk(
 			"error=%d (%s) fileid=%02x:%02x:%llu fhandle=0x%08x "
-			"offset=%lld count=%zu stateid=%d:0x%08x",
+			"offset=%lld count=%u res=%u stateid=%d:0x%08x",
 			__entry->error,
 			show_nfsv4_errors(__entry->error),
 			MAJOR(__entry->dev), MINOR(__entry->dev),
 			(unsigned long long)__entry->fileid,
 			__entry->fhandle,
 			(long long)__entry->offset,
-			__entry->count,
+			__entry->arg_count, __entry->res_count,
 			__entry->stateid_seq, __entry->stateid_hash
 		)
 );
@@ -1552,7 +1558,8 @@ DECLARE_EVENT_CLASS(nfs4_write_event,
 			__field(u32, fhandle)
 			__field(u64, fileid)
 			__field(loff_t, offset)
-			__field(size_t, count)
+			__field(u32, arg_count)
+			__field(u32, res_count)
 			__field(int, error)
 			__field(int, stateid_seq)
 			__field(u32, stateid_hash)
@@ -1560,13 +1567,18 @@ DECLARE_EVENT_CLASS(nfs4_write_event,
 
 		TP_fast_assign(
 			const struct inode *inode = hdr->inode;
+			const struct nfs_inode *nfsi = NFS_I(inode);
+			const struct nfs_fh *fh = hdr->args.fh ?
+						  hdr->args.fh : &nfsi->fh;
 			const struct nfs4_state *state =
 				hdr->args.context->state;
+
 			__entry->dev = inode->i_sb->s_dev;
-			__entry->fileid = NFS_FILEID(inode);
-			__entry->fhandle = nfs_fhandle_hash(NFS_FH(inode));
+			__entry->fileid = nfsi->fileid;
+			__entry->fhandle = nfs_fhandle_hash(fh);
 			__entry->offset = hdr->args.offset;
-			__entry->count = hdr->args.count;
+			__entry->arg_count = hdr->args.count;
+			__entry->res_count = hdr->res.count;
 			__entry->error = error;
 			__entry->stateid_seq =
 				be32_to_cpu(state->stateid.seqid);
@@ -1576,14 +1588,14 @@ DECLARE_EVENT_CLASS(nfs4_write_event,
 
 		TP_printk(
 			"error=%d (%s) fileid=%02x:%02x:%llu fhandle=0x%08x "
-			"offset=%lld count=%zu stateid=%d:0x%08x",
+			"offset=%lld count=%u res=%u stateid=%d:0x%08x",
 			__entry->error,
 			show_nfsv4_errors(__entry->error),
 			MAJOR(__entry->dev), MINOR(__entry->dev),
 			(unsigned long long)__entry->fileid,
 			__entry->fhandle,
 			(long long)__entry->offset,
-			__entry->count,
+			__entry->arg_count, __entry->res_count,
 			__entry->stateid_seq, __entry->stateid_hash
 		)
 );
@@ -1613,15 +1625,19 @@ DECLARE_EVENT_CLASS(nfs4_commit_event,
 			__field(u32, fhandle)
 			__field(u64, fileid)
 			__field(loff_t, offset)
-			__field(size_t, count)
+			__field(u32, count)
 			__field(int, error)
 		),
 
 		TP_fast_assign(
 			const struct inode *inode = data->inode;
+			const struct nfs_inode *nfsi = NFS_I(inode);
+			const struct nfs_fh *fh = data->args.fh ?
+						  data->args.fh : &nfsi->fh;
+
 			__entry->dev = inode->i_sb->s_dev;
-			__entry->fileid = NFS_FILEID(inode);
-			__entry->fhandle = nfs_fhandle_hash(NFS_FH(inode));
+			__entry->fileid = nfsi->fileid;
+			__entry->fhandle = nfs_fhandle_hash(fh);
 			__entry->offset = data->args.offset;
 			__entry->count = data->args.count;
 			__entry->error = error;
@@ -1629,7 +1645,7 @@ DECLARE_EVENT_CLASS(nfs4_commit_event,
 
 		TP_printk(
 			"error=%d (%s) fileid=%02x:%02x:%llu fhandle=0x%08x "
-			"offset=%lld count=%zu",
+			"offset=%lld count=%u",
 			__entry->error,
 			show_nfsv4_errors(__entry->error),
 			MAJOR(__entry->dev), MINOR(__entry->dev),
