@@ -1391,17 +1391,11 @@ static int ff_layout_read_done_cb(struct rpc_task *task,
 	int err;
 
 	trace_nfs4_pnfs_read(hdr, task->tk_status);
-	if (task->tk_status < 0) {
-		trace_ff_layout_read_done_error(hdr->ds_clp,
-						hdr->args.fh,
-						hdr->inode,
-						&hdr->args.stateid,
-						hdr->res.op_status);
+	if (task->tk_status < 0)
 		ff_layout_io_track_ds_error(hdr->lseg, hdr->pgio_mirror_idx,
 					    hdr->args.offset, hdr->args.count,
 					    hdr->res.op_status, OP_READ,
 					    task->tk_status);
-	}
 
 	err = ff_layout_async_handle_error(task, hdr->args.context->state,
 					   hdr->ds_clp, hdr->lseg,
@@ -1571,17 +1565,11 @@ static int ff_layout_write_done_cb(struct rpc_task *task,
 	int err;
 
 	trace_nfs4_pnfs_write(hdr, task->tk_status);
-	if (task->tk_status < 0) {
-		trace_ff_layout_write_done_error(hdr->ds_clp,
-						hdr->args.fh,
-						hdr->inode,
-						&hdr->args.stateid,
-						hdr->res.op_status);
+	if (task->tk_status < 0)
 		ff_layout_io_track_ds_error(hdr->lseg, hdr->pgio_mirror_idx,
 					    hdr->args.offset, hdr->args.count,
 					    hdr->res.op_status, OP_WRITE,
 					    task->tk_status);
-	}
 
 	err = ff_layout_async_handle_error(task, hdr->args.context->state,
 					   hdr->ds_clp, hdr->lseg,
