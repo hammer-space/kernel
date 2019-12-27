@@ -16,8 +16,6 @@
 EXPORT_TRACEPOINT_SYMBOL_GPL(nfs4_pnfs_read);
 EXPORT_TRACEPOINT_SYMBOL_GPL(nfs4_pnfs_write);
 EXPORT_TRACEPOINT_SYMBOL_GPL(nfs4_pnfs_commit_ds);
-EXPORT_TRACEPOINT_SYMBOL_GPL(ff_layout_read_done_error);
-EXPORT_TRACEPOINT_SYMBOL_GPL(ff_layout_write_done_error);
 
 EXPORT_TRACEPOINT_SYMBOL_GPL(pnfs_mds_fallback_pg_init_read);
 EXPORT_TRACEPOINT_SYMBOL_GPL(pnfs_mds_fallback_pg_init_write);
@@ -26,4 +24,8 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(pnfs_mds_fallback_read_done);
 EXPORT_TRACEPOINT_SYMBOL_GPL(pnfs_mds_fallback_write_done);
 EXPORT_TRACEPOINT_SYMBOL_GPL(pnfs_mds_fallback_read_pagelist);
 EXPORT_TRACEPOINT_SYMBOL_GPL(pnfs_mds_fallback_write_pagelist);
+
+EXPORT_TRACEPOINT_SYMBOL_GPL(ff_layout_read_error);
+EXPORT_TRACEPOINT_SYMBOL_GPL(ff_layout_write_error);
+EXPORT_TRACEPOINT_SYMBOL_GPL(ff_layout_commit_error);
 #endif
