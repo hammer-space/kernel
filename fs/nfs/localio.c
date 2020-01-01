@@ -556,6 +556,15 @@ nfs_local_write_done(struct nfs_local_kiocb *iocb, long status)
 
 	dprintk("%s: wrote %ld bytes.\n", __func__, status > 0 ? status : 0);
 
+	/* Handle short writes as if they are ENOSPC */
+	if (status > 0 && status < hdr->args.count) {
+		hdr->mds_offset += status;
+		hdr->args.offset += status;
+		hdr->args.pgbase += status;
+		hdr->args.count -= status;
+		nfs_set_pgio_error(hdr, -ENOSPC, hdr->args.offset);
+		status = -ENOSPC;
+	}
 	nfs_local_pgio_done(hdr, status);
 
 	nfs_set_local_verifier(hdr->res.verf,
