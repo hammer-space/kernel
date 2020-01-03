@@ -687,7 +687,8 @@ nfsd3_proc_commit(struct svc_rqst *rqstp)
 		RETURN_STATUS(nfserr_inval);
 
 	fh_copy(&resp->fh, &argp->fh);
-	nfserr = nfsd_commit(rqstp, &resp->fh, argp->offset, argp->count);
+	nfserr = nfsd_commit(rqstp, &resp->fh, argp->offset, argp->count,
+			resp->verf);
 
 	RETURN_STATUS(nfserr);
 }
