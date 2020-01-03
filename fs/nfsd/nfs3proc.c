@@ -207,7 +207,7 @@ nfsd3_proc_write(struct svc_rqst *rqstp)
 	}
 	nfserr = nfsd_write(rqstp, &resp->fh, argp->offset,
 			    rqstp->rq_vec, nvecs, &cnt,
-			    resp->committed);
+			    resp->committed, resp->verf);
 	resp->count = cnt;
 	RETURN_STATUS(nfserr);
 }
