@@ -35,6 +35,8 @@
 
 #define NFSD_MAY_REMOVE		(NFSD_MAY_EXEC|NFSD_MAY_WRITE|NFSD_MAY_TRUNC)
 
+#define NFSD_MAY_LOCALIO		0x800000
+
 struct nfsd_file;
 
 /*
@@ -75,7 +77,7 @@ __be32		do_nfsd_create(struct svc_rqst *, struct svc_fh *,
 				struct svc_fh *res, int createmode,
 				u32 *verifier, bool *truncp, bool *created);
 __be32		nfsd_commit(struct svc_rqst *, struct svc_fh *,
-				loff_t, unsigned long);
+				loff_t, unsigned long, __be32 *verf);
 #endif /* CONFIG_NFSD_V3 */
 int 		nfsd_open_break_lease(struct inode *, int);
 __be32		nfsd_open(struct svc_rqst *, struct svc_fh *, umode_t,
@@ -95,11 +97,12 @@ __be32 		nfsd_read(struct svc_rqst *, struct svc_fh *,
 				loff_t, struct kvec *, int, unsigned long *,
 				u32 *eof);
 __be32 		nfsd_write(struct svc_rqst *, struct svc_fh *, loff_t,
-				struct kvec *, int, unsigned long *, int);
+				struct kvec *, int, unsigned long *,
+				int stable, __be32 *verf);
 __be32		nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 				struct nfsd_file *nf, loff_t offset,
 				struct kvec *vec, int vlen, unsigned long *cnt,
-				int stable);
+				int stable, __be32 *verf);
 __be32		nfsd_readlink(struct svc_rqst *, struct svc_fh *,
 				char *, int *);
 __be32		nfsd_symlink(struct svc_rqst *, struct svc_fh *,

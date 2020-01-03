@@ -259,7 +259,8 @@ TRACE_DEFINE_ENUM(NFSD_FILE_REFERENCED);
 	__print_flags(val, "|",						\
 		{ NFSD_MAY_READ,		"READ" },		\
 		{ NFSD_MAY_WRITE,		"WRITE" },		\
-		{ NFSD_MAY_NOT_BREAK_LEASE,	"NOT_BREAK_LEASE" })
+		{ NFSD_MAY_NOT_BREAK_LEASE,	"NOT_BREAK_LEASE" },	\
+		{ NFSD_MAY_LOCALIO,		"LOCALIO" })
 
 DECLARE_EVENT_CLASS(nfsd_file_class,
 	TP_PROTO(struct nfsd_file *nf),
