@@ -504,24 +504,38 @@ nfs_do_local_read(struct nfs_pgio_header *hdr, struct file *filp,
 }
 
 static void
-nfs_set_local_verifier(struct nfs_writeverf *verf, enum nfs3_stable_how how)
+nfs_copy_boot_verifier(struct nfs_write_verifier *verifier, struct inode *inode)
 {
-	memset(verf->verifier.data, 0xaa, sizeof(verf->verifier.data));
-	verf->committed = how;
+	struct nfs_client *clp = NFS_SERVER(inode)->nfs_client;
+	u32 *verf = (u32 *)verifier->data;
+	int seq;
+
+	do {
+		read_seqbegin_or_lock(&clp->cl_boot_lock, &seq);
+		verf[0] = (u32)clp->cl_nfssvc_boot.tv_sec;
+		verf[1] = (u32)clp->cl_nfssvc_boot.tv_nsec;
+	} while (need_seqretry(&clp->cl_boot_lock, seq));
+	done_seqretry(&clp->cl_boot_lock, seq);
 }
 
-static enum nfs3_stable_how
-nfs_iocb_to_stable_how(struct kiocb *kiocb)
+static void
+nfs_reset_boot_verifier(struct inode *inode)
 {
-	switch (kiocb->ki_flags & (IOCB_DSYNC|IOCB_SYNC)) {
-	default:
-		break;
-	case IOCB_DSYNC:
-		return NFS_DATA_SYNC;
-	case IOCB_DSYNC|IOCB_SYNC:
-		return NFS_FILE_SYNC;
-	}
-	return NFS_UNSTABLE;
+	struct nfs_client *clp = NFS_SERVER(inode)->nfs_client;
+
+	write_seqlock(&clp->cl_boot_lock);
+	ktime_get_real_ts64(&clp->cl_nfssvc_boot);
+	write_sequnlock(&clp->cl_boot_lock);
+}
+
+static void
+nfs_set_local_verifier(struct inode *inode,
+		struct nfs_writeverf *verf,
+		enum nfs3_stable_how how)
+{
+
+	nfs_copy_boot_verifier(&verf->verifier, inode);
+	verf->committed = how;
 }
 
 static void
@@ -562,10 +576,9 @@ nfs_local_write_done(struct nfs_local_kiocb *iocb, long status)
 		nfs_set_pgio_error(hdr, -ENOSPC, hdr->args.offset);
 		status = -ENOSPC;
 	}
+	if (status < 0)
+		nfs_reset_boot_verifier(hdr->inode);
 	nfs_local_pgio_done(hdr, status);
-
-	nfs_set_local_verifier(hdr->res.verf,
-			nfs_iocb_to_stable_how(&iocb->kiocb));
 }
 
 static void
@@ -620,6 +633,8 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp,
 		INIT_WORK(&iocb->work, nfs_local_write_aio_complete_work);
 		iocb->kiocb.ki_complete = nfs_local_write_aio_complete;
 	}
+
+	nfs_set_local_verifier(hdr->inode, hdr->res.verf, hdr->args.stable);
 
 	file_start_write(filp);
 	status = call_write_iter(filp, &iocb->kiocb, &iter);
@@ -711,10 +726,13 @@ nfs_local_commit(struct nfs_client *clp, struct file *filp,
 	status = vfs_fsync_range(filp, data->args.offset, end, 0);
 	fput(filp);
 	if (status >= 0) {
-		nfs_set_local_verifier(data->res.verf, NFS_FILE_SYNC);
+		nfs_set_local_verifier(data->inode,
+				data->res.verf,
+				NFS_FILE_SYNC);
 		data->res.op_status = NFS4_OK;
 		data->task.tk_status = 0;
 	} else {
+		nfs_reset_boot_verifier(data->inode);
 		data->res.op_status = nfs4errno(status);
 		data->task.tk_status = status;
 	}
