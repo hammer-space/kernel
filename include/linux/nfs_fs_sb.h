@@ -127,6 +127,10 @@ struct nfs_client {
 
 	struct net		*cl_net;
 	struct list_head	pending_cb_stateids;
+
+	/* localio */
+	struct timespec64	cl_nfssvc_boot;
+	seqlock_t		cl_boot_lock;
 };
 
 /*
