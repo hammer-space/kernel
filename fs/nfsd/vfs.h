@@ -35,6 +35,8 @@
 
 #define NFSD_MAY_REMOVE		(NFSD_MAY_EXEC|NFSD_MAY_WRITE|NFSD_MAY_TRUNC)
 
+#define NFSD_MAY_LOCALIO		0x800000
+
 struct nfsd_file;
 
 /*

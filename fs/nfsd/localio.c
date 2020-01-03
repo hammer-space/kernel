@@ -129,7 +129,7 @@ int nfsd_open_local_fh(struct rpc_clnt *rpc_clnt,
 	struct svc_fh fh;
 	struct nfsd_file *nf;
 	int status = 0;
-	int mayflags = 0;
+	int mayflags = NFSD_MAY_LOCALIO;
 	__be32 beres;
 
 	/* Save creds before calling into nfsd */
