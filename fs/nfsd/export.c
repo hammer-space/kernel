@@ -168,11 +168,8 @@ static int expkey_parse(struct cache_detail *cd, char *mesg, int mlen)
 			 * Ignore ETIMEDOUT/EAGAIN and just flush the
 			 * cache in order to trigger a retry.
 			 */
-			if (err == -ETIMEDOUT || err == -EAGAIN) {
-				err = 0;
+			if (err == -ETIMEDOUT || err == -EAGAIN)
 				cache_purge(cd);
-				goto out;
-			}
 			goto out;
 		}
 
@@ -604,10 +601,8 @@ static int svc_export_parse(struct cache_detail *cd, char *mesg, int mlen)
 		 * Ignore ETIMEDOUT/EAGAIN and just flush the
 		 * cache in order to trigger a retry.
 		 */
-		if (err == -ETIMEDOUT || err == -EAGAIN) {
+		if (err == -ETIMEDOUT || err == -EAGAIN)
 			cache_purge(cd);
-			err = 0;
-		}
 		goto out1;
 	}
 
