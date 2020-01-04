@@ -88,16 +88,19 @@ TRACE_EVENT(nfsd_exp_find_key,
 	TP_STRUCT__entry(
 		__field(int, fsidtype)
 		__array(u32, fsid, 6)
+		__string(auth_domain, key->ek_client->name)
 		__field(int, status)
 	),
 	TP_fast_assign(
 		__entry->fsidtype = key->ek_fsidtype;
 		memcpy(__entry->fsid, key->ek_fsid, 4*6);
+		__assign_str(auth_domain, key->ek_client->name);
 		__entry->status = status;
 	),
-	TP_printk("fsid=%x::%s status=%d",
+	TP_printk("fsid=%x::%s domain=%s status=%d",
 		__entry->fsidtype,
 		__print_array(__entry->fsid, 6, 4),
+		__get_str(auth_domain),
 		__entry->status
 	)
 );
@@ -108,14 +111,17 @@ TRACE_EVENT(nfsd_exp_get_by_name,
 	TP_ARGS(key, status),
 	TP_STRUCT__entry(
 		__string(path, key->ex_path.dentry->d_name.name)
+		__string(auth_domain, key->ex_client->name)
 		__field(int, status)
 	),
 	TP_fast_assign(
 		__assign_str(path, key->ex_path.dentry->d_name.name);
+		__assign_str(auth_domain, key->ex_client->name);
 		__entry->status = status;
 	),
-	TP_printk("path=%s status=%d",
+	TP_printk("path=%s domain=%s status=%d",
 		__get_str(path),
+		__get_str(auth_domain),
 		__entry->status
 	)
 );
