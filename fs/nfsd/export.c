@@ -165,11 +165,11 @@ static int expkey_parse(struct cache_detail *cd, char *mesg, int mlen)
 		err = kern_path(buf, 0, &key.ek_path);
 		if (err) {
 			/*
-			 * Ignore ETIMEDOUT/EAGAIN and just flush the
-			 * cache in order to trigger a retry.
+			 * Ignore ETIMEDOUT/EAGAIN and just unhash the
+			 * entry in order to trigger a retry.
 			 */
 			if (err == -ETIMEDOUT || err == -EAGAIN)
-				cache_purge(cd);
+				sunrpc_cache_unhash(cd, &ek->h);
 			goto out;
 		}
 
@@ -596,15 +596,8 @@ static int svc_export_parse(struct cache_detail *cd, char *mesg, int mlen)
 		goto out1;
 
 	err = kern_path(buf, 0, &exp.ex_path);
-	if (err) {
-		/*
-		 * Ignore ETIMEDOUT/EAGAIN and just flush the
-		 * cache in order to trigger a retry.
-		 */
-		if (err == -ETIMEDOUT || err == -EAGAIN)
-			cache_purge(cd);
+	if (err)
 		goto out1;
-	}
 
 	exp.ex_client = dom;
 	exp.cd = cd;
