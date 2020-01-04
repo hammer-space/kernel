@@ -81,6 +81,7 @@
 enum {
 	/* Mount options that take no arguments */
 	Opt_soft, Opt_softerr, Opt_hard,
+	Opt_softreval, Opt_nosoftreval,
 	Opt_posix, Opt_noposix,
 	Opt_cto, Opt_nocto,
 	Opt_ac, Opt_noac,
@@ -130,6 +131,8 @@ static const match_table_t nfs_mount_option_tokens = {
 	{ Opt_soft, "soft" },
 	{ Opt_softerr, "softerr" },
 	{ Opt_hard, "hard" },
+	{ Opt_softreval, "softreval" },
+	{ Opt_nosoftreval, "nosoftreval" },
 	{ Opt_deprecated, "intr" },
 	{ Opt_deprecated, "nointr" },
 	{ Opt_posix, "posix" },
@@ -638,6 +641,7 @@ static void nfs_show_mount_options(struct seq_file *m, struct nfs_server *nfss,
 	} nfs_info[] = {
 		{ NFS_MOUNT_SOFT, ",soft", "" },
 		{ NFS_MOUNT_SOFTERR, ",softerr", "" },
+		{ NFS_MOUNT_SOFTREVAL, ",softreval", "" },
 		{ NFS_MOUNT_POSIX, ",posix", "" },
 		{ NFS_MOUNT_NOCTO, ",nocto", "" },
 		{ NFS_MOUNT_NOAC, ",noac", "" },
@@ -1258,11 +1262,19 @@ static int nfs_parse_mount_options(char *raw,
 			mnt->flags &= ~NFS_MOUNT_SOFTERR;
 			break;
 		case Opt_softerr:
-			mnt->flags |= NFS_MOUNT_SOFTERR;
+			mnt->flags |= NFS_MOUNT_SOFTERR | NFS_MOUNT_SOFTREVAL;
 			mnt->flags &= ~NFS_MOUNT_SOFT;
 			break;
 		case Opt_hard:
-			mnt->flags &= ~(NFS_MOUNT_SOFT|NFS_MOUNT_SOFTERR);
+			mnt->flags &= ~(NFS_MOUNT_SOFT |
+					NFS_MOUNT_SOFTERR |
+					NFS_MOUNT_SOFTREVAL);
+			break;
+		case Opt_softreval:
+			mnt->flags |= NFS_MOUNT_SOFTREVAL;
+			break;
+		case Opt_nosoftreval:
+			mnt->flags &= ~NFS_MOUNT_SOFTREVAL;
 			break;
 		case Opt_posix:
 			mnt->flags |= NFS_MOUNT_POSIX;
