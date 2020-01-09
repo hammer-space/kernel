@@ -214,7 +214,7 @@ static int
 auth_name_encode_init_args(struct name_cred *name_cred, struct page **pages, unsigned int len)
 {
 	struct xdr_stream xdr = { 0 };
-	struct xdr_buf buf = { 0 };
+	struct xdr_buf buf = { { { NULL, }, }, };
 	int i;
 
 	// AUTH_NAME_MAX_XDRLEN

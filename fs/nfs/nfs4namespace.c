@@ -392,12 +392,11 @@ struct vfsmount *nfs4_submount(struct nfs_server *server, struct dentry *dentry,
 	rpc_authflavor_t flavor = server->client->cl_auth->au_flavor;
 	struct dentry *parent = dget_parent(dentry);
 	struct inode *dir = d_inode(parent);
-	const struct qstr *name = &dentry->d_name;
 	struct rpc_clnt *client;
 	struct vfsmount *mnt;
 
 	/* Look it up again to get its attributes and sec flavor */
-	client = nfs4_proc_lookup_mountpoint(dir, name, fh, fattr);
+	client = nfs4_proc_lookup_mountpoint(dir, dentry, fh, fattr);
 	dput(parent);
 	if (IS_ERR(client))
 		return ERR_CAST(client);
