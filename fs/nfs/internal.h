@@ -31,6 +31,15 @@ static inline int nfs_attr_use_mounted_on_fileid(struct nfs_fattr *fattr)
 	return 1;
 }
 
+static inline bool nfs_lookup_is_soft_revalidate(const struct dentry *dentry)
+{
+	if (!(NFS_SB(dentry->d_sb)->flags & NFS_MOUNT_SOFTREVAL))
+		return false;
+	if (!d_is_positive(dentry) || !NFS_FH(d_inode(dentry))->size)
+		return false;
+	return true;
+}
+
 struct nfs_clone_mount {
 	const struct super_block *sb;
 	const struct dentry *dentry;
