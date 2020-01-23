@@ -445,7 +445,8 @@ void nfs_force_use_readdirplus(struct inode *dir)
 	if (nfs_server_capable(dir, NFS_CAP_READDIRPLUS) &&
 	    !list_empty(&nfsi->open_files)) {
 		set_bit(NFS_INO_ADVISE_RDPLUS, &nfsi->flags);
-		invalidate_mapping_pages(dir->i_mapping, 0, -1);
+		invalidate_mapping_pages(dir->i_mapping,
+			nfsi->page_index + 1, -1);
 	}
 }
 
@@ -716,6 +717,7 @@ static
 int find_and_lock_cache_page(nfs_readdir_descriptor_t *desc)
 {
 	int res;
+	struct inode *inode;
 
 	desc->page = get_cache_page(desc);
 	if (IS_ERR(desc->page))
@@ -726,8 +728,11 @@ int find_and_lock_cache_page(nfs_readdir_descriptor_t *desc)
 	res = -EAGAIN;
 	if (desc->page->mapping != NULL) {
 		res = nfs_readdir_search_array(desc);
-		if (res == 0)
+		if (res == 0) {
+			inode = file_inode(desc->file);
+			NFS_I(inode)->page_index = desc->page_index;
 			return 0;
+		}
 	}
 	unlock_page(desc->page);
 error:
