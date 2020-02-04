@@ -180,6 +180,9 @@ struct nfs_inode {
 	struct rw_semaphore	rmdir_sem;
 	struct mutex		commit_mutex;
 
+	/* track last access to cached pages */
+	unsigned long		page_index;
+
 #if IS_ENABLED(CONFIG_NFS_V4)
         /* NFSv4 state */
 	struct list_head	open_states;
