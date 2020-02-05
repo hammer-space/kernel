@@ -1229,6 +1229,20 @@ static void xs_sock_reset_connection_flags(struct rpc_xprt *xprt)
 	smp_mb__after_atomic();
 }
 
+static void xs_tcp_handle_connect_error(struct rpc_xprt *xprt,
+		struct sock *sk,
+		int err)
+{
+	struct sock_xprt *transport = container_of(xprt, struct sock_xprt, xprt);
+
+	/*
+	 * If we timed out in a SYN_SENT state, then reset the source port
+	 * since the server may be rejecting the port reuse.
+	 */
+	if (sk->sk_state == TCP_SYN_SENT && err == -ETIMEDOUT)
+		transport->srcport = 0;
+}
+
 /**
  * xs_error_report - callback to handle TCP socket state errors
  * @sk: socket
@@ -1248,6 +1262,7 @@ static void xs_error_report(struct sock *sk)
 	err = -sk->sk_err;
 	if (err == 0)
 		goto out;
+	xs_tcp_handle_connect_error(xprt, sk, err);
 	dprintk("RPC:       xs_error_report client %p, error=%d...\n",
 			xprt, -err);
 	trace_rpc_socket_error(xprt, sk->sk_socket, err);
