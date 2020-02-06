@@ -1078,11 +1078,10 @@ xdr_encode_nfstime4(__be32 *p, const struct timespec64 *t)
 static void encode_attrs(struct xdr_stream *xdr, const struct iattr *iap,
 				const struct nfs4_label *label,
 				const umode_t *umask,
-				const struct nfs_ioctl_nfs4_statx *statx,
+				const struct nfs4_statx *statx,
 				const struct nfs_server *server,
 				const uint32_t attrmask[])
 {
-	struct timespec64 ts;
 	char owner_name[IDMAP_NAMESZ];
 	char owner_group[IDMAP_NAMESZ];
 	int owner_namelen = 0;
@@ -1212,14 +1211,10 @@ static void encode_attrs(struct xdr_stream *xdr, const struct iattr *iap,
 		} else
 			*p++ = cpu_to_be32(NFS4_SET_TO_SERVER_TIME);
 	}
-	if (bmval[1] & FATTR4_WORD1_TIME_BACKUP) {
-		ts = timespec_to_timespec64(statx->fa_time_backup);
-		p = xdr_encode_nfstime4(p, &ts);
-	}
-	if (bmval[1] & FATTR4_WORD1_TIME_CREATE) {
-		ts = timespec_to_timespec64(statx->fa_time_create);
-		p = xdr_encode_nfstime4(p, &ts);
-	}
+	if (bmval[1] & FATTR4_WORD1_TIME_BACKUP)
+		p = xdr_encode_nfstime4(p, &statx->fa_time_backup);
+	if (bmval[1] & FATTR4_WORD1_TIME_CREATE)
+		p = xdr_encode_nfstime4(p, &statx->fa_time_create);
 	if (bmval[1] & FATTR4_WORD1_TIME_MODIFY_SET) {
 		if (iap->ia_valid & ATTR_MTIME_SET) {
 			*p++ = cpu_to_be32(NFS4_SET_TO_CLIENT_TIME);

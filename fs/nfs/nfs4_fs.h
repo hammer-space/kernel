@@ -245,6 +245,32 @@ struct nfs4_opendata {
 	int rpc_status;
 };
 
+struct nfs4_statx {
+	__s64		real_fd;		/* real FD to use,
+						   -1 means use current file */
+	__u64		fa_valid[2];		/* Attributes set */
+
+	struct timespec64 fa_time_backup;	/* Backup time */
+	struct timespec64 fa_time_create;	/* Birth time */
+	/* Flag attributes */
+	__u64 fa_flags;
+	struct timespec64 fa_atime;		/* Access time */
+	struct timespec64 fa_mtime;		/* Modify time */
+	struct timespec64 fa_ctime;		/* Change time */
+	uid_t fa_owner_uid;			/* Owner User ID */
+	gid_t fa_group_gid;			/* Primary Group ID */
+        /* Normal stat fields after this */
+	__u32	 	fa_mode;		/* Mode */
+	unsigned int 	fa_nlink;
+	__u32		fa_blksize;
+	__u32		fa_spare;		/* Alignment */
+	__u64		fa_ino;
+	dev_t		fa_dev;
+	dev_t		fa_rdev;
+	loff_t		fa_size;
+	__u64		fa_blocks;
+};
+
 struct nfs4_add_xprt_data {
 	struct nfs_client	*clp;
 	const struct cred	*cred;
@@ -314,7 +340,7 @@ extern int nfs4_set_rw_stateid(nfs4_stateid *stateid,
 		const struct nfs_lock_context *l_ctx,
 		fmode_t fmode);
 extern int nfs4_set_nfs4_statx(struct inode *inode,
-		struct nfs_ioctl_nfs4_statx *statx,
+		struct nfs4_statx *statx,
 		struct nfs_fattr *fattr);
 
 #if defined(CONFIG_NFS_V4_1)

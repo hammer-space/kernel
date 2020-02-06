@@ -8,6 +8,8 @@
 #include <linux/file.h>
 #include <linux/falloc.h>
 #include <linux/nfs_fs.h>
+#include <linux/time32.h>
+#include <linux/compat.h>
 #include "delegation.h"
 #include "internal.h"
 #include "iostat.h"
@@ -128,10 +130,36 @@ nfs4_file_flush(struct file *file, fl_owner_t id)
 	return nfs_wb_all(inode);
 }
 
+static inline
+int is_32bit_api(void)
+{
+#ifdef CONFIG_COMPAT
+	return in_compat_syscall();
+#else
+	return (BITS_PER_LONG == 32);
+#endif
+}
+
+static int nfs_get_timespec64(struct timespec64 *ts,
+		const void __user *uts)
+{
+	if (is_32bit_api())
+		return get_old_timespec32(ts, uts);
+	return get_timespec64(ts, uts);
+}
+
+static int nfs_put_timespec64(const struct timespec64 *ts,
+		void __user *uts)
+{
+	if (is_32bit_api())
+		return put_old_timespec32(ts, uts);
+	return put_timespec64(ts, uts);
+}
+
 static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		struct nfs_ioctl_nfs4_statx __user *uarg)
 {
-	struct nfs_ioctl_nfs4_statx args = {
+	struct nfs4_statx args = {
 		.real_fd = -1,
 		.fa_valid = { 0 },
 	};
@@ -174,15 +202,13 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 
 	if (fattr_supported & NFS_ATTR_FATTR_TIME_BACKUP) {
 		args.fa_valid[0] |= NFS_FA_VALID_TIME_BACKUP;
-		if (copy_to_user(&uarg->fa_time_backup, &nfsi->timebackup,
-					sizeof(uarg->fa_time_backup)))
+		if (nfs_put_timespec64(&nfsi->timebackup, &uarg->fa_time_backup))
 			goto out;
 	}
 
 	if (fattr_supported & NFS_ATTR_FATTR_TIME_CREATE) {
 		args.fa_valid[0] |= NFS_FA_VALID_TIME_CREATE;
-		if (copy_to_user(&uarg->fa_time_create, &nfsi->timecreate,
-					sizeof(uarg->fa_time_create)))
+		if (nfs_put_timespec64(&nfsi->timecreate, &uarg->fa_time_create))
 			goto out;
 	}
 
@@ -191,22 +217,19 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	 */
 	if (fattr_supported & NFS_ATTR_FATTR_ATIME) {
 		args.fa_valid[0] |= NFS_FA_VALID_ATIME;
-		if (copy_to_user(&uarg->fa_atime, &inode->i_atime,
-					sizeof(uarg->fa_atime)))
+		if (nfs_put_timespec64(&inode->i_atime, &uarg->fa_atime))
 			goto out;
 	}
 
 	if (fattr_supported & NFS_ATTR_FATTR_MTIME) {
 		args.fa_valid[0] |= NFS_FA_VALID_MTIME;
-		if (copy_to_user(&uarg->fa_mtime, &inode->i_mtime,
-					sizeof(uarg->fa_mtime)))
+		if (nfs_put_timespec64(&inode->i_mtime, &uarg->fa_mtime))
                         goto out;
 	}
 
 	if (fattr_supported & NFS_ATTR_FATTR_CTIME) {
 		args.fa_valid[0] |= NFS_FA_VALID_CTIME;
-		if (copy_to_user(&uarg->fa_ctime, &inode->i_ctime,
-				sizeof(uarg->fa_ctime)))
+		if (nfs_put_timespec64(&inode->i_ctime, &uarg->fa_ctime))
 			goto out;
 	}
 
@@ -315,7 +338,7 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 		struct nfs_ioctl_nfs4_statx __user *uarg)
 {
 	struct inode *inode = file_inode(dst_file);
-	struct nfs_ioctl_nfs4_statx args = {
+	struct nfs4_statx args = {
 		.real_fd = -1,
 		.fa_valid = { 0 },
 	};
@@ -368,23 +391,19 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 		goto out;
 
 	if ((args.fa_valid[0] & NFS_FA_VALID_TIME_CREATE) &&
-	    copy_from_user(&args.fa_time_create, &uarg->fa_time_create,
-					sizeof(args.fa_time_create)))
+	    nfs_get_timespec64(&args.fa_time_create, &uarg->fa_time_create))
 		goto out;
 
 	if ((args.fa_valid[0] & NFS_FA_VALID_ATIME) &&
-	    copy_from_user(&args.fa_atime, &uarg->fa_atime,
-					sizeof(args.fa_atime)))
+	    nfs_get_timespec64(&args.fa_atime, &uarg->fa_atime))
 		goto out;
 
 	if ((args.fa_valid[0] & NFS_FA_VALID_MTIME) &&
-	    copy_from_user(&args.fa_mtime, &uarg->fa_mtime,
-					sizeof(args.fa_mtime)))
+	    nfs_get_timespec64(&args.fa_mtime, &uarg->fa_mtime))
 		goto out;
 
 	if (args.fa_valid[0] & NFS_FA_VALID_TIME_BACKUP) {
-		if (copy_from_user(&args.fa_time_backup, &uarg->fa_time_backup,
-					sizeof(args.fa_time_backup)))
+		if (nfs_get_timespec64(&args.fa_time_backup, &uarg->fa_time_backup))
 			goto out;
 	} else if ((args.fa_valid[0] & NFS_FA_VALID_ARCHIVE) &&
 			!(NFS_SERVER(inode)->fattr_valid & NFS_ATTR_FATTR_ARCHIVE)) {

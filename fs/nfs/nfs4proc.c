@@ -8070,7 +8070,7 @@ static int _nfs41_proc_get_locations(struct inode *inode,
 #endif	/* CONFIG_NFS_V4_1 */
 
 static int _nfs4_set_nfs4_statx(struct inode *inode,
-		struct nfs_ioctl_nfs4_statx *statx,
+		struct nfs4_statx *statx,
 		struct nfs_fattr *fattr)
 {
 
@@ -8139,7 +8139,7 @@ static int _nfs4_set_nfs4_statx(struct inode *inode,
 }
 
 int nfs4_set_nfs4_statx(struct inode *inode,
-		struct nfs_ioctl_nfs4_statx *statx,
+		struct nfs4_statx *statx,
 		struct nfs_fattr *fattr)
 {
 	struct nfs4_exception exception = { };

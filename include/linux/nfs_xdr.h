@@ -812,6 +812,7 @@ struct nfs_createargs {
 	struct iattr *		sattr;
 };
 
+struct nfs4_statx;
 struct nfs_setattrargs {
 	struct nfs4_sequence_args 	seq_args;
 	struct nfs_fh *                 fh;
@@ -820,7 +821,7 @@ struct nfs_setattrargs {
 	const struct nfs_server *	server; /* Needed for name mapping */
 	const u32 *			bitmask;
 	const struct nfs4_label		*label;
-	const struct nfs_ioctl_nfs4_statx	*statx;
+	const struct nfs4_statx		*statx;
 };
 
 struct nfs_setaclargs {
