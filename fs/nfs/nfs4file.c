@@ -166,7 +166,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	struct nfs_server *server = NFS_SERVER(inode);
 	u64 fattr_supported = server->fattr_valid;
 	struct nfs_inode *nfsi = NFS_I(inode);
-	int ret = -EFAULT;
+	int ret;
 	/*
 	 * We get the first u64 word from the uarg as it tells us whether
 	 * to use the passed in struct file or use that fd to find the
@@ -187,6 +187,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	if (ret != 0)
 		return ret;
 
+	ret = -EFAULT;
 	if (fattr_supported & NFS_ATTR_FATTR_OWNER) {
 		args.fa_valid[0] |= NFS_FA_VALID_OWNER;
 		if (copy_to_user(&uarg->fa_owner_uid, &inode->i_uid, sizeof(uid_t)))
@@ -327,6 +328,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	if (copy_to_user(uarg->fa_valid, args.fa_valid, sizeof(uarg->fa_valid)))
 		goto out;
 
+	ret = 0;
 out:
 	if (args.real_fd >= 0)
 		fput(dst_file);
