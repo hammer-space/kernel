@@ -314,10 +314,12 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 			goto out;
 	}
 
-	args.fa_valid[0] |= NFS_FA_VALID_BLKSIZE;
-	if (copy_to_user(&uarg->fa_blksize, &NFS_SERVER(inode)->dtsize,
-			sizeof(uarg->fa_blksize)))
+	tmp = i_blocksize(inode);
+	if (S_ISDIR(inode->i_mode))
+		tmp = NFS_SERVER(inode)->dtsize;
+	if (unlikely(put_user(tmp, &uarg->fa_blksize) != 0))
 		goto out;
+	args.fa_valid[0] |= NFS_FA_VALID_BLKSIZE;
 
 	args.fa_valid[0] |= NFS_FA_VALID_INO;
 	if (copy_to_user(&uarg->fa_ino, &inode->i_ino,
