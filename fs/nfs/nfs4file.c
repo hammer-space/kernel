@@ -155,6 +155,24 @@ static int nfs_put_timespec64(const struct timespec64 *ts,
 	return put_timespec64(ts, uts);
 }
 
+static struct file *nfs4_get_real_file(struct file *src, unsigned int fd)
+{
+	struct file *filp = fget_raw(fd);
+	int ret = -EBADF;
+
+	if (!filp)
+		goto out;
+	/* Validate that the files share the same underlying filesystem */
+	ret = -EXDEV;
+	if (file_inode(filp)->i_sb != file_inode(src)->i_sb)
+		goto out_put;
+	return filp;
+out_put:
+	fput(filp);
+out:
+	return ERR_PTR(ret);
+}
+
 static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		struct nfs_ioctl_nfs4_statx __user *uarg)
 {
@@ -162,10 +180,10 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		.real_fd = -1,
 		.fa_valid = { 0 },
 	};
-	struct inode *inode = file_inode(dst_file);
-	struct nfs_server *server = NFS_SERVER(inode);
-	u64 fattr_supported = server->fattr_valid;
-	struct nfs_inode *nfsi = NFS_I(inode);
+	struct inode *inode;
+	struct nfs_inode *nfsi;
+	struct nfs_server *server;
+	u64 fattr_supported;
 	int ret;
 	/*
 	 * We get the first u64 word from the uarg as it tells us whether
@@ -176,12 +194,15 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		return -EFAULT;
 
 	if (args.real_fd >= 0) {
-		dst_file = fget_raw(args.real_fd);
-		if (!dst_file)
-			return -EBADF;
-		inode = file_inode(dst_file);
-		nfsi = NFS_I(inode);
+		dst_file = nfs4_get_real_file(dst_file, args.real_fd);
+		if (IS_ERR(dst_file))
+			return PTR_ERR(dst_file);
 	}
+
+	inode = file_inode(dst_file);
+	nfsi = NFS_I(inode);
+	server = NFS_SERVER(inode);
+	fattr_supported = server->fattr_valid;
 
 	ret = nfs_revalidate_inode(server, inode);
 	if (ret != 0)
@@ -338,12 +359,12 @@ out:
 static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 		struct nfs_ioctl_nfs4_statx __user *uarg)
 {
-	struct inode *inode = file_inode(dst_file);
 	struct nfs4_statx args = {
 		.real_fd = -1,
 		.fa_valid = { 0 },
 	};
 	struct nfs_fattr *fattr = nfs_alloc_fattr();
+	struct inode *inode;
 	/*
 	 * If you need a different error code below, you need to set it
 	 */
@@ -363,13 +384,13 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 		goto out_free;
 
 	if (args.real_fd >= 0) {
-		dst_file = fget_raw(args.real_fd);
-		if (!dst_file) {
-			ret = -EBADF;
+		dst_file = nfs4_get_real_file(dst_file, args.real_fd);
+		if (IS_ERR(dst_file)) {
+			ret = PTR_ERR(dst_file);
 			goto out_free;
 		}
-		inode = file_inode(dst_file);
 	}
+	inode = file_inode(dst_file);
 
 	if (get_user(args.fa_valid[0], &uarg->fa_valid[0]))
 		goto out;
