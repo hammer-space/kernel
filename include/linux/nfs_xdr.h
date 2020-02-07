@@ -68,17 +68,17 @@ struct nfs_fattr {
 	struct nfs_fsid		fsid;
 	__u64			fileid;
 	__u64			mounted_on_fileid;
-	struct timespec		atime;
-	struct timespec		mtime;
-	struct timespec		ctime;
-	struct timespec		time_create;
+	struct timespec64	atime;
+	struct timespec64	mtime;
+	struct timespec64	ctime;
+	struct timespec64	time_create;
 	__u32			hsa_flags;	/* hidden, system, archive flags bitfield */
-	struct timespec		time_backup;
+	struct timespec64	time_backup;
 	__u64			change_attr;	/* NFSv4 change attribute */
 	__u64			pre_change_attr;/* pre-op NFSv4 change attribute */
 	__u64			pre_size;	/* pre_op_attr.size	  */
-	struct timespec		pre_mtime;	/* pre_op_attr.mtime	  */
-	struct timespec		pre_ctime;	/* pre_op_attr.ctime	  */
+	struct timespec64	pre_mtime;	/* pre_op_attr.mtime	  */
+	struct timespec64	pre_ctime;	/* pre_op_attr.ctime	  */
 	unsigned long		time_start;
 	unsigned long		gencount;
 	struct nfs4_string	*owner_name;
@@ -163,7 +163,7 @@ struct nfs_fsinfo {
 	__u32			wtmult;	/* writes should be multiple of this */
 	__u32			dtpref;	/* pref. readdir transfer size */
 	__u64			maxfilesize;
-	struct timespec		time_delta; /* server time granularity */
+	struct timespec64	time_delta; /* server time granularity */
 	__u32			lease_time; /* in seconds */
 	__u32			nlayouttypes; /* number of layouttypes */
 	__u32			layouttype[NFS_MAX_LAYOUT_TYPES]; /* supported pnfs layout driver */
@@ -636,8 +636,8 @@ struct nfs_release_lockowner_res {
 };
 
 struct nfs4_delegattr {
-	struct timespec		atime;
-	struct timespec		mtime;
+	struct timespec64	atime;
+	struct timespec64	mtime;
 	bool			atime_set;
 	bool			mtime_set;
 };
@@ -812,6 +812,7 @@ struct nfs_createargs {
 	struct iattr *		sattr;
 };
 
+struct nfs4_statx;
 struct nfs_setattrargs {
 	struct nfs4_sequence_args 	seq_args;
 	struct nfs_fh *                 fh;
@@ -820,7 +821,7 @@ struct nfs_setattrargs {
 	const struct nfs_server *	server; /* Needed for name mapping */
 	const u32 *			bitmask;
 	const struct nfs4_label		*label;
-	const struct nfs_ioctl_nfs4_statx	*statx;
+	const struct nfs4_statx		*statx;
 };
 
 struct nfs_setaclargs {
@@ -914,7 +915,7 @@ struct nfs3_sattrargs {
 	struct nfs_fh *		fh;
 	struct iattr *		sattr;
 	unsigned int		guard;
-	struct timespec		guardtime;
+	struct timespec64	guardtime;
 };
 
 struct nfs3_diropargs {

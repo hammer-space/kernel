@@ -72,9 +72,9 @@ struct cb_getattrres {
 	uint32_t bitmap[3];
 	uint64_t size;
 	uint64_t change_attr;
-	struct timespec atime;
-	struct timespec ctime;
-	struct timespec mtime;
+	struct timespec64 atime;
+	struct timespec64 ctime;
+	struct timespec64 mtime;
 };
 
 struct cb_recallargs {
