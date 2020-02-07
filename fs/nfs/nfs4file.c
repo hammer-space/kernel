@@ -210,14 +210,18 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 
 	ret = -EFAULT;
 	if (fattr_supported & NFS_ATTR_FATTR_OWNER) {
+		uid_t uid = from_kuid_munged(current_user_ns(), inode->i_uid);
+
 		args.fa_valid[0] |= NFS_FA_VALID_OWNER;
-		if (copy_to_user(&uarg->fa_owner_uid, &inode->i_uid, sizeof(uid_t)))
+		if (unlikely(put_user(uid, &uarg->fa_owner_uid) != 0))
 			goto out;
 	}
 
 	if (fattr_supported & NFS_ATTR_FATTR_GROUP) {
+		gid_t gid = from_kgid_munged(current_user_ns(), inode->i_gid);
+
 		args.fa_valid[0] |= NFS_FA_VALID_OWNER_GROUP;
-		if (copy_to_user(&uarg->fa_group_gid, &inode->i_gid, sizeof(gid_t)))
+		if (unlikely(put_user(gid, &uarg->fa_group_gid) != 0))
 			goto out;
 	}
 
