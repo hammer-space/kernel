@@ -184,6 +184,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	struct nfs_inode *nfsi;
 	struct nfs_server *server;
 	u64 fattr_supported;
+	__u32 tmp;
 	int ret;
 	/*
 	 * We get the first u64 word from the uarg as it tells us whether
@@ -299,11 +300,11 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		goto out;
 
 	if ((fattr_supported & NFS_ATTR_FATTR_MODE)) {
-		args.fa_valid[0] |= NFS_FA_VALID_MODE;
+		tmp = inode->i_mode;
 		/* This is an unsigned short we put into an __u32 */
-		if (copy_to_user(&uarg->fa_mode, &inode->i_mode,
-				sizeof(unsigned short)))
+		if (unlikely(put_user(tmp, &uarg->fa_mode) != 0))
 			goto out;
+		args.fa_valid[0] |= NFS_FA_VALID_MODE;
 	}
 
 	if ((fattr_supported & NFS_ATTR_FATTR_NLINK)) {
