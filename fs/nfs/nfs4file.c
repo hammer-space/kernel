@@ -400,15 +400,29 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 		goto out;
 	args.fa_valid[0] &= NFS_FA_VALID_ALL_ATTR_0;
 
-	if ((args.fa_valid[0] & NFS_FA_VALID_OWNER) &&
-	    copy_from_user(&args.fa_owner_uid, &uarg->fa_owner_uid,
-					sizeof(args.fa_owner_uid)))
-		goto out;
+	if (args.fa_valid[0] & NFS_FA_VALID_OWNER) {
+		uid_t uid;
 
-	if ((args.fa_valid[0] & NFS_FA_VALID_OWNER_GROUP) &&
-	    copy_from_user(&args.fa_group_gid, &uarg->fa_group_gid,
-					sizeof(args.fa_group_gid)))
-		goto out;
+		if (unlikely(get_user(uid, &uarg->fa_owner_uid) != 0))
+			goto out;
+		args.fa_owner_uid = make_kuid(current_user_ns(), uid);
+		if (!uid_valid(args.fa_owner_uid)) {
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+
+	if (args.fa_valid[0] & NFS_FA_VALID_OWNER_GROUP) {
+		gid_t gid;
+
+		if (unlikely(get_user(gid, &uarg->fa_group_gid) != 0))
+			goto out;
+		args.fa_group_gid = make_kgid(current_user_ns(), gid);
+		if (!gid_valid(args.fa_group_gid)) {
+			ret = -EINVAL;
+			goto out;
+		}
+	}
 
 	if ((args.fa_valid[0] & (NFS_FA_VALID_ARCHIVE |
 					NFS_FA_VALID_HIDDEN |

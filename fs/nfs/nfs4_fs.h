@@ -255,8 +255,8 @@ struct nfs4_statx {
 	struct timespec64 fa_atime;		/* Access time */
 	struct timespec64 fa_mtime;		/* Modify time */
 	struct timespec64 fa_ctime;		/* Change time */
-	uid_t fa_owner_uid;			/* Owner User ID */
-	gid_t fa_group_gid;			/* Primary Group ID */
+	kuid_t fa_owner_uid;			/* Owner User ID */
+	kgid_t fa_group_gid;			/* Primary Group ID */
         /* Normal stat fields after this */
 	__u32	 	fa_mode;		/* Mode */
 	unsigned int 	fa_nlink;
