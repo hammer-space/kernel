@@ -8134,12 +8134,12 @@ static int _nfs4_set_nfs4_statx(struct inode *inode,
 
 	if (statx && (statx->fa_valid[0] & NFS_FA_VALID_OWNER)) {
 		sattr.ia_valid |= ATTR_UID;
-		sattr.ia_uid.val = statx->fa_owner_uid;
+		sattr.ia_uid = statx->fa_owner_uid;
 	}
 
 	if (statx && (statx->fa_valid[0] & NFS_FA_VALID_OWNER_GROUP)) {
 		sattr.ia_valid |= ATTR_GID;
-		sattr.ia_gid.val = statx->fa_group_gid;
+		sattr.ia_gid = statx->fa_group_gid;
 	}
 
 	if (statx && (statx->fa_valid[0] & NFS_FA_VALID_SIZE)) {
