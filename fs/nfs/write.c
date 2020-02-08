@@ -1705,7 +1705,7 @@ int nfs_initiate_commit(struct nfs_client *clp,
 		.callback_ops = call_ops,
 		.callback_data = data,
 		.workqueue = nfsiod_workqueue,
-		.flags = RPC_TASK_ASYNC | flags,
+		.flags = RPC_TASK_ASYNC | RPC_TASK_CRED_NOREF | flags,
 		.priority = priority,
 	};
 	int status = 0;

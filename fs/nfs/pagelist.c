@@ -651,7 +651,7 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 		.callback_ops = call_ops,
 		.callback_data = hdr,
 		.workqueue = nfsiod_workqueue,
-		.flags = RPC_TASK_ASYNC | flags,
+		.flags = RPC_TASK_ASYNC | RPC_TASK_CRED_NOREF | flags,
 	};
 	int ret = 0;
 
