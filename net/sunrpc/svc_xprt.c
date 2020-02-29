@@ -1026,6 +1026,13 @@ out:
 }
 EXPORT_SYMBOL_GPL(svc_recv);
 
+static void svc_drop_connection(struct svc_xprt *xprt)
+{
+	if (test_bit(XPT_TEMP, &xprt->xpt_flags) &&
+	    !test_and_set_bit(XPT_CLOSE, &xprt->xpt_flags))
+		svc_xprt_enqueue(xprt);
+}
+
 /*
  * Drop request
  */
@@ -1283,6 +1290,7 @@ static void svc_revisit(struct cache_deferred_req *dreq, int too_many)
 	if (too_many || test_bit(XPT_DEAD, &xprt->xpt_flags)) {
 		spin_unlock(&xprt->xpt_lock);
 		dprintk("revisit canceled\n");
+		svc_drop_connection(xprt);
 		svc_xprt_put(xprt);
 		trace_svc_drop_deferred(dr);
 		kfree(dr);
