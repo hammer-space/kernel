@@ -48,16 +48,6 @@ warn_no_mountd(struct cache_detail *detail, int has_died)
 	       has_died ? "died" : "not been started");
 }
 
-/*
- * Always try to wait for mountd if it is slow to start
- */
-static int cache_upcall(struct cache_detail *cd, struct cache_head *h)
-{
-	if (cd->last_close == 0 && !atomic_read(&cd->readers))
-		cd->last_close = seconds_since_boot();
-	return sunrpc_cache_pipe_upcall(cd, h);
-}
-
 static void expkey_put(struct kref *ref)
 {
 	struct svc_expkey *key = container_of(ref, struct svc_expkey, h.ref);
@@ -67,6 +57,11 @@ static void expkey_put(struct kref *ref)
 		path_put(&key->ek_path);
 	auth_domain_put(key->ek_client);
 	kfree_rcu(key, ek_rcu);
+}
+
+static int expkey_upcall(struct cache_detail *cd, struct cache_head *h)
+{
+	return sunrpc_cache_pipe_upcall(cd, h);
 }
 
 static void expkey_request(struct cache_detail *cd,
@@ -279,7 +274,7 @@ static const struct cache_detail svc_expkey_cache_template = {
 	.hash_size	= EXPKEY_HASHMAX,
 	.name		= "nfsd.fh",
 	.cache_put	= expkey_put,
-	.cache_upcall	= cache_upcall,
+	.cache_upcall	= expkey_upcall,
 	.cache_request	= expkey_request,
 	.cache_parse	= expkey_parse,
 	.cache_show	= expkey_show,
@@ -360,6 +355,11 @@ static void svc_export_put(struct kref *ref)
 	nfsd4_fslocs_free(&exp->ex_fslocs);
 	kfree(exp->ex_uuid);
 	kfree_rcu(exp, ex_rcu);
+}
+
+static int svc_export_upcall(struct cache_detail *cd, struct cache_head *h)
+{
+	return sunrpc_cache_pipe_upcall(cd, h);
 }
 
 static void svc_export_request(struct cache_detail *cd,
@@ -813,7 +813,7 @@ static const struct cache_detail svc_export_cache_template = {
 	.hash_size	= EXPORT_HASHMAX,
 	.name		= "nfsd.export",
 	.cache_put	= svc_export_put,
-	.cache_upcall	= cache_upcall,
+	.cache_upcall	= svc_export_upcall,
 	.cache_request	= svc_export_request,
 	.cache_parse	= svc_export_parse,
 	.cache_show	= svc_export_show,
