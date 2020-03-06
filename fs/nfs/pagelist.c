@@ -482,16 +482,6 @@ nfs_wait_on_request(struct nfs_page *req)
 }
 EXPORT_SYMBOL_GPL(nfs_wait_on_request);
 
-static struct nfs_client *
-nfs_pgio_get_clp(struct nfs_pageio_descriptor *desc, struct nfs_page *req)
-{
-	struct nfs_client *clp = pnfs_get_nfs_client(desc, req);
-	if (clp)
-		return clp;
-
-	return NFS_SERVER(desc->pg_inode)->nfs_client;
-}
-
 /*
  * nfs_generic_pg_test - determine if requests can be coalesced
  * @desc: pointer to descriptor
@@ -505,14 +495,8 @@ size_t nfs_generic_pg_test(struct nfs_pageio_descriptor *desc,
 			   struct nfs_page *prev, struct nfs_page *req)
 {
 	struct nfs_pgio_mirror *mirror = nfs_pgio_current_mirror(desc);
-	struct nfs_client *clp = nfs_pgio_get_clp(desc, req);
-	bool limit_bsize = true;
 
-	/* if localio is enabled, ignore bsize */
-	if (clp && nfs_server_is_local(clp))
-		limit_bsize = false;
-
-	if (limit_bsize && mirror->pg_count > mirror->pg_bsize) {
+	if (mirror->pg_count > mirror->pg_bsize) {
 		/* should never happen */
 		WARN_ON_ONCE(1);
 		return 0;
@@ -525,9 +509,6 @@ size_t nfs_generic_pg_test(struct nfs_pageio_descriptor *desc,
 	if (((mirror->pg_count + req->wb_bytes) >> PAGE_SHIFT) *
 			sizeof(struct page *) > PAGE_SIZE)
 		return 0;
-
-	if (!limit_bsize)
-		return req->wb_bytes;
 
 	return min(mirror->pg_bsize - mirror->pg_count, (size_t)req->wb_bytes);
 }

@@ -890,14 +890,11 @@ pnfs_layout_mark_request_commit(struct nfs_page *req,
 	struct pnfs_commit_bucket *buckets;
 
 	mutex_lock(&NFS_I(cinfo->inode)->commit_mutex);
+	if (!pnfs_is_valid_lseg(lseg) || ds_commit_idx >= cinfo->ds->nbuckets)
+		goto out_resched;
 	buckets = cinfo->ds->buckets;
 	list = &buckets[ds_commit_idx].written;
 	if (list_empty(list)) {
-		if (!pnfs_is_valid_lseg(lseg)) {
-			mutex_unlock(&NFS_I(cinfo->inode)->commit_mutex);
-			cinfo->completion_ops->resched_write(cinfo, req);
-			return;
-		}
 		/* Non-empty buckets hold a reference on the lseg.  That ref
 		 * is normally transferred to the COMMIT call and released
 		 * there.  It could also be released if the last req is pulled
@@ -913,6 +910,10 @@ pnfs_layout_mark_request_commit(struct nfs_page *req,
 	nfs_request_add_commit_list_locked(req, list, cinfo);
 	mutex_unlock(&NFS_I(cinfo->inode)->commit_mutex);
 	nfs_mark_page_unstable(req->wb_page, cinfo);
+	return;
+out_resched:
+	mutex_unlock(&NFS_I(cinfo->inode)->commit_mutex);
+	cinfo->completion_ops->resched_write(cinfo, req);
 }
 EXPORT_SYMBOL_GPL(pnfs_layout_mark_request_commit);
 
