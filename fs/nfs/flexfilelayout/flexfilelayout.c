@@ -2568,18 +2568,6 @@ ff_layout_set_layoutdriver(struct nfs_server *server,
 	return 0;
 }
 
-static struct nfs_client *
-ff_get_nfs_client(struct nfs_pageio_descriptor *desc, struct nfs_page *req)
-{
-	struct nfs4_ff_layout_mirror *mirror;
-	struct nfs4_pnfs_ds *ds;
-
-	mirror = FF_LAYOUT_COMP(desc->pg_lseg, desc->pg_mirror_idx);
-	ds = mirror->mirror_ds->ds;
-
-	return ds->ds_clp;
-}
-
 static struct pnfs_layoutdriver_type flexfilelayout_type = {
 	.id			= LAYOUT_FLEX_FILES,
 	.name			= "LAYOUT_FLEX_FILES",
@@ -2605,7 +2593,6 @@ static struct pnfs_layoutdriver_type flexfilelayout_type = {
 	.write_pagelist		= ff_layout_write_pagelist,
 	.alloc_deviceid_node    = ff_layout_alloc_deviceid_node,
 	.prepare_layoutreturn   = ff_layout_prepare_layoutreturn,
-	.get_nfs_client		= ff_get_nfs_client,
 	.sync			= pnfs_nfs_generic_sync,
 	.prepare_layoutstats	= ff_layout_prepare_layoutstats,
 };

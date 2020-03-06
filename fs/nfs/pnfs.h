@@ -161,8 +161,6 @@ struct pnfs_layoutdriver_type {
 				     struct nfs_commit_info *cinfo);
 	struct nfs_page * (*search_commit_reqs)(struct nfs_commit_info *cinfo,
 						struct page *page);
-	struct nfs_client * (*get_nfs_client)(struct nfs_pageio_descriptor *desc,
-				       struct nfs_page *req);
 
 	int (*commit_pagelist)(struct inode *inode,
 			       struct list_head *mds_pages,
@@ -516,18 +514,6 @@ pnfs_search_commit_reqs(struct inode *inode, struct nfs_commit_info *cinfo,
 	return ld->search_commit_reqs(cinfo, page);
 }
 
-static inline struct nfs_client *
-pnfs_get_nfs_client(struct nfs_pageio_descriptor *desc, struct nfs_page *req)
-{
-	struct pnfs_layoutdriver_type *ld;
-
-	ld = NFS_SERVER(desc->pg_inode)->pnfs_curr_ld;
-
-	if (ld == NULL || ld->get_nfs_client == NULL || desc->pg_lseg == NULL)
-		return NULL;
-	return ld->get_nfs_client(desc, req);
-}
-
 /* Should the pNFS client commit and return the layout upon a setattr */
 static inline bool
 pnfs_ld_layoutret_on_setattr(struct inode *inode)
@@ -796,12 +782,6 @@ pnfs_scan_commit_lists(struct inode *inode, struct nfs_commit_info *cinfo,
 static inline struct nfs_page *
 pnfs_search_commit_reqs(struct inode *inode, struct nfs_commit_info *cinfo,
 			struct page *page)
-{
-	return NULL;
-}
-
-static inline struct nfs_client *
-pnfs_get_nfs_client(struct nfs_pageio_descriptor *desc, struct nfs_page *req)
 {
 	return NULL;
 }
