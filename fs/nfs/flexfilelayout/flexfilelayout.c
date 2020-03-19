@@ -49,6 +49,7 @@ ff_layout_alloc_layout_hdr(struct inode *inode, gfp_t gfp_flags)
 
 	ffl = kzalloc(sizeof(*ffl), gfp_flags);
 	if (ffl) {
+		INIT_LIST_HEAD(&ffl->commit_info.commits);
 		INIT_LIST_HEAD(&ffl->error_list);
 		INIT_LIST_HEAD(&ffl->mirrors);
 		ffl->last_report_time = ktime_get();
