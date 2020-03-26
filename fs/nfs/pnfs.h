@@ -523,7 +523,7 @@ pnfs_clear_request_commit(struct nfs_page *req, struct nfs_commit_info *cinfo)
 {
 	struct pnfs_ds_commit_info *fl_cinfo = cinfo->ds;
 
-	if (!fl_cinfo->ops || !fl_cinfo->ops->clear_request_commit)
+	if (!fl_cinfo || !fl_cinfo->ops || !fl_cinfo->ops->clear_request_commit)
 		return false;
 	fl_cinfo->ops->clear_request_commit(req, cinfo);
 	return true;
