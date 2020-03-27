@@ -398,6 +398,14 @@ nfs_local_iter_init(struct iov_iter *i, struct nfs_local_kiocb *iocb, int dir)
 }
 
 static void
+nfs_local_hdr_release(struct nfs_pgio_header *hdr,
+		const struct rpc_call_ops *call_ops)
+{
+	call_ops->rpc_call_done(&hdr->task, hdr);
+	call_ops->rpc_release(hdr);
+}
+
+static void
 nfs_local_pgio_init(struct nfs_pgio_header *hdr,
 		const struct rpc_call_ops *call_ops)
 {
@@ -420,17 +428,22 @@ nfs_local_pgio_done(struct nfs_pgio_header *hdr, long status)
 }
 
 static void
-nfs_local_pgio_complete_work(struct work_struct *work)
+nfs_local_pgio_release(struct nfs_local_kiocb *iocb)
 {
-	struct nfs_local_kiocb *iocb = container_of(work,
-			struct nfs_local_kiocb, work);
 	struct nfs_pgio_header *hdr = iocb->hdr;
-	const struct rpc_call_ops *call_ops = hdr->task.tk_ops;
 
 	fput(iocb->kiocb.ki_filp);
 	nfs_local_iocb_free(iocb);
-	call_ops->rpc_call_done(&hdr->task, hdr);
-	call_ops->rpc_release(hdr);
+	nfs_local_hdr_release(hdr, hdr->task.tk_ops);
+}
+
+static void
+nfs_local_read_aio_complete_work(struct work_struct *work)
+{
+	struct nfs_local_kiocb *iocb = container_of(work,
+			struct nfs_local_kiocb, work);
+
+	nfs_local_pgio_release(iocb);
 }
 
 /*
@@ -491,16 +504,16 @@ nfs_do_local_read(struct nfs_pgio_header *hdr, struct file *filp,
 	hdr->res.eof = false;
 
 	if (iocb->kiocb.ki_flags & IOCB_DIRECT) {
-		INIT_WORK(&iocb->work, nfs_local_pgio_complete_work);
+		INIT_WORK(&iocb->work, nfs_local_read_aio_complete_work);
 		iocb->kiocb.ki_complete = nfs_local_read_aio_complete;
 	}
 
 	status = call_read_iter(filp, &iocb->kiocb, &iter);
 	if (status != -EIOCBQUEUED) {
 		nfs_local_read_done(iocb, status);
-		nfs_local_iocb_free(iocb);
+		nfs_local_pgio_release(iocb);
 	}
-	return status;
+	return 0;
 }
 
 static void
@@ -588,7 +601,7 @@ nfs_local_write_aio_complete_work(struct work_struct *work)
 			struct nfs_local_kiocb, work);
 
 	nfs_get_vfs_attr(iocb->kiocb.ki_filp, iocb->hdr->res.fattr);
-	nfs_local_pgio_complete_work(work);
+	nfs_local_pgio_release(iocb);
 }
 
 static void
@@ -642,9 +655,9 @@ nfs_do_local_write(struct nfs_pgio_header *hdr, struct file *filp,
 	if (status != -EIOCBQUEUED) {
 		nfs_local_write_done(iocb, status);
 		nfs_get_vfs_attr(filp, hdr->res.fattr);
-		nfs_local_iocb_free(iocb);
+		nfs_local_pgio_release(iocb);
 	}
-	return status;
+	return 0;
 }
 
 static struct file *
@@ -705,9 +718,11 @@ nfs_local_doio(struct nfs_client *clp, struct file *filp,
 		status = -EINVAL;
 	}
 out_fput:
-	if (status != -EIOCBQUEUED)
+	if (status != 0) {
 		fput(filp);
-
+		hdr->task.tk_status = status;
+		nfs_local_hdr_release(hdr, call_ops);
+	}
 	return status;
 }
 EXPORT_SYMBOL_GPL(nfs_local_doio);
