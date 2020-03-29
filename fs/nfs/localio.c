@@ -557,19 +557,27 @@ nfs_get_vfs_attr(struct file *filp, struct nfs_fattr *fattr)
 	struct kstat stat;
 
 	if (fattr != NULL && vfs_getattr(&filp->f_path, &stat,
-					 STATX_ATIME | STATX_MTIME | STATX_CTIME | STATX_SIZE,
+					 STATX_INO |
+					 STATX_ATIME |
+					 STATX_MTIME |
+					 STATX_CTIME |
+					 STATX_SIZE |
+					 STATX_BLOCKS,
 					 AT_STATX_SYNC_AS_STAT) == 0) {
-		fattr->valid = NFS_ATTR_FATTR_CHANGE | NFS_ATTR_FATTR_SIZE |
-			NFS_ATTR_FATTR_ATIME | NFS_ATTR_FATTR_MTIME |
-			NFS_ATTR_FATTR_CTIME;
+		fattr->valid = NFS_ATTR_FATTR_FILEID |
+			NFS_ATTR_FATTR_CHANGE |
+			NFS_ATTR_FATTR_SIZE |
+			NFS_ATTR_FATTR_ATIME |
+			NFS_ATTR_FATTR_MTIME |
+			NFS_ATTR_FATTR_CTIME |
+			NFS_ATTR_FATTR_SPACE_USED;
+		fattr->fileid = stat.ino;
 		fattr->size = stat.size;
-		fattr->atime.tv_sec = stat.atime.tv_sec;
-		fattr->atime.tv_nsec = stat.atime.tv_nsec;
-		fattr->mtime.tv_sec = stat.mtime.tv_sec;
-		fattr->mtime.tv_nsec = stat.mtime.tv_nsec;
-		fattr->ctime.tv_sec = stat.ctime.tv_sec;
-		fattr->ctime.tv_nsec = stat.ctime.tv_nsec;
+		fattr->atime = stat.atime;
+		fattr->mtime = stat.mtime;
+		fattr->ctime = stat.ctime;
 		fattr->change_attr = nfs_timespec_to_change_attr(&fattr->ctime);
+		fattr->du.nfs3.used = stat.blocks << 9;
 	}
 }
 
