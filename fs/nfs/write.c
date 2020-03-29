@@ -1708,7 +1708,6 @@ int nfs_initiate_commit(struct nfs_client *clp,
 		.flags = RPC_TASK_ASYNC | RPC_TASK_CRED_NOREF | flags,
 		.priority = priority,
 	};
-	int status = 0;
 
 	/* Set up the initial task struct.  */
 	nfs_ops->commit_setup(data, &msg, &task_setup_data.rpc_client);
@@ -1717,21 +1716,18 @@ int nfs_initiate_commit(struct nfs_client *clp,
 	dprintk("NFS: initiated commit call\n");
 
 	if (localio) {
-		status = nfs_local_commit(clp, localio, data);
-		if (status > 0)
-			status = 0;
-
-		call_ops->rpc_call_done(&data->task, data);
-		call_ops->rpc_release(data);
-	} else {
-		task = rpc_run_task(&task_setup_data);
-		if (IS_ERR(task))
-			return PTR_ERR(task);
-		if (how & FLUSH_SYNC)
-			rpc_wait_for_completion_task(task);
-		rpc_put_task(task);
+		nfs_local_commit(clp, localio, data, call_ops);
+		goto out;
 	}
-	return status;
+
+	task = rpc_run_task(&task_setup_data);
+	if (IS_ERR(task))
+		return PTR_ERR(task);
+	if (how & FLUSH_SYNC)
+		rpc_wait_for_completion_task(task);
+	rpc_put_task(task);
+out:
+	return 0;
 }
 EXPORT_SYMBOL_GPL(nfs_initiate_commit);
 

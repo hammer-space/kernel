@@ -729,7 +729,8 @@ EXPORT_SYMBOL_GPL(nfs_local_doio);
 
 int
 nfs_local_commit(struct nfs_client *clp, struct file *filp,
-		 struct nfs_commit_data *data)
+		 struct nfs_commit_data *data,
+		 const struct rpc_call_ops *call_ops)
 {
 	loff_t end;
 	int status;
@@ -751,8 +752,9 @@ nfs_local_commit(struct nfs_client *clp, struct file *filp,
 		data->res.op_status = nfs4errno(status);
 		data->task.tk_status = status;
 	}
-
-	return status;
+	call_ops->rpc_call_done(&data->task, data);
+	call_ops->rpc_release(data);
+	return 0;
 }
 EXPORT_SYMBOL_GPL(nfs_local_commit);
 
