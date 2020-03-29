@@ -618,7 +618,6 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 		      const struct rpc_call_ops *call_ops, int how, int flags,
 		      struct file *localio)
 {
-	struct nfs_pgio_mirror *mirror = nfs_pgio_current_mirror(desc);
 	struct rpc_task *task;
 	struct rpc_message msg = {
 		.rpc_argp = &hdr->args,
@@ -634,7 +633,6 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 		.workqueue = nfsiod_workqueue,
 		.flags = RPC_TASK_ASYNC | RPC_TASK_CRED_NOREF | flags,
 	};
-	int ret = 0;
 
 	hdr->rw_ops->rw_initiate(hdr, &msg, rpc_ops, &task_setup_data, how);
 
@@ -646,32 +644,16 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 		(unsigned long long)hdr->args.offset);
 
 	if (localio) {
-		ret = nfs_local_doio(clp, localio, hdr, call_ops);
-		if (ret == -EIOCBQUEUED)
-			return 0;
-
-		if (ret < 0 && !test_and_set_bit(NFS_IOHDR_REDO, &hdr->flags)) {
-			/* local IO fails, resend all pages */
-			list_splice_init(&hdr->pages, &mirror->pg_list);
-			mirror->pg_recoalesce = 1;
-		}
-		call_ops->rpc_call_done(&hdr->task, hdr);
-		call_ops->rpc_release(hdr);
-	} else {
-		task = rpc_run_task(&task_setup_data);
-		if (IS_ERR(task)) {
-			ret = PTR_ERR(task);
-			goto out;
-		}
-		if (how & FLUSH_SYNC) {
-			ret = rpc_wait_for_completion_task(task);
-			if (ret == 0)
-				ret = task->tk_status;
-		}
-		rpc_put_task(task);
+		nfs_local_doio(clp, localio, hdr, call_ops);
+		goto out;
 	}
+
+	task = rpc_run_task(&task_setup_data);
+	if (IS_ERR(task))
+		return PTR_ERR(task);
+	rpc_put_task(task);
 out:
-	return ret < 0 ? ret : 0;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(nfs_initiate_pgio);
 

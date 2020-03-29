@@ -424,7 +424,8 @@ extern struct file *nfs_local_file_open(struct nfs_client *clp,
 extern int nfs_local_doio(struct nfs_client *, struct file *,
 		struct nfs_pgio_header *, const struct rpc_call_ops *);
 extern int nfs_local_commit(struct nfs_client *, struct file *,
-			    struct nfs_commit_data *);
+			    struct nfs_commit_data *,
+			    const struct rpc_call_ops *);
 extern void nfs_probe_local_addr(struct nfs_client *clnt);
 extern bool nfs_server_is_local(const struct nfs_client *clp);
 
