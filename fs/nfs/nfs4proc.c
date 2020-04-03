@@ -2857,16 +2857,19 @@ static int nfs41_check_delegation_stateid(struct nfs4_state *state)
 		return NFS_OK;
 	}
 
+	spin_lock(&delegation->lock);
 	nfs4_stateid_copy(&stateid, &delegation->stateid);
 
 	if (!test_and_clear_bit(NFS_DELEGATION_TEST_EXPIRED,
 				&delegation->flags)) {
+		spin_unlock(&delegation->lock);
 		rcu_read_unlock();
 		return NFS_OK;
 	}
 
 	if (delegation->cred)
 		cred = get_cred(delegation->cred);
+	spin_unlock(&delegation->lock);
 	rcu_read_unlock();
 	status = nfs41_test_and_free_expired_stateid(server, &stateid, cred);
 	trace_nfs4_test_delegation_stateid(state, NULL, status);
@@ -9871,6 +9874,7 @@ static void nfs4_layoutreturn_release(void *calldata)
 		lrp->ld_private.ops->free(&lrp->ld_private);
 	pnfs_put_layout_hdr(lrp->args.layout);
 	nfs_iput_and_deactive(lrp->inode);
+	put_cred(lrp->cred);
 	kfree(calldata);
 	dprintk("<-- %s\n", __func__);
 }
