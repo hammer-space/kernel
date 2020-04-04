@@ -1272,7 +1272,7 @@ static void xs_error_report(struct sock *sk)
 	transport->xprt_err = -sk->sk_err;
 	if (transport->xprt_err == 0)
 		goto out;
-	xs_tcp_handle_connect_error(xprt, sk, err);
+	xs_tcp_handle_connect_error(xprt, sk, transport->xprt_err);
 	dprintk("RPC:       xs_error_report client %p, error=%d...\n",
 			xprt, -transport->xprt_err);
 	trace_rpc_socket_error(xprt, sk->sk_socket, transport->xprt_err);
