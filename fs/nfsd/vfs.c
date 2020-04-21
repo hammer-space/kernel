@@ -1089,10 +1089,11 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 		flags |= RWF_SYNC;
 
 	iov_iter_kvec(&iter, WRITE, vec, vlen, *cnt);
-	file_start_write(file);
 	if (flags & RWF_SYNC) {
 		down_write(&nf->nf_rwsem);
+		file_start_write(file);
 		host_err = vfs_iter_write(file, &iter, &pos, flags);
+		file_end_write(file);
 		if (host_err < 0)
 			nfsd_reset_boot_verifier(net_generic(SVC_NET(rqstp),
 						 nfsd_net_id));
@@ -1103,10 +1104,11 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 			nfsd_copy_boot_verifier(verf,
 					net_generic(SVC_NET(rqstp),
 					nfsd_net_id));
+		file_start_write(file);
 		host_err = vfs_iter_write(file, &iter, &pos, flags);
+		file_end_write(file);
 		up_read(&nf->nf_rwsem);
 	}
-	file_end_write(file);
 	if (host_err < 0)
 		goto out_nfserr;
 	*cnt = host_err;
