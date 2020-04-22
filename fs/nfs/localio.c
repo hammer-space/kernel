@@ -50,6 +50,13 @@ struct nfs_local_kiocb {
 	struct work_struct	work;
 };
 
+struct nfs_local_fsync_ctx {
+	struct file		*filp;
+	struct nfs_commit_data	*data;
+	struct work_struct	work;
+};
+static void nfs_local_fsync_work(struct work_struct *work);
+
 /*
  * We need to translate between nfs status return values and
  * the local errno values which may not be the same.
@@ -735,20 +742,28 @@ out_fput:
 }
 EXPORT_SYMBOL_GPL(nfs_local_doio);
 
-int
-nfs_local_commit(struct nfs_client *clp, struct file *filp,
-		 struct nfs_commit_data *data,
-		 const struct rpc_call_ops *call_ops)
+static void
+nfs_local_init_commit(struct nfs_commit_data *data,
+		const struct rpc_call_ops *call_ops)
+{
+	data->task.tk_ops = call_ops;
+}
+
+static int
+nfs_local_run_commit(struct file *filp, struct nfs_commit_data *data)
 {
 	loff_t end;
-	int status;
 
 	dprintk("%s: commit %llu - %u\n", __func__,
 		data->args.offset, data->args.count);
 
 	end = data->args.count ? data->args.offset + data->args.count : -1;
-	status = vfs_fsync_range(filp, data->args.offset, end, 0);
-	fput(filp);
+	return vfs_fsync_range(filp, data->args.offset, end, 0);
+}
+
+static void
+nfs_local_commit_done(struct nfs_commit_data *data, int status)
+{
 	if (status >= 0) {
 		nfs_set_local_verifier(data->inode,
 				data->res.verf,
@@ -760,8 +775,70 @@ nfs_local_commit(struct nfs_client *clp, struct file *filp,
 		data->res.op_status = nfs4errno(status);
 		data->task.tk_status = status;
 	}
+}
+
+static void
+nfs_local_release_commit_data(struct file *filp,
+		struct nfs_commit_data *data,
+		const struct rpc_call_ops *call_ops)
+{
+	fput(filp);
 	call_ops->rpc_call_done(&data->task, data);
 	call_ops->rpc_release(data);
+}
+
+static struct nfs_local_fsync_ctx *
+nfs_local_fsync_ctx_alloc(struct nfs_commit_data *data, struct file *filp,
+		gfp_t flags)
+{
+	struct nfs_local_fsync_ctx *ctx = kmalloc(sizeof(*ctx), flags);
+
+	if (ctx != NULL) {
+		ctx->filp = filp;
+		ctx->data = data;
+		INIT_WORK(&ctx->work, nfs_local_fsync_work);
+	}
+	return ctx;
+}
+
+static void
+nfs_local_fsync_ctx_free(struct nfs_local_fsync_ctx *ctx)
+{
+	nfs_local_release_commit_data(ctx->filp, ctx->data,
+			ctx->data->task.tk_ops);
+	kfree(ctx);
+}
+
+static void
+nfs_local_fsync_work(struct work_struct *work)
+{
+	struct nfs_local_fsync_ctx *ctx;
+	int status;
+
+	ctx = container_of(work, struct nfs_local_fsync_ctx, work);
+
+	status = nfs_local_run_commit(ctx->filp, ctx->data);
+	nfs_local_commit_done(ctx->data, status);
+	nfs_local_fsync_ctx_free(ctx);
+}
+
+int
+nfs_local_commit(struct nfs_client *clp, struct file *filp,
+		 struct nfs_commit_data *data,
+		 const struct rpc_call_ops *call_ops)
+{
+	struct nfs_local_fsync_ctx *ctx;
+
+	ctx = nfs_local_fsync_ctx_alloc(data, filp, GFP_KERNEL);
+	if (!ctx) {
+		nfs_local_commit_done(data, -ENOMEM);
+		nfs_local_release_commit_data(filp, data, call_ops);
+		return -ENOMEM;
+	}
+
+	nfs_local_init_commit(data, call_ops);
+	queue_work(nfsiod_workqueue, &ctx->work);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(nfs_local_commit);
