@@ -581,6 +581,8 @@ name_free_cred(struct name_cred *name_cred)
 		kfree(name_cred->nc_other_principals[i]);
 	kfree(name_cred->nc_other_principals);
 
+	put_cred(name_cred->nc_base.cr_cred);
+
 	kfree(name_cred);
 }
 
