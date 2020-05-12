@@ -1638,6 +1638,8 @@ __rpc_call_rpcerror(struct rpc_task *task, int tk_status, int rpc_status)
 				task->tk_xprt ? task->tk_xprt->servername :
 				"<unknown>");
 	}
+
+	trace_rpc_call_rpcerror(task, tk_status, rpc_status);
 	task->tk_rpc_status = rpc_status;
 	rpc_exit(task, tk_status);
 }
