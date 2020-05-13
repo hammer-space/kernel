@@ -756,7 +756,7 @@ int nfs_initiate_pgio(struct nfs_pageio_descriptor *desc,
 		.callback_ops = call_ops,
 		.callback_data = hdr,
 		.workqueue = nfsiod_workqueue,
-		.flags = RPC_TASK_ASYNC | RPC_TASK_CRED_NOREF | flags,
+		.flags = RPC_TASK_ASYNC | flags,
 	};
 
 	hdr->rw_ops->rw_initiate(hdr, &msg, rpc_ops, &task_setup_data, how);
@@ -969,7 +969,8 @@ static int nfs_generic_pg_pgios(struct nfs_pageio_descriptor *desc)
 					hdr->cred,
 					NFS_PROTO(hdr->inode),
 					desc->pg_rpc_callops,
-					desc->pg_ioflags, 0,
+					desc->pg_ioflags,
+					RPC_TASK_CRED_NOREF,
 					filp);
 	}
 	return ret;

@@ -1693,7 +1693,7 @@ int nfs_initiate_commit(struct nfs_client *clp,
 		.callback_ops = call_ops,
 		.callback_data = data,
 		.workqueue = nfsiod_workqueue,
-		.flags = RPC_TASK_ASYNC | RPC_TASK_CRED_NOREF | flags,
+		.flags = RPC_TASK_ASYNC | flags,
 		.priority = priority,
 	};
 
@@ -1823,8 +1823,8 @@ nfs_commit_list(struct inode *inode, struct list_head *head, int how,
 	filp = nfs_local_file_open(clp, data->cred, data->args.fh,
 				   data->context);
 	return nfs_initiate_commit(clp, NFS_CLIENT(inode), data,
-				   NFS_PROTO(inode), data->mds_ops, how, 0,
-				   filp);
+				   NFS_PROTO(inode), data->mds_ops, how,
+				   RPC_TASK_CRED_NOREF, filp);
 }
 
 /*
