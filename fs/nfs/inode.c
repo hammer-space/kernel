@@ -905,11 +905,46 @@ static bool nfs_need_revalidate_inode(struct inode *inode)
 	return false;
 }
 
+static int nfs_getattr_revalidate_force(struct dentry *dentry)
+{
+	struct inode *inode = d_inode(dentry);
+	struct nfs_server *server = NFS_SERVER(inode);
+
+	if (!(server->flags & NFS_MOUNT_NOAC))
+		nfs_readdirplus_parent_cache_miss(dentry);
+	else
+		nfs_readdirplus_parent_cache_hit(dentry);
+	return __nfs_revalidate_inode(server, inode);
+}
+
+static int nfs_getattr_revalidate_none(struct dentry *dentry)
+{
+	nfs_readdirplus_parent_cache_hit(dentry);
+	return NFS_STALE(d_inode(dentry)) ? -ESTALE : 0;
+}
+
+static int nfs_getattr_revalidate_maybe(struct dentry *dentry)
+{
+	if (nfs_need_revalidate_inode(d_inode(dentry)))
+		return nfs_getattr_revalidate_force(dentry);
+	return nfs_getattr_revalidate_none(dentry);
+}
+
+int nfs_getattr_revalidate(const struct path *path,
+			   unsigned int query_flags)
+{
+	if (query_flags & AT_STATX_FORCE_SYNC)
+		return nfs_getattr_revalidate_force(path->dentry);
+	if (!(query_flags & AT_STATX_DONT_SYNC))
+		return nfs_getattr_revalidate_maybe(path->dentry);
+	return nfs_getattr_revalidate_none(path->dentry);
+}
+EXPORT_SYMBOL_GPL(nfs_getattr_revalidate);
+
 int nfs_getattr(const struct path *path, struct kstat *stat,
 		u32 request_mask, unsigned int query_flags)
 {
 	struct inode *inode = d_inode(path->dentry);
-	struct nfs_server *server = NFS_SERVER(inode);
 	unsigned long cache_validity;
 	int err = 0;
 	bool force_sync = query_flags & AT_STATX_FORCE_SYNC;
@@ -917,8 +952,10 @@ int nfs_getattr(const struct path *path, struct kstat *stat,
 
 	trace_nfs_getattr_enter(inode);
 
-	if ((query_flags & AT_STATX_DONT_SYNC) && !force_sync)
+	if ((query_flags & AT_STATX_DONT_SYNC) && !force_sync) {
+		nfs_readdirplus_parent_cache_hit(path->dentry);
 		goto out_no_update;
+	}
 
 	/* Flush out writes to the server in order to update c/mtime.  */
 	if ((request_mask & (STATX_CTIME|STATX_MTIME)) &&
@@ -959,13 +996,11 @@ int nfs_getattr(const struct path *path, struct kstat *stat,
 		do_update |= cache_validity & NFS_INO_INVALID_ATIME;
 	if (request_mask & (STATX_CTIME|STATX_MTIME))
 		do_update |= cache_validity & NFS_INO_REVAL_PAGECACHE;
+	if (request_mask & STATX_BLOCKS)
+		do_update |= cache_validity & NFS_INO_INVALID_BLOCKS;
 	if (do_update) {
 		/* Update the attribute cache */
-		if (!(server->flags & NFS_MOUNT_NOAC))
-			nfs_readdirplus_parent_cache_miss(path->dentry);
-		else
-			nfs_readdirplus_parent_cache_hit(path->dentry);
-		err = __nfs_revalidate_inode(server, inode);
+		err = nfs_getattr_revalidate_force(path->dentry);
 		if (err)
 			goto out;
 	} else
@@ -1896,7 +1931,8 @@ out_noforce:
 	status = nfs_post_op_update_inode_locked(inode, fattr,
 			NFS_INO_INVALID_CHANGE
 			| NFS_INO_INVALID_CTIME
-			| NFS_INO_INVALID_MTIME);
+			| NFS_INO_INVALID_MTIME
+			| NFS_INO_INVALID_BLOCKS);
 	return status;
 }
 
@@ -2007,7 +2043,8 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 	nfsi->cache_validity &= ~(NFS_INO_INVALID_ATTR
 			| NFS_INO_INVALID_ATIME
 			| NFS_INO_REVAL_FORCED
-			| NFS_INO_REVAL_PAGECACHE);
+			| NFS_INO_REVAL_PAGECACHE
+			| NFS_INO_INVALID_BLOCKS);
 
 	/* Do atomic weak cache consistency updates */
 	nfs_wcc_update_inode(inode, fattr);
@@ -2214,8 +2251,12 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 		inode->i_blocks = nfs_calc_block_size(fattr->du.nfs3.used);
 	} else if (fattr->valid & NFS_ATTR_FATTR_BLOCKS_USED)
 		inode->i_blocks = fattr->du.nfs2.blocks;
-	else
+	else {
+		nfsi->cache_validity |= save_cache_validity &
+				(NFS_INO_INVALID_BLOCKS
+				| NFS_INO_REVAL_FORCED);
 		cache_revalidated = false;
+	}
 
 	if (fattr->valid & NFS_ATTR_FATTR_OFFLINE) {
 		nfsi->offline = (fattr->hsa_flags & NFS_HSA_OFFLINE) != 0;

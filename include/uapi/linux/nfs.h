@@ -9,6 +9,7 @@
 #define _UAPI_LINUX_NFS_H
 
 #include <linux/types.h>
+#include <asm/byteorder.h>
 
 #define NFS_PROGRAM	100003
 #define NFS_PORT	2049
@@ -38,6 +39,10 @@
 /* NFS ioctls */
 #define NFS_IOC_FILE_STATX_GET	_IOR('N', 2, struct nfs_ioctl_nfs4_statx)
 #define NFS_IOC_FILE_STATX_SET	_IOW('N', 3, struct nfs_ioctl_nfs4_statx)
+
+#define NFS_FA_OPTIONS_SYNC_AS_STAT			0x0000
+#define NFS_FA_OPTIONS_FORCE_SYNC			0x2000 /* See statx */
+#define NFS_FA_OPTIONS_DONT_SYNC			0x4000 /* See statx */
 
 #define NFS_FA_VALID_TIME_CREATE			0x00001UL
 #define NFS_FA_VALID_TIME_BACKUP			0x00002UL
@@ -84,8 +89,20 @@
 #define NFS_FA_FLAG_SYSTEM				(1UL << 2)
 #define NFS_FA_FLAG_OFFLINE				(1UL << 3)
 struct nfs_ioctl_nfs4_statx {
-	__s64		real_fd;		/* real FD to use,
+#if defined(__BYTE_ORDER) ? __BYTE_ORDER == __LITTLE_ENDIAN : defined(__LITTLE_ENDIAN)
+
+	int		real_fd;		/* real FD to use,
 						   -1 means use current file */
+	__u32		fa_options;
+
+#elif defined(__BYTE_ORDER) ? __BYTE_ORDER == __BIG_ENDIAN : defined(__BIG_ENDIAN)
+
+	__u32		fa_options;
+	int		real_fd;		/* real FD to use,
+						   -1 means use current file */
+#else
+#error edit for your odd byteorder.
+#endif
 	__u64		fa_valid[2];		/* Attributes set */
 
 	struct timespec fa_time_backup;		/* Backup time */

@@ -184,10 +184,11 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	struct nfs_inode *nfsi;
 	struct nfs_server *server;
 	u64 fattr_supported;
+	unsigned int reval_flags;
 	__u32 tmp;
 	int ret;
 	/*
-	 * We get the first u64 word from the uarg as it tells us whether
+	 * We get the first word from the uarg as it tells us whether
 	 * to use the passed in struct file or use that fd to find the
 	 * struct file.
 	 */
@@ -200,12 +201,29 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 			return PTR_ERR(dst_file);
 	}
 
+	if (get_user(args.fa_options, &uarg->fa_options))
+		return -EFAULT;
+	/*
+	 * Backward compatibility: we stole the top 32 bits of 'real_fd'
+	 * to create the fa_options field, so if its value is -1, then
+	 * assume it is the high word of (__s64)real_fd == -1, and just
+	 * set it to zero.
+	 */
+	if (args.fa_options == 0xFFFF)
+		args.fa_options = 0;
+
 	inode = file_inode(dst_file);
 	nfsi = NFS_I(inode);
 	server = NFS_SERVER(inode);
 	fattr_supported = server->fattr_valid;
 
-	ret = nfs_revalidate_inode(server, inode);
+	if (args.fa_options & NFS_FA_OPTIONS_FORCE_SYNC)
+		reval_flags = AT_STATX_FORCE_SYNC;
+	else if (args.fa_options & NFS_FA_OPTIONS_DONT_SYNC)
+		reval_flags = AT_STATX_DONT_SYNC;
+	else
+		reval_flags = AT_STATX_SYNC_AS_STAT;
+	ret = nfs_getattr_revalidate(&dst_file->f_path, reval_flags);
 	if (ret != 0)
 		return ret;
 

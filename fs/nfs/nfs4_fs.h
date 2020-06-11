@@ -246,8 +246,9 @@ struct nfs4_opendata {
 };
 
 struct nfs4_statx {
-	__s64		real_fd;		/* real FD to use,
+	int		real_fd;		/* real FD to use,
 						   -1 means use current file */
+	__u32		fa_options;		/* statx flags */
 	__u64		fa_valid[2];		/* Attributes set */
 
 	struct timespec64 fa_time_backup;	/* Backup time */
