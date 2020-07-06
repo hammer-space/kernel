@@ -289,7 +289,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 
 	if (fattr_supported & NFS_ATTR_FATTR_TIME_BACKUP) {
 		args.fa_valid[0] |= NFS_FA_VALID_ARCHIVE;
-		if (timespec64_compare(&nfsi->timebackup, &inode->i_mtime) >= 0)
+		if (timespec64_compare(&inode->i_mtime, &nfsi->timebackup) > 0)
 			args.fa_flags |= NFS_FA_FLAG_ARCHIVE;
 	}
 
@@ -470,7 +470,7 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 			!(NFS_SERVER(inode)->fattr_valid & NFS_ATTR_FATTR_ARCHIVE)) {
 		nfs_revalidate_inode(NFS_SERVER(inode), inode);
 		args.fa_valid[0] |= NFS_FA_VALID_TIME_BACKUP;
-		if (args.fa_flags & NFS_FA_FLAG_ARCHIVE) {
+		if (!(args.fa_flags & NFS_FA_FLAG_ARCHIVE)) {
 			args.fa_time_backup.tv_sec = inode->i_mtime.tv_sec;
 			args.fa_time_backup.tv_nsec = inode->i_mtime.tv_nsec;
 		} else if (args.fa_valid[0] & NFS_FA_VALID_TIME_CREATE)
