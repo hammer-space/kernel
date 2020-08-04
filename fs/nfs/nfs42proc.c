@@ -15,6 +15,7 @@
 #include "pnfs.h"
 #include "nfs4session.h"
 #include "internal.h"
+#include "nfs4trace.h"
 
 #define NFSDBG_FACILITY NFSDBG_PROC
 static int nfs42_do_offload_cancel_async(struct file *dst, nfs4_stateid *std);
@@ -564,7 +565,7 @@ nfs42_layoutstat_done(struct rpc_task *task, void *calldata)
 
 	switch (task->tk_status) {
 	case 0:
-		break;
+		return;
 	case -NFS4ERR_BADHANDLE:
 	case -ESTALE:
 		pnfs_destroy_layout(NFS_I(inode));
@@ -610,6 +611,8 @@ nfs42_layoutstat_done(struct rpc_task *task, void *calldata)
 	case -EOPNOTSUPP:
 		NFS_SERVER(inode)->caps &= ~NFS_CAP_LAYOUTSTATS;
 	}
+
+	trace_nfs4_layoutstats(inode, &data->args.stateid, task->tk_status);
 }
 
 static void
@@ -732,7 +735,7 @@ nfs42_layouterror_done(struct rpc_task *task, void *calldata)
 
 	switch (task->tk_status) {
 	case 0:
-		break;
+		return;
 	case -NFS4ERR_BADHANDLE:
 	case -ESTALE:
 		pnfs_destroy_layout(NFS_I(inode));
@@ -776,6 +779,9 @@ nfs42_layouterror_done(struct rpc_task *task, void *calldata)
 	case -EOPNOTSUPP:
 		NFS_SERVER(inode)->caps &= ~NFS_CAP_LAYOUTERROR;
 	}
+
+	trace_nfs4_layouterror(inode, &data->args.errors[0].stateid,
+			       task->tk_status);
 }
 
 static void
