@@ -1594,10 +1594,10 @@ DEFINE_NFS4_INODE_STATEID_CALLBACK_EVENT(nfs4_cb_recall);
 DEFINE_NFS4_INODE_STATEID_CALLBACK_EVENT(nfs4_cb_layoutrecall_file);
 
 #ifdef CONFIG_NFS_V4_1
-#define NFS4_LAYOUT_STATEID_HASH(lo) \
-	(lo ? nfs_stateid_hash(&lo->plh_stateid) : 0)
+#define NFS4_LSEG_LAYOUT_STATEID_HASH(lseg) \
+	(lseg ? nfs_stateid_hash(&lseg->pls_layout->plh_stateid) : 0)
 #else
-#define NFS4_LAYOUT_STATEID_HASH(lo) (0)
+#define NFS4_LSEG_LAYOUT_STATEID_HASH(lseg) (0)
 #endif
 
 DECLARE_EVENT_CLASS(nfs4_read_event,
@@ -1630,9 +1630,6 @@ DECLARE_EVENT_CLASS(nfs4_read_event,
 			const struct nfs4_state *state =
 				hdr->args.context->state;
 			const struct pnfs_layout_segment *lseg = hdr->lseg;
-			const struct pnfs_layout_hdr *lo = lseg ?
-							   lseg->pls_layout :
-							   NULL;
 
 			__entry->dev = inode->i_sb->s_dev;
 			__entry->fileid = nfsi->fileid;
@@ -1647,7 +1644,7 @@ DECLARE_EVENT_CLASS(nfs4_read_event,
 				nfs_stateid_hash(&state->stateid);
 			__entry->layoutstateid_seq = lseg ? lseg->pls_seq : 0;
 			__entry->layoutstateid_hash =
-				NFS4_LAYOUT_STATEID_HASH(lo);
+				NFS4_LSEG_LAYOUT_STATEID_HASH(lseg);
 		),
 
 		TP_printk(
@@ -1707,9 +1704,6 @@ DECLARE_EVENT_CLASS(nfs4_write_event,
 			const struct nfs4_state *state =
 				hdr->args.context->state;
 			const struct pnfs_layout_segment *lseg = hdr->lseg;
-			const struct pnfs_layout_hdr *lo = lseg ?
-							   lseg->pls_layout :
-							   NULL;
 
 			__entry->dev = inode->i_sb->s_dev;
 			__entry->fileid = nfsi->fileid;
@@ -1724,7 +1718,7 @@ DECLARE_EVENT_CLASS(nfs4_write_event,
 				nfs_stateid_hash(&state->stateid);
 			__entry->layoutstateid_seq = lseg ? lseg->pls_seq : 0;
 			__entry->layoutstateid_hash =
-				NFS4_LAYOUT_STATEID_HASH(lo);
+				NFS4_LSEG_LAYOUT_STATEID_HASH(lseg);
 		),
 
 		TP_printk(
@@ -1780,8 +1774,6 @@ DECLARE_EVENT_CLASS(nfs4_commit_event,
 			const struct nfs_fh *fh = data->args.fh ?
 						  data->args.fh : &nfsi->fh;
 			const struct pnfs_layout_segment *lseg = data->lseg;
-			const struct pnfs_layout_hdr *lo = lseg ?
-						  lseg->pls_layout : NULL;
 
 			__entry->dev = inode->i_sb->s_dev;
 			__entry->fileid = nfsi->fileid;
@@ -1791,7 +1783,7 @@ DECLARE_EVENT_CLASS(nfs4_commit_event,
 			__entry->error = error < 0 ? -error : 0;
 			__entry->layoutstateid_seq = lseg ? lseg->pls_seq : 0;
 			__entry->layoutstateid_hash =
-				NFS4_LAYOUT_STATEID_HASH(lo);
+				NFS4_LSEG_LAYOUT_STATEID_HASH(lseg);
 		),
 
 		TP_printk(
