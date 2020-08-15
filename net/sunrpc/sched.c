@@ -721,11 +721,10 @@ EXPORT_SYMBOL_GPL(rpc_wake_up_next);
  *
  * Grabs queue->lock
  */
-void rpc_wake_up(struct rpc_wait_queue *queue)
+void rpc_wake_up_locked(struct rpc_wait_queue *queue)
 {
 	struct list_head *head;
 
-	spin_lock(&queue->lock);
 	head = &queue->tasks[queue->maxpriority];
 	for (;;) {
 		while (!list_empty(head)) {
@@ -739,6 +738,18 @@ void rpc_wake_up(struct rpc_wait_queue *queue)
 			break;
 		head--;
 	}
+}
+
+/**
+ * rpc_wake_up - wake up all rpc_tasks
+ * @queue: rpc_wait_queue on which the tasks are sleeping
+ *
+ * Grabs queue->lock
+ */
+void rpc_wake_up(struct rpc_wait_queue *queue)
+{
+	spin_lock(&queue->lock);
+	rpc_wake_up_locked(queue);
 	spin_unlock(&queue->lock);
 }
 EXPORT_SYMBOL_GPL(rpc_wake_up);
@@ -772,6 +783,58 @@ void rpc_wake_up_status(struct rpc_wait_queue *queue, int status)
 	spin_unlock(&queue->lock);
 }
 EXPORT_SYMBOL_GPL(rpc_wake_up_status);
+
+static void rpc_completion_init(struct rpc_completion *rc)
+{
+	rc->done = 0;
+	rpc_init_wait_queue(&rc->queue, "rpc_completion");
+}
+
+static void rpc_completion_destroy(struct rpc_completion *rc)
+{
+	rpc_destroy_wait_queue(&rc->queue);
+}
+
+struct rpc_completion *rpc_completion_alloc(gfp_t flags)
+{
+	struct rpc_completion *rc;
+
+	rc = kmalloc(sizeof(*rc), flags);
+	if (rc)
+		rpc_completion_init(rc);
+	return rc;
+}
+EXPORT_SYMBOL_GPL(rpc_completion_alloc);
+
+void rpc_completion_free_rcu(struct rpc_completion *rc)
+{
+	rpc_completion_destroy(rc);
+	kfree_rcu(rc, rcu_head);
+}
+EXPORT_SYMBOL_GPL(rpc_completion_free_rcu);
+
+void rpc_completion_complete(struct rpc_completion *rc)
+{
+	spin_lock(&rc->queue.lock);
+	rc->done = 1;
+	rpc_wake_up_locked(&rc->queue);
+	spin_unlock(&rc->queue.lock);
+}
+EXPORT_SYMBOL_GPL(rpc_completion_complete);
+
+bool rpc_completion_wait(struct rpc_completion *rc, struct rpc_task *task)
+{
+	bool ret = false;
+
+	spin_lock(&rc->queue.lock);
+	if (!rc->done) {
+		__rpc_sleep_on_priority(&rc->queue, task, task->tk_priority);
+		ret = true;
+	}
+	spin_unlock(&rc->queue.lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(rpc_completion_wait);
 
 static void __rpc_queue_timer_fn(struct work_struct *work)
 {
