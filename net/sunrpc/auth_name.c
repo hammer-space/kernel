@@ -195,6 +195,75 @@ name_cred_set_session(struct rpc_cred *cred, struct name_session *name_session)
 	}
 }
 
+static void
+name_cred_completion_alloc(struct name_cred *name_cred)
+{
+	struct rpc_completion *rc;
+
+	if (rcu_access_pointer(name_cred->nc_init_completion))
+		return;
+	rc = rpc_completion_alloc(GFP_NOFS);
+	if (!rc)
+		return;
+	rcu_read_lock();
+	if (cmpxchg(&name_cred->nc_init_completion, NULL, rc)) {
+		rcu_read_unlock();
+		rpc_completion_free_rcu(rc);
+	} else
+		rcu_read_unlock();
+}
+
+static void
+name_cred_completion_free(struct name_cred *name_cred)
+{
+	struct rpc_completion *rc;
+
+	rcu_read_lock();
+	rc = xchg(&name_cred->nc_init_completion, NULL);
+	rcu_read_unlock();
+	if (rc)
+		rpc_completion_free_rcu(rc);
+}
+
+static bool
+name_cred_completion_wait(struct name_cred *name_cred, struct rpc_task *task)
+{
+	struct rpc_completion *rc;
+	bool ret = false;
+
+	rcu_read_lock();
+	rc = rcu_dereference(name_cred->nc_init_completion);
+	if (rc)
+		ret = rpc_completion_wait(rc, task);
+	rcu_read_unlock();
+	return ret;
+}
+
+static void
+name_cred_completion_done(struct name_cred *name_cred)
+{
+	struct rpc_completion *rc;
+
+	if (!rcu_access_pointer(name_cred->nc_init_completion))
+		return;
+	rcu_read_lock();
+	rc = rcu_dereference(name_cred->nc_init_completion);
+	if (rc)
+		rpc_completion_complete(rc);
+	rcu_read_unlock();
+	name_cred_completion_free(name_cred);
+}
+
+static void
+name_cred_init_complete(struct name_cred *name_cred)
+{
+	struct rpc_cred *cred = &name_cred->nc_base;
+
+	clear_bit(RPCAUTH_CRED_INIT, &cred->cr_flags);
+	smp_mb__after_atomic();
+	name_cred_completion_done(name_cred);
+}
+
 static int
 xdr_stream_encode_string(struct xdr_stream *xdr, const char *str)
 {
@@ -280,12 +349,12 @@ rpc_ping_payload_done(struct rpc_task *task, void *obj)
 		ctx->name_session->ns_verf = ctx->verf;
 
 		name_cred_set_session(cred, ctx->name_session);
+		clear_bit(RPCAUTH_CRED_NEW, &cred->cr_flags);
 		dprintk("RPC: %s got res %u session_id %u on session init!",
 				__func__, ctx->status, ctx->session_id);
 	} else
 		dprintk("RPC: %s got status %d, res %u on session init!",
 				__func__, task->tk_status, ctx->status);
-	clear_bit(RPCAUTH_CRED_NEW, &cred->cr_flags);
 }
 
 static void
@@ -300,6 +369,8 @@ rpc_ping_payload_release(void *obj)
 		put_page(pages[i]);
 	kfree(ctx->pages);
 	name_session_put(ctx->name_session);
+	name_cred_init_complete(ctx->name_cred);
+	put_rpccred(&ctx->name_cred->nc_base);
 	kfree(ctx);
 }
 
@@ -338,7 +409,6 @@ static int rpc_ping_payload_init(struct rpc_clnt *clnt, struct rpc_cred *cred)
 		.flags = RPC_TASK_SOFT | RPC_TASK_SOFTCONN | RPC_TASK_ASYNC,
 	};
 	struct rpc_task *task;
-	int err;
 
 	if (!ctx)
 		goto out_enomem;
@@ -352,15 +422,16 @@ static int rpc_ping_payload_init(struct rpc_clnt *clnt, struct rpc_cred *cred)
 		goto out_session_put;
 	ctx->len = auth_name_encode_init_args(name_cred, ctx->pages,
 			AUTH_NAME_MAX_XDRLEN);
+	get_rpccred(cred);
 	task = rpc_run_task(&task_setup_data);
 	if (IS_ERR(task))
 		return PTR_ERR(task);
-	err = rpc_wait_for_completion_task(task);
 	rpc_put_task(task);
-	return err;
+	return -EAGAIN;
 out_session_put:
 	name_session_put(ctx->name_session);
 out_enomem:
+	name_cred_init_complete(ctx->name_cred);
 	kfree(ctx);
 	return -ENOMEM;
 }
@@ -596,8 +667,10 @@ name_free_cred_callback(struct rcu_head *head)
 static void
 name_destroy_nullcred(struct rpc_cred *cred)
 {
+	struct name_cred *name_cred = container_of(cred, struct name_cred, nc_base);
 	struct name_auth *name_auth = container_of(cred->cr_auth, struct name_auth, rpc_auth);
 
+	name_cred_completion_done(name_cred);
 	call_rcu(&cred->cr_rcu, name_free_cred_callback);
 	name_put_auth(name_auth);
 }
@@ -686,7 +759,6 @@ name_cred_map_principals(struct name_cred *name_cred, struct rpc_task *task)
 
 	ngroups = (!gi) ? 0 : gi->ngroups;
 
-again:
 	/* check if already mapped */
 	if (test_bit(AUTH_NAME_CRED_FL_MAPPED, &name_cred->nc_flags))
 		return 0;
@@ -695,15 +767,10 @@ again:
 	if (test_and_set_bit(AUTH_NAME_CRED_FL_MAPPING, &name_cred->nc_flags)) {
 		/* another context is mapping, wait until it's done */
 		dprintk("RPC: %s wait for mapping\n", __func__);
-		if (wait_on_bit(&name_cred->nc_flags, AUTH_NAME_CRED_FL_MAPPING,
-				TASK_KILLABLE))
-			return -EINTR;
-
-		goto again;
+		return -EAGAIN;
 	}
 
 	/* Did we race? */
-	ret = 0;
 	if (test_bit(AUTH_NAME_CRED_FL_MAPPED, &name_cred->nc_flags))
 		goto out_unlock;
 
@@ -734,12 +801,10 @@ again:
 
 	/* success! */
 	set_bit(AUTH_NAME_CRED_FL_MAPPED, &name_cred->nc_flags);
+	smp_mb__after_atomic();
 out_unlock:
 	clear_bit(AUTH_NAME_CRED_FL_MAPPING, &name_cred->nc_flags);
-	smp_mb__after_atomic();
-	wake_up_bit(&name_cred->nc_flags, AUTH_NAME_CRED_FL_MAPPING);
-
-	return ret;
+	return 0;
 
 out_free_others:
 	for (i = 0; i < gi->ngroups && name_cred->nc_other_principals[i]; i++)
@@ -750,8 +815,11 @@ out_free_group:
 out_free_user:
 	kfree(name_cred->nc_user_principal);
 out_wake:
+	clear_bit(AUTH_NAME_CRED_FL_MAPPING, &name_cred->nc_flags);
+	smp_mb__after_atomic();
+	name_cred_completion_done(name_cred);
 	dprintk("RPC: %s failed with %d\n", __func__, ret);
-	goto out_unlock;
+	return ret;
 }
 
 static struct rpc_cred *
@@ -901,6 +969,17 @@ name_refresh_init_session(struct rpc_task *task)
 	int ret = 0;
 
 	dprintk("RPC: %s\n", __func__);
+	if (test_bit(RPCAUTH_CRED_NEW, &cred->cr_flags)) {
+		name_cred_completion_alloc(name_cred);
+		/* Raced? */
+		if (!test_bit(RPCAUTH_CRED_NEW, &cred->cr_flags)) {
+			name_cred_completion_done(name_cred);
+			return 0;
+		}
+	}
+
+	if (!name_cred_completion_wait(name_cred, task))
+		return 0;
 
 	ret = name_cred_map_principals(name_cred, task);
 	if (ret) {
@@ -909,22 +988,18 @@ name_refresh_init_session(struct rpc_task *task)
 		return ret;
 	}
 
-	if (!test_and_set_bit(RPCAUTH_CRED_INIT, &cred->cr_flags)) {
-		if (test_bit(RPCAUTH_CRED_NEW, &cred->cr_flags)) {
-			dprintk("RPC: %s do init\n", __func__);
-			ret = rpc_ping_payload_init(task->tk_client, cred);
-		}
-		clear_bit(RPCAUTH_CRED_INIT, &cred->cr_flags);
-		smp_mb__after_atomic();
-		wake_up_bit(&cred->cr_flags, RPCAUTH_CRED_INIT);
-	} else {
+	if (test_and_set_bit(RPCAUTH_CRED_INIT, &cred->cr_flags)) {
 		dprintk("RPC: %s wait for init\n", __func__);
-		/* FIXME: use a waitq instead! */
-		if (wait_on_bit(&cred->cr_flags, RPCAUTH_CRED_INIT, TASK_KILLABLE))
-			ret = -EINTR;
-
+		return -EAGAIN;
 	}
 
+	if (!test_bit(RPCAUTH_CRED_NEW, &cred->cr_flags)) {
+		name_cred_init_complete(name_cred);
+		return 0;
+	}
+
+	dprintk("RPC: %s do init\n", __func__);
+	ret = rpc_ping_payload_init(task->tk_client, cred);
 	dprintk("RPC: %s done with ret = %d\n", __func__, ret);
 
 	return ret;

@@ -53,6 +53,7 @@ struct name_cred {
 
 	/* on the wire credential state */
 	struct name_session __rcu	*nc_session;
+	struct rpc_completion __rcu	*nc_init_completion;
 
 	unsigned long			nc_flags;
 #define AUTH_NAME_CRED_FL_MAPPED	0
