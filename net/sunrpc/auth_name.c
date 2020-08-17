@@ -349,12 +349,12 @@ rpc_ping_payload_done(struct rpc_task *task, void *obj)
 		ctx->name_session->ns_verf = ctx->verf;
 
 		name_cred_set_session(cred, ctx->name_session);
+		clear_bit(RPCAUTH_CRED_NEW, &cred->cr_flags);
 		dprintk("RPC: %s got res %u session_id %u on session init!",
 				__func__, ctx->status, ctx->session_id);
 	} else
 		dprintk("RPC: %s got status %d, res %u on session init!",
 				__func__, task->tk_status, ctx->status);
-	clear_bit(RPCAUTH_CRED_NEW, &cred->cr_flags);
 }
 
 static void
