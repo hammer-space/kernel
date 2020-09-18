@@ -750,13 +750,17 @@ nfs_local_init_commit(struct nfs_commit_data *data,
 static int
 nfs_local_run_commit(struct file *filp, struct nfs_commit_data *data)
 {
-	loff_t end;
+	loff_t start = data->args.offset;
+	loff_t end = LLONG_MAX;
 
-	dprintk("%s: commit %llu - %u\n", __func__,
-		data->args.offset, data->args.count);
+	if (data->args.count > 0) {
+		end = start + data->args.count;
+		if (end < start)
+			end = LLONG_MAX;
+	}
 
-	end = data->args.count ? data->args.offset + data->args.count : -1;
-	return vfs_fsync_range(filp, data->args.offset, end, 0);
+	dprintk("%s: commit %llu - %llu\n", __func__, start, end);
+	return vfs_fsync_range(filp, start, end, 0);
 }
 
 static void
