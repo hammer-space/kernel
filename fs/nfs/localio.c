@@ -241,7 +241,6 @@ nfs_local_disable(struct nfs_client *clp)
 		nfs_local_put_lookup_ctx();
 	}
 }
-EXPORT_SYMBOL_GPL(nfs_local_disable);
 
 /*
  * nfs_local_probe - probe local i/o support for an nfs_client
@@ -293,7 +292,6 @@ out:
 	if (enable)
 		nfs_local_enable(clp);
 }
-EXPORT_SYMBOL_GPL(nfs_local_probe);
 
 /*
  * nfs_local_open_fh - open a local filehandle
@@ -741,7 +739,6 @@ out_fput:
 	}
 	return status;
 }
-EXPORT_SYMBOL_GPL(nfs_local_doio);
 
 static void
 nfs_local_init_commit(struct nfs_commit_data *data,
@@ -858,7 +855,6 @@ nfs_local_commit(struct nfs_client *clp, struct file *filp,
 	nfs_local_fsync_ctx_put(ctx);
 	return 0;
 }
-EXPORT_SYMBOL_GPL(nfs_local_commit);
 
 static int
 nfs_client_add_addr(struct nfs_client *clnt, char *buf, gfp_t flags)
