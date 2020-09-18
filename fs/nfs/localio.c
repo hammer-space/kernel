@@ -54,6 +54,7 @@ struct nfs_local_fsync_ctx {
 	struct file		*filp;
 	struct nfs_commit_data	*data;
 	struct work_struct	work;
+	struct kref		kref;
 };
 static void nfs_local_fsync_work(struct work_struct *work);
 
@@ -240,7 +241,6 @@ nfs_local_disable(struct nfs_client *clp)
 		nfs_local_put_lookup_ctx();
 	}
 }
-EXPORT_SYMBOL_GPL(nfs_local_disable);
 
 /*
  * nfs_local_probe - probe local i/o support for an nfs_client
@@ -292,7 +292,6 @@ out:
 	if (enable)
 		nfs_local_enable(clp);
 }
-EXPORT_SYMBOL_GPL(nfs_local_probe);
 
 /*
  * nfs_local_open_fh - open a local filehandle
@@ -740,7 +739,6 @@ out_fput:
 	}
 	return status;
 }
-EXPORT_SYMBOL_GPL(nfs_local_doio);
 
 static void
 nfs_local_init_commit(struct nfs_commit_data *data,
@@ -797,8 +795,21 @@ nfs_local_fsync_ctx_alloc(struct nfs_commit_data *data, struct file *filp,
 		ctx->filp = filp;
 		ctx->data = data;
 		INIT_WORK(&ctx->work, nfs_local_fsync_work);
+		kref_init(&ctx->kref);
 	}
 	return ctx;
+}
+
+static void
+nfs_local_fsync_ctx_kref_free(struct kref *kref)
+{
+	kfree(container_of(kref, struct nfs_local_fsync_ctx, kref));
+}
+
+static void
+nfs_local_fsync_ctx_put(struct nfs_local_fsync_ctx *ctx)
+{
+	kref_put(&ctx->kref, nfs_local_fsync_ctx_kref_free);
 }
 
 static void
@@ -806,7 +817,7 @@ nfs_local_fsync_ctx_free(struct nfs_local_fsync_ctx *ctx)
 {
 	nfs_local_release_commit_data(ctx->filp, ctx->data,
 			ctx->data->task.tk_ops);
-	kfree(ctx);
+	nfs_local_fsync_ctx_put(ctx);
 }
 
 static void
@@ -825,7 +836,7 @@ nfs_local_fsync_work(struct work_struct *work)
 int
 nfs_local_commit(struct nfs_client *clp, struct file *filp,
 		 struct nfs_commit_data *data,
-		 const struct rpc_call_ops *call_ops)
+		 const struct rpc_call_ops *call_ops, int how)
 {
 	struct nfs_local_fsync_ctx *ctx;
 
@@ -837,11 +848,13 @@ nfs_local_commit(struct nfs_client *clp, struct file *filp,
 	}
 
 	nfs_local_init_commit(data, call_ops);
+	kref_get(&ctx->kref);
 	queue_work(nfsiod_workqueue, &ctx->work);
-
+	if (how & FLUSH_SYNC)
+		flush_work(&ctx->work);
+	nfs_local_fsync_ctx_put(ctx);
 	return 0;
 }
-EXPORT_SYMBOL_GPL(nfs_local_commit);
 
 static int
 nfs_client_add_addr(struct nfs_client *clnt, char *buf, gfp_t flags)
