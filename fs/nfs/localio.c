@@ -754,7 +754,7 @@ nfs_local_run_commit(struct file *filp, struct nfs_commit_data *data)
 	loff_t end = LLONG_MAX;
 
 	if (data->args.count > 0) {
-		end = start + data->args.count;
+		end = start + data->args.count - 1;
 		if (end < start)
 			end = LLONG_MAX;
 	}
