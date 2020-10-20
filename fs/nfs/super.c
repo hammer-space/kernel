@@ -36,6 +36,7 @@
 #include <linux/sunrpc/metrics.h>
 #include <linux/sunrpc/xprtsock.h>
 #include <linux/sunrpc/xprtrdma.h>
+#include <linux/sunrpc/idmap.h>
 #include <linux/nfs_fs.h>
 #include <linux/nfs_mount.h>
 #include <linux/nfs4_mount.h>
@@ -2985,6 +2986,33 @@ EXPORT_SYMBOL_GPL(send_implementation_id);
 EXPORT_SYMBOL_GPL(nfs4_client_id_uniquifier);
 EXPORT_SYMBOL_GPL(recover_lost_locks);
 
+static unsigned int nfs_idmap_cache_timeout = 600;
+static int param_set_idmap_cache(const char *val, const struct kernel_param *kp)
+{
+	unsigned int res;
+	int ret;
+
+	ret = kstrtouint(val, 0, &res);
+	if (!ret) {
+		*(unsigned int *)kp->arg = res;
+		sunrpc_idmap_set_cache_timeout(res);
+	}
+	return ret;
+}
+
+static int param_get_idmap_cache(char *buffer, const struct kernel_param *kp)
+{
+	return scnprintf(buffer, PAGE_SIZE, "%u\n",
+			 sunrpc_idmap_get_cache_timeout());
+}
+
+static const struct kernel_param_ops param_ops_idmap_cache = {
+	.set = param_set_idmap_cache,
+	.get = param_get_idmap_cache,
+};
+
+#define param_check_idmap_cache(name, p) __param_check(name, p, unsigned int);
+
 #define NFS_CALLBACK_MAXPORTNR (65535U)
 
 static int param_set_portnr(const char *val, const struct kernel_param *kp)
@@ -3010,6 +3038,7 @@ module_param_named(callback_tcpport, nfs_callback_set_tcpport, portnr, 0644);
 module_param_named(callback_nr_threads, nfs_callback_nr_threads, ushort, 0644);
 MODULE_PARM_DESC(callback_nr_threads, "Number of threads that will be "
 		"assigned to the NFSv4 callback channels.");
+module_param(nfs_idmap_cache_timeout, idmap_cache, 0644);
 module_param(nfs4_disable_idmapping, bool, 0644);
 module_param_string(nfs4_unique_id, nfs4_client_id_uniquifier,
 			NFS4_CLIENT_ID_UNIQ_LEN, 0600);
