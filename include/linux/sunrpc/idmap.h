@@ -77,5 +77,6 @@ int sunrpc_idmap_gid_to_group(const struct rpc_clnt *, kgid_t, char *, size_t, b
 
 int sunrpc_idmap_string_to_numeric(const char *name, size_t namelen, __u32 *res);
 
-extern unsigned int nfs_idmap_cache_timeout;
+void sunrpc_idmap_set_cache_timeout(unsigned int secs);
+unsigned int sunrpc_idmap_get_cache_timeout(void);
 #endif /* SUNRPC_IDMAP_H */

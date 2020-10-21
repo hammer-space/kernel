@@ -55,7 +55,7 @@
 
 static const struct cred *id_resolver_cache;
 static struct key_type key_type_id_resolver_legacy;
-unsigned int sunrpc_idmap_cache_timeout = 600;
+static unsigned int sunrpc_idmap_cache_timeout = 600;
 
 struct sunrpc_idmap_legacy_upcalldata {
 	struct rpc_pipe_msg pipe_msg;
@@ -71,6 +71,18 @@ struct idmap {
 	struct mutex		idmap_mutex;
 	const struct cred	*cred;
 };
+
+void sunrpc_idmap_set_cache_timeout(unsigned int secs)
+{
+	sunrpc_idmap_cache_timeout = secs;
+}
+EXPORT_SYMBOL_GPL(sunrpc_idmap_set_cache_timeout);
+
+unsigned int sunrpc_idmap_get_cache_timeout(void)
+{
+	return sunrpc_idmap_cache_timeout;
+}
+EXPORT_SYMBOL_GPL(sunrpc_idmap_get_cache_timeout);
 
 static struct user_namespace *idmap_userns(const struct idmap *idmap)
 {
