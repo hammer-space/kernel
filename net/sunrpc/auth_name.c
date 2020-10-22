@@ -195,22 +195,23 @@ name_cred_set_session(struct rpc_cred *cred, struct name_session *name_session)
 	}
 }
 
-static void
+static int
 name_cred_completion_alloc(struct name_cred *name_cred)
 {
 	struct rpc_completion *rc;
 
 	if (rcu_access_pointer(name_cred->nc_init_completion))
-		return;
+		return 0;
 	rc = rpc_completion_alloc(GFP_NOFS);
 	if (!rc)
-		return;
+		return -ENOMEM;
 	rcu_read_lock();
 	if (cmpxchg(&name_cred->nc_init_completion, NULL, rc)) {
 		rcu_read_unlock();
 		rpc_completion_free_rcu(rc);
 	} else
 		rcu_read_unlock();
+	return 0;
 }
 
 static void
@@ -861,7 +862,7 @@ name_match(struct auth_cred *acred, struct rpc_cred *rc, int flags)
 	if (!test_bit(RPCAUTH_CRED_UPTODATE, &rc->cr_flags))
 		return 0;
 out:
-	return uid_eq(rc->cr_cred->fsuid, acred->cred->fsuid);
+	return cred_fscmp(rc->cr_cred, acred->cred) == 0;
 }
 
 /*
@@ -969,13 +970,14 @@ name_refresh_init_session(struct rpc_task *task)
 	int ret = 0;
 
 	dprintk("RPC: %s\n", __func__);
-	if (test_bit(RPCAUTH_CRED_NEW, &cred->cr_flags)) {
-		name_cred_completion_alloc(name_cred);
-		/* Raced? */
-		if (!test_bit(RPCAUTH_CRED_NEW, &cred->cr_flags)) {
-			name_cred_completion_done(name_cred);
-			return 0;
-		}
+
+	ret = name_cred_completion_alloc(name_cred);
+	if (ret < 0)
+		return ret;
+	/* Raced? */
+	if (!test_bit(RPCAUTH_CRED_NEW, &cred->cr_flags)) {
+		name_cred_completion_done(name_cred);
+		return 0;
 	}
 
 	if (!name_cred_completion_wait(name_cred, task))
