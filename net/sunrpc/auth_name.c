@@ -862,7 +862,7 @@ name_match(struct auth_cred *acred, struct rpc_cred *rc, int flags)
 	if (!test_bit(RPCAUTH_CRED_UPTODATE, &rc->cr_flags))
 		return 0;
 out:
-	return uid_eq(rc->cr_cred->fsuid, acred->cred->fsuid);
+	return cred_fscmp(rc->cr_cred, acred->cred) == 0;
 }
 
 /*
