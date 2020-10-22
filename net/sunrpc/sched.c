@@ -716,27 +716,18 @@ struct rpc_task *rpc_wake_up_next(struct rpc_wait_queue *queue)
 EXPORT_SYMBOL_GPL(rpc_wake_up_next);
 
 /**
- * rpc_wake_up - wake up all rpc_tasks
+ * rpc_wake_up_locked - wake up all rpc_tasks
  * @queue: rpc_wait_queue on which the tasks are sleeping
- *
- * Grabs queue->lock
  */
 void rpc_wake_up_locked(struct rpc_wait_queue *queue)
 {
-	struct list_head *head;
+	struct rpc_task	*task;
 
-	head = &queue->tasks[queue->maxpriority];
 	for (;;) {
-		while (!list_empty(head)) {
-			struct rpc_task *task;
-			task = list_first_entry(head,
-					struct rpc_task,
-					u.tk_wait.list);
-			rpc_wake_up_task_queue_locked(queue, task);
-		}
-		if (head == &queue->tasks[0])
+		task = __rpc_find_next_queued(queue);
+		if (task == NULL)
 			break;
-		head--;
+		rpc_wake_up_task_queue_locked(queue, task);
 	}
 }
 
