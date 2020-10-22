@@ -754,22 +754,14 @@ EXPORT_SYMBOL_GPL(rpc_wake_up);
  */
 void rpc_wake_up_status(struct rpc_wait_queue *queue, int status)
 {
-	struct list_head *head;
+	struct rpc_task	*task;
 
 	spin_lock(&queue->lock);
-	head = &queue->tasks[queue->maxpriority];
 	for (;;) {
-		while (!list_empty(head)) {
-			struct rpc_task *task;
-			task = list_first_entry(head,
-					struct rpc_task,
-					u.tk_wait.list);
-			task->tk_status = status;
-			rpc_wake_up_task_queue_locked(queue, task);
-		}
-		if (head == &queue->tasks[0])
+		task = __rpc_find_next_queued(queue);
+		if (task == NULL)
 			break;
-		head--;
+		rpc_wake_up_task_queue_set_status_locked(queue, task, status);
 	}
 	spin_unlock(&queue->lock);
 }
