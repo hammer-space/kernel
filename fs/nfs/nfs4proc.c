@@ -181,6 +181,8 @@ static int nfs4_map_errors(int err)
 		return -EBUSY;
 	case -NFS4ERR_ATTRNOTSUPP:
 		return -EINVAL;
+	case -NFS4ERR_NOT_SAME:
+		return -ENOTSYNC;
 	default:
 		dprintk("%s could not handle NFSv4 error %d\n",
 				__func__, -err);
