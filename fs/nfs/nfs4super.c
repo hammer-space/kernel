@@ -95,7 +95,7 @@ static void nfs4_evict_inode(struct inode *inode)
 	nfs_inode_evict_delegation(inode);
 	/* Note that above delegreturn would trigger pnfs return-on-close */
 	pnfs_return_layout(inode);
-	pnfs_destroy_layout(NFS_I(inode));
+	pnfs_destroy_layout_final(NFS_I(inode));
 #if defined(CONFIG_NFS_V4_1)
 	WARN_ONCE(NFS_I(inode)->layout != NULL,
 			"NFS: BUG unfreed layout, refcount = %i.\n",
