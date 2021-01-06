@@ -1568,6 +1568,7 @@ void pnfs_roc_release(struct nfs4_layoutreturn_args *args,
 		if (pnfs_layout_is_valid(lo) &&
 		    nfs4_stateid_match_other(&args->stateid, &lo->plh_stateid))
 			pnfs_set_plh_return_info(lo, args->range.iomode, 0);
+		pnfs_clear_layoutreturn_waitbit(lo);
 		spin_unlock(&inode->i_lock);
 		break;
 	case 0:
@@ -2247,6 +2248,7 @@ static void _lgopen_prepare_attached(struct nfs4_opendata *data,
 					     &rng, GFP_KERNEL);
 	if (!lgp) {
 		pnfs_clear_first_layoutget(lo);
+		nfs_layoutget_end(lo);
 		pnfs_put_layout_hdr(lo);
 		return;
 	}
