@@ -1241,6 +1241,7 @@ xprt_request_enqueue_transmit(struct rpc_task *task)
 		INIT_LIST_HEAD(&req->rq_xmit2);
 		trace_xprt_enq_xmit(task, 4);
 out:
+		atomic_long_inc(&xprt->xmit_queuelen);
 		set_bit(RPC_TASK_NEED_XMIT, &task->tk_runstate);
 		spin_unlock(&xprt->queue_lock);
 	}
@@ -1270,6 +1271,7 @@ xprt_request_dequeue_transmit_locked(struct rpc_task *task)
 		}
 	} else
 		list_del(&req->rq_xmit2);
+	atomic_long_dec(&req->rq_xprt->xmit_queuelen);
 }
 
 /**
