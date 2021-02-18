@@ -884,6 +884,8 @@ nfsd_file_find_locked(struct inode *inode, unsigned int may_flags,
 
 	hlist_for_each_entry_rcu(nf, &nfsd_file_hashtbl[hashval].nfb_head,
 				 nf_node) {
+		if (!test_bit(NFSD_FILE_HASHED, &nf->nf_flags))
+			continue;
 		if ((need & nf->nf_may) != need)
 			continue;
 		if (nf->nf_inode != inode)
