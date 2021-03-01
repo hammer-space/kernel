@@ -7618,10 +7618,6 @@ static int nfs4_xattr_get_richacl(const struct xattr_handler *handler,
 		return PTR_ERR(acl);
 	if (acl == NULL)
 		return -ENODATA;
-	error = -ENODATA;
-	if (richacl_equiv_mode(acl, &mode) == 0 &&
-	    ((mode ^ inode->i_mode) & S_IRWXUGO) == 0)
-		goto out;
 	error = richacl_to_xattr(&init_user_ns, acl, buf, buflen);
 out:
 	richacl_put(acl);
