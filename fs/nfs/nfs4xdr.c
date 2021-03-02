@@ -1630,7 +1630,8 @@ static void encode_readdir(struct xdr_stream *xdr, const struct nfs4_readdir_arg
 			    FATTR4_WORD1_TIME_CREATE |
 			    FATTR4_WORD1_TIME_METADATA |
 			    FATTR4_WORD1_TIME_MODIFY;
-		attrs[2] |= FATTR4_WORD2_SECURITY_LABEL | FATTR4_WORD2_OFFLINE;
+		attrs[2] |= FATTR4_WORD2_SECURITY_LABEL | FATTR4_WORD2_OFFLINE |
+			    FATTR4_WORD2_UNCACHEABLE;
 	}
 	/* Use mounted_on_fileid only if the server supports it */
 	if (!(readdir->bitmask[1] & FATTR4_WORD1_MOUNTED_ON_FILEID))
@@ -4484,6 +4485,30 @@ static int decode_attr_offline(struct xdr_stream *xdr, uint32_t *bitmap,
 	return status;
 }
 
+static int decode_attr_uncacheable(struct xdr_stream *xdr, uint32_t *bitmap,
+				   uint32_t *res, uint64_t *flags)
+{
+	int status = 0;
+	__be32 *p;
+
+	if (unlikely(bitmap[2] & (FATTR4_WORD2_UNCACHEABLE - 1U)))
+		return -EIO;
+	if (likely(bitmap[2] & FATTR4_WORD2_UNCACHEABLE)) {
+		p = xdr_inline_decode(xdr, 4);
+		if (unlikely(!p))
+			return -EIO;
+		if (be32_to_cpup(p))
+			*res |= NFS_HSA_UNCACHEABLE;
+		else
+			*res &= ~NFS_HSA_UNCACHEABLE;
+		bitmap[2] &= ~FATTR4_WORD2_UNCACHEABLE;
+		*flags |= NFS_ATTR_FATTR_UNCACHEABLE;
+	}
+	dprintk("%s: uncacheable: =%s\n", __func__,
+		(*res & NFS_HSA_UNCACHEABLE) == 0 ? "false" : "true");
+	return status;
+}
+
 static int verify_attr_len(struct xdr_stream *xdr, unsigned int savep, uint32_t attrlen)
 {
 	unsigned int attrwords = XDR_QUADLEN(attrlen);
@@ -4980,6 +5005,11 @@ static int decode_getfattr_attrs(struct xdr_stream *xdr, uint32_t *bitmap,
 
 	status = decode_attr_offline(xdr, bitmap, &fattr->hsa_flags,
 				     &fattr->valid);
+	if (status < 0)
+		goto xdr_error;
+
+	status = decode_attr_uncacheable(xdr, bitmap, &fattr->hsa_flags,
+					 &fattr->valid);
 	if (status < 0)
 		goto xdr_error;
 
