@@ -7611,7 +7611,6 @@ static int nfs4_xattr_get_richacl(const struct xattr_handler *handler,
 {
 	struct richacl *acl;
 	int error;
-	umode_t mode = inode->i_mode & S_IFMT;
 
 	acl = nfs4_proc_get_acl(inode);
 	if (IS_ERR(acl))
@@ -7619,7 +7618,6 @@ static int nfs4_xattr_get_richacl(const struct xattr_handler *handler,
 	if (acl == NULL)
 		return -ENODATA;
 	error = richacl_to_xattr(&init_user_ns, acl, buf, buflen);
-out:
 	richacl_put(acl);
 	return error;
 }
