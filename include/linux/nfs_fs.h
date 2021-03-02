@@ -154,6 +154,7 @@ struct nfs_inode {
 	unsigned char		hidden : 1;
 	unsigned char		system : 1;
 	unsigned char		offline : 1;
+	unsigned char		uncacheable : 1;
 
 	/*
 	 * read_cache_jiffies is when we started read-caching this inode.
@@ -279,6 +280,7 @@ struct nfs4_copy_state {
 #define NFS_INO_INVALID_MODE	BIT(17)		/* cached mode is invalid */
 #define NFS_INO_INVALID_BTIME	BIT(18)		/* cached btime is invalid */
 #define NFS_INO_INVALID_WINATTR	BIT(19)		/* cached windows attr is invalid */
+#define NFS_INO_INVALID_UNCACHE	BIT(20)		/* cached uncacheable attr is invalid */
 
 #define NFS_INO_INVALID_ATTR	(NFS_INO_INVALID_CHANGE \
 		| NFS_INO_INVALID_CTIME \
