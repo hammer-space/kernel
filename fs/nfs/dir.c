@@ -969,14 +969,17 @@ static bool nfs_readdir_dont_search_cache(struct nfs_readdir_descriptor *desc)
 {
 	struct address_space *mapping = desc->file->f_mapping;
 	struct inode *dir = file_inode(desc->file);
+	struct nfs_inode *nfsi = NFS_I(dir);
 	unsigned int dtsize = NFS_SERVER(dir)->dtsize;
 	loff_t size = i_size_read(dir);
 
 	/*
-	 * Default to uncached readdir if the page cache is empty, and
-	 * we're looking for a non-zero cookie in a large directory.
+	 * Default to uncached readdir if not cacheable or if the page
+	 * cache is empty, and we're looking for a non-zero cookie
+	 * in a large directory.
 	 */
-	return desc->dir_cookie != 0 && mapping->nrpages == 0 && size > dtsize;
+	return nfsi->uncacheable ||
+	       (desc->dir_cookie != 0 && mapping->nrpages == 0 && size > dtsize);
 }
 
 /* Search for desc->dir_cookie from the beginning of the page cache */
@@ -1167,7 +1170,7 @@ static int nfs_readdir(struct file *file, struct dir_context *ctx)
 		if (res == -EBADCOOKIE) {
 			res = 0;
 			/* This means either end of directory */
-			if (desc->dir_cookie && !desc->eof) {
+			if (!desc->eof) {
 				/* Or that the server has 'lost' a cookie */
 				res = uncached_readdir(desc);
 				if (res == 0)
