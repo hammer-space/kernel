@@ -35,7 +35,8 @@
 			{ NFS_INO_INVALID_NLINK, "INVALID_NLINK" }, \
 			{ NFS_INO_INVALID_MODE, "INVALID_MODE" }, \
 			{ NFS_INO_INVALID_BTIME, "INVALID_BTIME" }, \
-			{ NFS_INO_INVALID_WINATTR, "INVALID_WINATTR" })
+			{ NFS_INO_INVALID_WINATTR, "INVALID_WINATTR" }, \
+			{ NFS_INO_INVALID_UNCACHE, "INVALID_UNCACHE" })
 
 #define nfs_show_nfsi_flags(v) \
 	__print_flags(v, "|", \
@@ -167,6 +168,8 @@ DEFINE_NFS_INODE_EVENT_DONE(nfs_set_cache_invalid);
 DEFINE_NFS_INODE_EVENT(nfs_readdir_force_readdirplus);
 DEFINE_NFS_INODE_EVENT_DONE(nfs_readdir_cache_fill_done);
 DEFINE_NFS_INODE_EVENT_DONE(nfs_readdir_uncached_done);
+
+DEFINE_NFS_INODE_EVENT(nfs_readdir_uncacheable_directory);
 
 TRACE_EVENT(nfs_access_exit,
 		TP_PROTO(
