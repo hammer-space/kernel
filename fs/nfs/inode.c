@@ -531,6 +531,7 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr)
 		nfsi->hidden = 0;
 		nfsi->system = 0;
 		nfsi->offline = 0;
+		nfsi->uncacheable = 0;
 		inode_set_iversion_raw(inode, 0);
 		inode->i_size = 0;
 		clear_nlink(inode);
@@ -611,6 +612,11 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr)
 			nfsi->offline = (fattr->hsa_flags & NFS_HSA_OFFLINE) ? 1 : 0;
 		else if (fattr_supported & NFS_ATTR_FATTR_OFFLINE)
 			nfs_set_cache_invalid(inode, NFS_INO_INVALID_WINATTR);
+		if (fattr->valid & NFS_ATTR_FATTR_UNCACHEABLE)
+			nfsi->uncacheable = (fattr->hsa_flags & NFS_HSA_UNCACHEABLE) ? 1 : 0;
+		else if (fattr_supported & NFS_ATTR_FATTR_UNCACHEABLE)
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_UNCACHE);
+
 
 		nfs_setsecurity(inode, fattr);
 
@@ -1915,7 +1921,7 @@ static int nfs_inode_finish_partial_attr_update(const struct nfs_fattr *fattr,
 		NFS_INO_INVALID_MTIME | NFS_INO_INVALID_SIZE |
 		NFS_INO_INVALID_BLOCKS | NFS_INO_INVALID_OTHER |
 		NFS_INO_INVALID_NLINK | NFS_INO_INVALID_BTIME |
-		NFS_INO_INVALID_WINATTR;
+		NFS_INO_INVALID_WINATTR | NFS_INO_INVALID_UNCACHE;
 	unsigned long cache_validity = NFS_I(inode)->cache_validity;
 	enum nfs4_change_attr_type ctype = NFS_SERVER(inode)->change_attr_type;
 
@@ -2175,7 +2181,8 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 		  NFS_INO_INVALID_MTIME | NFS_INO_INVALID_SIZE |
 		  NFS_INO_INVALID_OTHER | NFS_INO_INVALID_BLOCKS |
 		  NFS_INO_INVALID_NLINK | NFS_INO_INVALID_MODE |
-		  NFS_INO_INVALID_BTIME | NFS_INO_INVALID_WINATTR);
+		  NFS_INO_INVALID_BTIME | NFS_INO_INVALID_WINATTR |
+		  NFS_INO_INVALID_UNCACHE);
 
 	/* Do atomic weak cache consistency updates */
 	nfs_wcc_update_inode(inode, fattr);
@@ -2207,7 +2214,8 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 					| NFS_INO_INVALID_MODE
 					| NFS_INO_INVALID_OTHER
 					| NFS_INO_INVALID_BTIME
-					| NFS_INO_INVALID_WINATTR;
+					| NFS_INO_INVALID_WINATTR
+					| NFS_INO_INVALID_UNCACHE;
 				if (S_ISDIR(inode->i_mode))
 					nfs_force_lookup_revalidate(inode);
 				attr_changed = true;
@@ -2357,6 +2365,13 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 	else if (fattr_supported & NFS_ATTR_FATTR_OFFLINE)
 		nfsi->cache_validity |=
 			save_cache_validity & NFS_INO_INVALID_WINATTR;
+
+	if (fattr->valid & NFS_ATTR_FATTR_UNCACHEABLE)
+		nfsi->uncacheable =
+				(fattr->hsa_flags & NFS_HSA_UNCACHEABLE) ? 1 : 0;
+	else if (fattr_supported & NFS_ATTR_FATTR_UNCACHEABLE)
+		nfsi->cache_validity |=
+			save_cache_validity & NFS_INO_INVALID_UNCACHE;
 
 	/* Update attrtimeo value if we're out of the unstable period */
 	if (attr_changed) {
