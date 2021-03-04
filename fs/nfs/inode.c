@@ -194,7 +194,7 @@ bool nfs_check_cache_invalid(struct inode *inode, unsigned long flags)
 	return nfs_check_cache_invalid_not_delegated(inode, flags);
 }
 
-static void nfs_set_cache_invalid(struct inode *inode, unsigned long flags)
+void nfs_set_cache_invalid(struct inode *inode, unsigned long flags)
 {
 	struct nfs_inode *nfsi = NFS_I(inode);
 	bool have_delegation = nfs_have_read_or_write_delegation(inode);
