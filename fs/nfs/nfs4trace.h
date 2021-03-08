@@ -342,7 +342,8 @@ TRACE_DEFINE_ENUM(NFS4ERR_RESET_TO_PNFS);
 		{ NFS_ATTR_FATTR_CTIME, "CTIME" }, \
 		{ NFS_ATTR_FATTR_CHANGE, "CHANGE" }, \
 		{ NFS_ATTR_FATTR_OWNER_NAME, "OWNER_NAME" }, \
-		{ NFS_ATTR_FATTR_GROUP_NAME, "GROUP_NAME" })
+		{ NFS_ATTR_FATTR_GROUP_NAME, "GROUP_NAME" }, \
+		{ NFS_ATTR_FATTR_UNCACHEABLE, "UNCACHEABLE" })
 
 DECLARE_EVENT_CLASS(nfs4_clientid_event,
 		TP_PROTO(
@@ -1361,13 +1362,57 @@ DECLARE_EVENT_CLASS(nfs4_inode_event,
 
 DEFINE_NFS4_INODE_EVENT(nfs4_access);
 DEFINE_NFS4_INODE_EVENT(nfs4_readlink);
-DEFINE_NFS4_INODE_EVENT(nfs4_readdir);
 DEFINE_NFS4_INODE_EVENT(nfs4_get_acl);
 DEFINE_NFS4_INODE_EVENT(nfs4_set_acl);
 #ifdef CONFIG_NFS_V4_SECURITY_LABEL
 DEFINE_NFS4_INODE_EVENT(nfs4_get_security_label);
 DEFINE_NFS4_INODE_EVENT(nfs4_set_security_label);
 #endif /* CONFIG_NFS_V4_SECURITY_LABEL */
+
+DECLARE_EVENT_CLASS(nfs4_readdir_event,
+		TP_PROTO(
+			const struct inode *inode,
+			int error
+		),
+
+		TP_ARGS(inode, error),
+
+		TP_STRUCT__entry(
+			__field(dev_t, dev)
+			__field(u32, fhandle)
+			__field(u64, fileid)
+			__field(unsigned long, error)
+			__field(u32, uncacheable)
+		),
+
+		TP_fast_assign(
+			__entry->dev = inode->i_sb->s_dev;
+			__entry->fileid = NFS_FILEID(inode);
+			__entry->fhandle = nfs_fhandle_hash(NFS_FH(inode));
+			__entry->error = error < 0 ? -error : 0;
+			__entry->uncacheable = NFS_I(inode)->uncacheable;
+		),
+
+		TP_printk(
+			"error=%ld (%s) fileid=%02x:%02x:%llu fhandle=0x%08x uncacheable=%u",
+			-__entry->error,
+			show_nfsv4_errors(__entry->error),
+			MAJOR(__entry->dev), MINOR(__entry->dev),
+			(unsigned long long)__entry->fileid,
+			__entry->fhandle,
+			__entry->uncacheable
+		)
+);
+
+#define DEFINE_NFS4_READDIR_EVENT(name) \
+	DEFINE_EVENT(nfs4_readdir_event, name, \
+			TP_PROTO( \
+				const struct inode *inode, \
+				int error \
+			), \
+			TP_ARGS(inode, error))
+
+DEFINE_NFS4_READDIR_EVENT(nfs4_readdir);
 
 DECLARE_EVENT_CLASS(nfs4_inode_stateid_event,
 		TP_PROTO(
