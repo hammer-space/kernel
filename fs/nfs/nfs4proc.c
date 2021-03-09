@@ -1176,14 +1176,14 @@ int nfs4_call_sync(struct rpc_clnt *clnt,
 static void
 nfs4_inc_nlink_locked(struct inode *inode)
 {
-	NFS_I(inode)->cache_validity |= NFS_INO_INVALID_OTHER;
+	nfs_set_cache_invalid(inode, NFS_INO_INVALID_OTHER);
 	inc_nlink(inode);
 }
 
 static void
 nfs4_dec_nlink_locked(struct inode *inode)
 {
-	NFS_I(inode)->cache_validity |= NFS_INO_INVALID_OTHER;
+	nfs_set_cache_invalid(inode, NFS_INO_INVALID_OTHER);
 	drop_nlink(inode);
 }
 
@@ -1193,25 +1193,23 @@ update_changeattr_locked(struct inode *dir, struct nfs4_change_info *cinfo,
 {
 	struct nfs_inode *nfsi = NFS_I(dir);
 
-	nfsi->cache_validity |= NFS_INO_INVALID_DATA
-		| cache_validity;
+	cache_validity |= NFS_INO_INVALID_DATA;
 	if (!nfs_have_delegated_mtime(dir))
-		nfsi->cache_validity |= NFS_INO_INVALID_CTIME
-			| NFS_INO_INVALID_MTIME;
+		cache_validity |= NFS_INO_INVALID_CTIME | NFS_INO_INVALID_MTIME;
 	if (cinfo->atomic && cinfo->before == inode_peek_iversion_raw(dir)) {
 		nfsi->cache_validity &= ~NFS_INO_REVAL_PAGECACHE;
 		nfsi->attrtimeo_timestamp = jiffies;
 	} else {
 		nfs_force_lookup_revalidate(dir);
 		if (cinfo->before != inode_peek_iversion_raw(dir))
-			nfsi->cache_validity |= NFS_INO_INVALID_ACCESS |
-				NFS_INO_INVALID_ACL;
+			cache_validity |= NFS_INO_INVALID_ACCESS |
+						  NFS_INO_INVALID_ACL;
 	}
 	inode_set_iversion_raw(dir, cinfo->after);
 	nfsi->read_cache_jiffies = timestamp;
 	nfsi->attr_gencount = nfs_inc_attr_generation_counter();
+	nfs_set_cache_invalid(dir, cache_validity);
 	nfsi->cache_validity &= ~NFS_INO_INVALID_CHANGE;
-	nfs_fscache_invalidate(dir);
 }
 
 static void
@@ -5932,9 +5930,9 @@ static int __nfs4_proc_set_acl(struct inode *inode, struct richacl *acl)
 	 * so mark the attribute cache invalid.
 	 */
 	spin_lock(&inode->i_lock);
-	NFS_I(inode)->cache_validity |= NFS_INO_INVALID_CHANGE
-		| NFS_INO_INVALID_CTIME
-		| NFS_INO_REVAL_FORCED;
+	nfs_set_cache_invalid(inode, NFS_INO_INVALID_CHANGE |
+					     NFS_INO_INVALID_CTIME |
+					     NFS_INO_REVAL_FORCED);
 	spin_unlock(&inode->i_lock);
 	nfs_access_zap_cache(inode);
 	nfs_zap_acl_cache(inode);
