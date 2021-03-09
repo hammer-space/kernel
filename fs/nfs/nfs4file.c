@@ -310,10 +310,17 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 			args.fa_flags |= NFS_FA_FLAG_OFFLINE;
 	}
 
+	if (fattr_supported & NFS_ATTR_FATTR_UNCACHEABLE) {
+		args.fa_valid[0] |= NFS_FA_VALID_UNCACHEABLE;
+		if (nfsi->uncacheable)
+			args.fa_flags |= NFS_FA_FLAG_UNCACHEABLE;
+	}
+
 	if ((args.fa_valid[0] & (NFS_FA_VALID_ARCHIVE |
 				NFS_FA_VALID_HIDDEN |
 				NFS_FA_VALID_SYSTEM |
-				NFS_FA_VALID_OFFLINE)) &&
+				NFS_FA_VALID_OFFLINE |
+				NFS_FA_VALID_UNCACHEABLE)) &&
 	    put_user(args.fa_flags, &uarg->fa_flags))
 		goto out;
 

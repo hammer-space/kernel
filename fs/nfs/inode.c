@@ -502,6 +502,7 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 		nfsi->system = 0;
 		nfsi->archive = 0;
 		nfsi->offline = 0;
+		nfsi->uncacheable = 0;
 		inode_set_iversion_raw(inode, 0);
 		inode->i_size = 0;
 		clear_nlink(inode);
@@ -577,6 +578,10 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 		if (fattr->valid & NFS_ATTR_FATTR_OFFLINE)
 			nfsi->offline = (fattr->hsa_flags & NFS_HSA_OFFLINE) != 0;
 		else if (fattr_supported & NFS_ATTR_FATTR_OFFLINE)
+			nfs_set_cache_invalid(inode, NFS_INO_INVALID_OTHER);
+		if (fattr->valid & NFS_ATTR_FATTR_UNCACHEABLE)
+			nfsi->uncacheable = (fattr->hsa_flags & NFS_HSA_UNCACHEABLE) != 0;
+		else if (fattr_supported & NFS_ATTR_FATTR_UNCACHEABLE)
 			nfs_set_cache_invalid(inode, NFS_INO_INVALID_OTHER);
 
 		if (nfsi->cache_validity != 0)
@@ -2255,6 +2260,16 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 	if (fattr->valid & NFS_ATTR_FATTR_OFFLINE) {
 		nfsi->offline = (fattr->hsa_flags & NFS_HSA_OFFLINE) != 0;
 	} else if (fattr_supported & NFS_ATTR_FATTR_OFFLINE) {
+		nfsi->cache_validity |= save_cache_validity &
+				(NFS_INO_INVALID_OTHER
+				| NFS_INO_REVAL_FORCED);
+		cache_revalidated = false;
+	}
+
+	if (fattr->valid & NFS_ATTR_FATTR_UNCACHEABLE) {
+		nfsi->uncacheable =
+				(fattr->hsa_flags & NFS_HSA_UNCACHEABLE) != 0;
+	} else if (fattr_supported & NFS_ATTR_FATTR_UNCACHEABLE) {
 		nfsi->cache_validity |= save_cache_validity &
 				(NFS_INO_INVALID_OTHER
 				| NFS_INO_REVAL_FORCED);
