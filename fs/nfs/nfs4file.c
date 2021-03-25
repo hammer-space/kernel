@@ -223,7 +223,11 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		reval_flags = AT_STATX_DONT_SYNC;
 	else
 		reval_flags = AT_STATX_SYNC_AS_STAT;
-	ret = nfs_getattr_revalidate(&dst_file->f_path, reval_flags);
+	ret = nfs_getattr_revalidate(&dst_file->f_path,
+				     NFS_INO_INVALID_ATTR |
+					     NFS_INO_INVALID_ATIME |
+					     NFS_INO_INVALID_BLOCKS,
+				     reval_flags);
 	if (ret != 0)
 		return ret;
 
@@ -475,7 +479,7 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 			goto out;
 	} else if ((args.fa_valid[0] & NFS_FA_VALID_ARCHIVE) &&
 			!(NFS_SERVER(inode)->fattr_valid & NFS_ATTR_FATTR_ARCHIVE)) {
-		nfs_revalidate_inode(NFS_SERVER(inode), inode);
+		nfs_revalidate_inode(inode, NFS_INO_INVALID_MTIME);
 		args.fa_valid[0] |= NFS_FA_VALID_TIME_BACKUP;
 		if (!(args.fa_flags & NFS_FA_FLAG_ARCHIVE)) {
 			args.fa_time_backup.tv_sec = inode->i_mtime.tv_sec;

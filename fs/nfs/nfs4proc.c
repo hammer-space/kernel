@@ -5752,7 +5752,7 @@ static struct richacl *nfs4_proc_get_acl(struct inode *inode)
 
 	if (!(server->caps & (NFS_CAP_ALLOW_ACLS | NFS_CAP_DENY_ACLS)))
 		return ERR_PTR(-EOPNOTSUPP);
-	ret = nfs_revalidate_inode(server, inode);
+	ret = nfs_revalidate_inode(inode, NFS_INO_INVALID_CHANGE);
 	if (ret < 0)
 		return ERR_PTR(ret);
 	if (NFS_I(inode)->cache_validity & NFS_INO_INVALID_ACL)
