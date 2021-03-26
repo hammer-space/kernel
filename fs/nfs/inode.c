@@ -205,7 +205,8 @@ void nfs_set_cache_invalid(struct inode *inode, unsigned long flags)
 		flags &= ~(NFS_INO_INVALID_CHANGE
 				| NFS_INO_INVALID_SIZE
 				| NFS_INO_REVAL_PAGECACHE);
-	}
+	} else if (flags & NFS_INO_REVAL_PAGECACHE)
+		flags |= NFS_INO_INVALID_CHANGE | NFS_INO_INVALID_SIZE;
 
 	if (flags & NFS_INO_INVALID_DATA)
 		nfs_fscache_invalidate(inode);
