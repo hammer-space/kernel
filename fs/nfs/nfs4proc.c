@@ -1191,23 +1191,38 @@ update_changeattr_locked(struct inode *dir, struct nfs4_change_info *cinfo,
 		unsigned long timestamp, unsigned long cache_validity)
 {
 	struct nfs_inode *nfsi = NFS_I(dir);
+	u64 change_attr = inode_peek_iversion_raw(dir);
 
 	cache_validity |= NFS_INO_INVALID_DATA;
 	if (!nfs_have_delegated_mtime(dir))
 		cache_validity |= NFS_INO_INVALID_CTIME | NFS_INO_INVALID_MTIME;
-	if (cinfo->atomic && cinfo->before == inode_peek_iversion_raw(dir)) {
+
+	switch (NFS_SERVER(dir)->change_attr_type) {
+	case NFS4_CHANGE_TYPE_IS_UNDEFINED:
+		break;
+	case NFS4_CHANGE_TYPE_IS_TIME_METADATA:
+		if ((s64)(change_attr - cinfo->after) > 0)
+			goto out;
+		break;
+	default:
+		if ((s64)(change_attr - cinfo->after) >= 0)
+			goto out;
+	}
+
+	if (cinfo->atomic && cinfo->before == change_attr) {
 		nfsi->attrtimeo_timestamp = jiffies;
 	} else {
 		nfs_force_lookup_revalidate(dir);
-		if (cinfo->before != inode_peek_iversion_raw(dir))
+		if (cinfo->before != change_attr)
 			cache_validity |= NFS_INO_INVALID_ACCESS |
 						  NFS_INO_INVALID_ACL;
 	}
 	inode_set_iversion_raw(dir, cinfo->after);
 	nfsi->read_cache_jiffies = timestamp;
 	nfsi->attr_gencount = nfs_inc_attr_generation_counter();
-	nfs_set_cache_invalid(dir, cache_validity);
 	nfsi->cache_validity &= ~NFS_INO_INVALID_CHANGE;
+out:
+	nfs_set_cache_invalid(dir, cache_validity);
 }
 
 static void
