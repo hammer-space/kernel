@@ -708,6 +708,7 @@ DECLARE_EVENT_CLASS(nfs4_xdr_event,
 			), \
 			TP_ARGS(xdr, op, error))
 DEFINE_NFS4_XDR_EVENT(nfs4_xdr_status);
+DEFINE_NFS4_XDR_EVENT(nfs4_xdr_bad_filehandle);
 
 DECLARE_EVENT_CLASS(nfs4_open_event,
 		TP_PROTO(
