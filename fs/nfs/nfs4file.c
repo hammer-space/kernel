@@ -226,7 +226,10 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	ret = nfs_getattr_revalidate(&dst_file->f_path,
 				     NFS_INO_INVALID_ATTR |
 					     NFS_INO_INVALID_ATIME |
-					     NFS_INO_INVALID_BLOCKS,
+					     NFS_INO_INVALID_BLOCKS |
+					     NFS_INO_INVALID_BTIME |
+					     NFS_INO_INVALID_WINATTR |
+					     NFS_INO_INVALID_UNCACHE,
 				     reval_flags);
 	if (ret != 0)
 		return ret;

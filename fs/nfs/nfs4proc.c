@@ -8172,7 +8172,10 @@ static int _nfs4_set_nfs4_statx(struct inode *inode,
 		struct nfs4_statx *statx,
 		struct nfs_fattr *fattr)
 {
-
+	const __u64 statx_btime = NFS_FA_VALID_TIME_CREATE;
+	const __u64 statx_win = NFS_FA_VALID_TIME_BACKUP |
+				NFS_FA_VALID_ARCHIVE | NFS_FA_VALID_HIDDEN |
+				NFS_FA_VALID_SYSTEM;
 	struct iattr sattr = {0};
 	struct nfs_server *server = NFS_SERVER(inode);
 	__u32 bitmask[3];
@@ -8232,8 +8235,22 @@ static int _nfs4_set_nfs4_statx(struct inode *inode,
 	status = nfs4_call_sync(server->client, server, &msg, &arg.seq_args, &res.seq_res, 1);
 	if (status)
 		dprintk("%s failed: %d\n", __func__, status);
-	else
+	else {
+		if (statx->fa_valid[0] & statx_btime)
+			nfs_set_cache_invalid(inode,
+					      NFS_INO_INVALID_CHANGE |
+						  NFS_INO_INVALID_CTIME |
+						  NFS_INO_INVALID_BTIME |
+						  NFS_INO_REVAL_FORCED);
+		if (statx->fa_valid[0] & statx_win)
+			nfs_set_cache_invalid(inode,
+					      NFS_INO_INVALID_CHANGE |
+						  NFS_INO_INVALID_CTIME |
+						  NFS_INO_INVALID_WINATTR |
+						  NFS_INO_REVAL_FORCED);
+
 		nfs_setattr_update_inode(inode, &sattr, fattr);
+	}
 
 	return status;
 }
