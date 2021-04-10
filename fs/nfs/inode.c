@@ -1992,10 +1992,6 @@ int nfs_post_op_update_inode_force_wcc_locked(struct inode *inode, struct nfs_fa
 	int attr_cmp = nfs_inode_attrs_cmp(fattr, inode);
 	int status;
 
-	if (nfs_have_delegated_mtime(inode)) {
-		nfs_update_delegated_mtime_locked(inode);
-		return 0;
-	}
 	/* Don't do a WCC update if these attributes are already stale */
 	if (attr_cmp < 0)
 		return 0;
