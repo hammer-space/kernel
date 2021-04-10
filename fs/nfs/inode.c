@@ -610,24 +610,6 @@ nfs_fattr_fixup_delegated(struct inode *inode, struct nfs_fattr *fattr)
 {
 	unsigned long cache_validity = NFS_I(inode)->cache_validity;
 
-	if (!nfs_have_read_or_write_delegation(inode))
-		return;
-
-	if (!(cache_validity & NFS_INO_REVAL_FORCED))
-		cache_validity &= ~(NFS_INO_INVALID_ATIME
-				| NFS_INO_INVALID_CHANGE
-				| NFS_INO_INVALID_CTIME
-				| NFS_INO_INVALID_MTIME
-				| NFS_INO_INVALID_SIZE);
-
-	if (!(cache_validity & NFS_INO_INVALID_SIZE))
-		fattr->valid &= ~(NFS_ATTR_FATTR_PRESIZE
-				| NFS_ATTR_FATTR_SIZE);
-
-	if (!(cache_validity & NFS_INO_INVALID_CHANGE))
-		fattr->valid &= ~(NFS_ATTR_FATTR_PRECHANGE
-				| NFS_ATTR_FATTR_CHANGE);
-
 	if (nfs_have_delegated_mtime(inode)) {
 		if (!(cache_validity & NFS_INO_INVALID_CTIME))
 			fattr->valid &= ~(NFS_ATTR_FATTR_PRECTIME
