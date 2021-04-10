@@ -324,6 +324,18 @@ static void nfs4_bitmap_copy_adjust(__u32 *dst, const __u32 *src,
 	if (!(cache_validity & NFS_INO_INVALID_OTHER))
 		dst[1] &= ~(FATTR4_WORD1_OWNER | FATTR4_WORD1_OWNER_GROUP);
 
+	if (!(cache_validity & NFS_INO_INVALID_BTIME))
+		dst[1] &= ~FATTR4_WORD1_TIME_CREATE;
+
+	if (!(cache_validity & NFS_INO_INVALID_WINATTR)) {
+		dst[0] &= ~(FATTR4_WORD0_HIDDEN | FATTR4_WORD0_ARCHIVE);
+		dst[1] &= ~(FATTR4_WORD1_SYSTEM | FATTR4_WORD1_TIME_BACKUP);
+		dst[2] &= ~FATTR4_WORD2_OFFLINE;
+	}
+
+	if (!(cache_validity & NFS_INO_INVALID_UNCACHE))
+		dst[2] &= ~FATTR4_WORD2_UNCACHEABLE;
+
 	if (nfs_have_delegated_mtime(inode)) {
 		if (!(cache_validity & NFS_INO_INVALID_ATIME))
 			dst[1] &= ~FATTR4_WORD1_TIME_ACCESS;
@@ -8206,8 +8218,11 @@ static int _nfs4_set_nfs4_statx(struct inode *inode,
 	};
 	int status;
 
-	nfs4_bitmap_copy_adjust(bitmask, server->attr_bitmask, inode,
-				NFS_INO_INVALID_CHANGE | NFS_INO_INVALID_CTIME);
+	nfs4_bitmap_copy_adjust(
+		bitmask, server->attr_bitmask, inode,
+		NFS_INO_INVALID_CHANGE | NFS_INO_INVALID_CTIME |
+			NFS_INO_INVALID_SIZE | NFS_INO_INVALID_OTHER |
+			NFS_INO_INVALID_BTIME | NFS_INO_INVALID_WINATTR);
 	/* Use the iattr structure to set atime and mtime since handling already
 	 * exists for them using the iattr struct in the encode_attrs()
 	 * (xdr encoding) routine.
