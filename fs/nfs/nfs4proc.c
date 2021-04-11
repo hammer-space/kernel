@@ -5493,10 +5493,7 @@ static void nfs4_bitmask_set(__u32 bitmask[NFS4_BITMASK_SZ], const __u32 *src,
 	if (cache_validity & NFS_INO_INVALID_BLOCKS)
 		bitmask[1] |= FATTR4_WORD1_SPACE_USED;
 
-	if (nfs4_have_delegation(inode, FMODE_READ, 0) &&
-	    !(cache_validity & NFS_INO_REVAL_FORCED))
-		bitmask[0] &= ~FATTR4_WORD0_SIZE;
-	else if (cache_validity & NFS_INO_INVALID_SIZE)
+	if (cache_validity & NFS_INO_INVALID_SIZE)
 		bitmask[0] |= FATTR4_WORD0_SIZE;
 
 	for (i = 0; i < NFS4_BITMASK_SZ; i++)
