@@ -2938,7 +2938,7 @@ static int nfs_execute_ok(struct inode *inode, int mask)
 
 	if (S_ISDIR(inode->i_mode))
 		return 0;
-	if (nfs_check_cache_invalid(inode, NFS_INO_INVALID_OTHER)) {
+	if (nfs_check_cache_invalid(inode, NFS_INO_INVALID_MODE)) {
 		if (mask & MAY_NOT_BLOCK)
 			return -ECHILD;
 		ret = __nfs_revalidate_inode(server, inode);
@@ -3001,7 +3001,8 @@ out_notsup:
 	if (mask & MAY_NOT_BLOCK)
 		return -ECHILD;
 
-	res = nfs_revalidate_inode(inode, NFS_INO_INVALID_OTHER);
+	res = nfs_revalidate_inode(inode, NFS_INO_INVALID_MODE |
+						  NFS_INO_INVALID_OTHER);
 	if (res == 0)
 		res = generic_permission(inode, mask);
 	goto out;
