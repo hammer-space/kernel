@@ -753,8 +753,6 @@ static void nfs_inode_add_request(struct inode *inode, struct nfs_page *req)
 	 * with invalidate/truncate.
 	 */
 	spin_lock(&mapping->private_lock);
-	if (!nfs_have_writebacks(inode) && nfs_have_write_delegation(inode))
-		inode_inc_iversion_raw(inode);
 	if (likely(!PageSwapCache(req->wb_page))) {
 		set_bit(PG_MAPPED, &req->wb_flags);
 		SetPagePrivate(req->wb_page);
@@ -1278,7 +1276,8 @@ static bool nfs_write_pageuptodate(struct page *page, struct inode *inode)
 
 	if (nfs_have_delegated_attributes(inode))
 		goto out;
-	if (nfsi->cache_validity & NFS_INO_REVAL_PAGECACHE)
+	if (nfsi->cache_validity &
+	    (NFS_INO_INVALID_CHANGE | NFS_INO_INVALID_SIZE))
 		return false;
 	smp_rmb();
 	if (test_bit(NFS_INO_INVALIDATING, &nfsi->flags))
@@ -1531,8 +1530,12 @@ void nfs_writeback_update_inode(struct nfs_pgio_header *hdr)
 	struct inode *inode = hdr->inode;
 
 	/* We may have already updated the attributes in nfs_grow_file(). */
-	if (nfs_have_delegated_mtime(inode))
+	if (nfs_have_delegated_mtime(inode)) {
+		spin_lock(&inode->i_lock);
+		nfs_set_cache_invalid(inode, NFS_INO_INVALID_BLOCKS);
+		spin_unlock(&inode->i_lock);
 		return;
+	}
 
 	spin_lock(&inode->i_lock);
 	nfs_writeback_check_extend(hdr, fattr);
@@ -1589,7 +1592,7 @@ static int nfs_writeback_done(struct rpc_task *task,
 	/* Deal with the suid/sgid bit corner case */
 	if (nfs_should_remove_suid(inode)) {
 		spin_lock(&inode->i_lock);
-		nfs_set_cache_invalid(inode, NFS_INO_INVALID_OTHER);
+		nfs_set_cache_invalid(inode, NFS_INO_INVALID_MODE);
 		spin_unlock(&inode->i_lock);
 	}
 	return 0;

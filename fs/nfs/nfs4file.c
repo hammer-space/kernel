@@ -223,7 +223,14 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		reval_flags = AT_STATX_DONT_SYNC;
 	else
 		reval_flags = AT_STATX_SYNC_AS_STAT;
-	ret = nfs_getattr_revalidate(&dst_file->f_path, reval_flags);
+	ret = nfs_getattr_revalidate(&dst_file->f_path,
+				     NFS_INO_INVALID_ATTR |
+					     NFS_INO_INVALID_ATIME |
+					     NFS_INO_INVALID_BLOCKS |
+					     NFS_INO_INVALID_BTIME |
+					     NFS_INO_INVALID_WINATTR |
+					     NFS_INO_INVALID_UNCACHE,
+				     reval_flags);
 	if (ret != 0)
 		return ret;
 
@@ -424,6 +431,8 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 	}
 	inode = file_inode(dst_file);
 
+	inode_lock(inode);
+
 	if (get_user(args.fa_valid[0], &uarg->fa_valid[0]))
 		goto out;
 	args.fa_valid[0] &= NFS_FA_VALID_ALL_ATTR_0;
@@ -475,7 +484,7 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 			goto out;
 	} else if ((args.fa_valid[0] & NFS_FA_VALID_ARCHIVE) &&
 			!(NFS_SERVER(inode)->fattr_valid & NFS_ATTR_FATTR_ARCHIVE)) {
-		nfs_revalidate_inode(NFS_SERVER(inode), inode);
+		nfs_revalidate_inode(inode, NFS_INO_INVALID_MTIME);
 		args.fa_valid[0] |= NFS_FA_VALID_TIME_BACKUP;
 		if (!(args.fa_flags & NFS_FA_FLAG_ARCHIVE)) {
 			args.fa_time_backup.tv_sec = inode->i_mtime.tv_sec;
@@ -489,10 +498,13 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
         if (args.fa_valid[0] & NFS_FA_VALID_SIZE) {
 		if (copy_from_user(&args.fa_size, &uarg->fa_size,
 					sizeof(args.fa_size)))
-		goto out;
+			goto out;
 		/* Write all dirty data */
-		if (S_ISREG(inode->i_mode))
-			nfs_sync_inode(inode);
+		if (S_ISREG(inode->i_mode)) {
+			ret = nfs_sync_inode(inode);
+			if (ret)
+				goto out;
+		}
 	}
 
 	/*
@@ -501,6 +513,7 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 	ret = nfs4_set_nfs4_statx(inode, &args, fattr);
 
 out:
+	inode_unlock(inode);
 	if (args.real_fd >= 0)
 		fput(dst_file);
 out_free:

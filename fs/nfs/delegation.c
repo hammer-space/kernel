@@ -496,6 +496,21 @@ int nfs_inode_set_delegation(struct inode *inode, const struct cred *cred,
 	if (freeme == NULL)
 		goto out;
 add_new:
+	/*
+	 * If we didn't revalidate the change attribute before setting
+	 * the delegation, then pre-emptively ask for a full attribute
+	 * cache revalidation.
+	 */
+	spin_lock(&inode->i_lock);
+	if (NFS_I(inode)->cache_validity & NFS_INO_INVALID_CHANGE)
+		nfs_set_cache_invalid(inode,
+			NFS_INO_INVALID_ATIME | NFS_INO_INVALID_CTIME |
+			NFS_INO_INVALID_MTIME | NFS_INO_INVALID_SIZE |
+			NFS_INO_INVALID_BLOCKS | NFS_INO_INVALID_NLINK |
+			NFS_INO_INVALID_OTHER | NFS_INO_INVALID_DATA |
+			NFS_INO_INVALID_ACCESS | NFS_INO_INVALID_ACL);
+	spin_unlock(&inode->i_lock);
+
 	list_add_tail_rcu(&delegation->super_list, &server->delegations);
 	rcu_assign_pointer(nfsi->delegation, delegation);
 	delegation = NULL;
@@ -508,11 +523,6 @@ add_new:
 	if (deleg_type == NFS4_OPEN_DELEGATE_WRITE_ATTRS_DELEG &&
 	    nfs_have_writebacks(inode))
 		nfs_update_delegated_mtime(inode);
-
-	spin_lock(&inode->i_lock);
-	if (NFS_I(inode)->cache_validity & (NFS_INO_INVALID_ATTR|NFS_INO_INVALID_ATIME))
-		NFS_I(inode)->cache_validity |= NFS_INO_REVAL_FORCED;
-	spin_unlock(&inode->i_lock);
 out:
 	spin_unlock(&clp->cl_lock);
 	if (delegation != NULL)

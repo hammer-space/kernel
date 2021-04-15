@@ -22,6 +22,8 @@
 #define NFS_HSA_OFFLINE		BIT(3)
 #define NFS_HSA_UNCACHEABLE	BIT(4)
 
+#define NFS_BITMASK_SZ		3
+
 struct nfs4_string {
 	unsigned int len;
 	char *data;
@@ -171,6 +173,8 @@ struct nfs_fsinfo {
 	__u32			layouttype[NFS_MAX_LAYOUT_TYPES]; /* supported pnfs layout driver */
 	__u32			blksize; /* preferred pnfs io block size */
 	__u32			clone_blksize; /* granularity of a CLONE operation */
+	enum nfs4_change_attr_type
+				change_attr_type; /* Info about change attr */
 };
 
 struct nfs_fsstat {
@@ -559,6 +563,7 @@ struct nfs_closeargs {
 	fmode_t			fmode;
 	u32			share_access;
 	const u32 *		bitmask;
+	u32			bitmask_store[NFS_BITMASK_SZ];
 	struct nfs4_layoutreturn_args *lr_args;
 };
 
@@ -648,7 +653,8 @@ struct nfs4_delegreturnargs {
 	struct nfs4_sequence_args	seq_args;
 	const struct nfs_fh *fhandle;
 	const nfs4_stateid *stateid;
-	const u32 * bitmask;
+	const u32 *bitmask;
+	u32 bitmask_store[NFS_BITMASK_SZ];
 	struct nfs4_layoutreturn_args *lr_args;
 	struct nfs4_delegattr *sattr_args;
 };
@@ -692,6 +698,7 @@ struct nfs_pgio_args {
 		unsigned int		replen;			/* used by read */
 		struct {
 			const u32 *		bitmask;	/* used by write */
+			u32 bitmask_store[NFS_BITMASK_SZ];	/* used by write */
 			enum nfs3_stable_how	stable;		/* used by write */
 		};
 	};

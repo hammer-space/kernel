@@ -104,8 +104,7 @@ static inline int nfs_have_write_delegation(struct inode *inode)
 
 static inline int nfs_have_delegated_attributes(struct inode *inode)
 {
-	return nfs_have_read_or_write_delegation(inode) &&
-		!(NFS_I(inode)->cache_validity & NFS_INO_REVAL_FORCED);
+	return nfs_have_read_or_write_delegation(inode);
 }
 
 static inline int nfs_have_delegated_atime(struct inode *inode)

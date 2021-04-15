@@ -398,7 +398,7 @@ extern void nfs_set_cache_invalid(struct inode *inode, unsigned long flags);
 extern bool nfs_check_cache_invalid(struct inode *, unsigned long);
 extern int nfs_wait_bit_killable(struct wait_bit_key *key, int mode);
 extern int nfs_wait_atomic_killable(atomic_t *p, unsigned int mode);
-extern int nfs_getattr_revalidate(const struct path *path,
+extern int nfs_getattr_revalidate(const struct path *path, unsigned long flags,
 				  unsigned int query_flags);
 
 /* localio.c */

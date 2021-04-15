@@ -343,7 +343,7 @@ static int decode_nfsstat3(struct xdr_stream *xdr, enum nfs_stat *status)
 	return 0;
 out_status:
 	*status = be32_to_cpup(p);
-	trace_nfs_xdr_status((int)*status);
+	trace_nfs_xdr_status(xdr, (int)*status);
 	return 0;
 }
 
@@ -430,7 +430,7 @@ static int decode_nfs_fh3(struct xdr_stream *xdr, struct nfs_fh *fh)
 	if (unlikely(!p))
 		return -EIO;
 	length = be32_to_cpup(p++);
-	if (unlikely(length > NFS3_FHSIZE))
+	if (unlikely(length > NFS3_FHSIZE || length == 0))
 		goto out_toobig;
 	p = xdr_inline_decode(xdr, length);
 	if (unlikely(!p))
@@ -439,7 +439,7 @@ static int decode_nfs_fh3(struct xdr_stream *xdr, struct nfs_fh *fh)
 	memcpy(fh->data, p, length);
 	return 0;
 out_toobig:
-	dprintk("NFS: file handle size (%u) too big\n", length);
+	trace_nfs_xdr_bad_filehandle(xdr, NFSERR_BADHANDLE);
 	return -E2BIG;
 }
 
@@ -2223,6 +2223,7 @@ static int decode_fsinfo3resok(struct xdr_stream *xdr,
 
 	/* ignore properties */
 	result->lease_time = 0;
+	result->change_attr_type = NFS4_CHANGE_TYPE_IS_TIME_METADATA;
 	return 0;
 }
 

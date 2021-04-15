@@ -45,6 +45,13 @@ TRACE_DEFINE_ENUM(NFS_INO_INVALID_CTIME);
 TRACE_DEFINE_ENUM(NFS_INO_INVALID_MTIME);
 TRACE_DEFINE_ENUM(NFS_INO_INVALID_SIZE);
 TRACE_DEFINE_ENUM(NFS_INO_INVALID_OTHER);
+TRACE_DEFINE_ENUM(NFS_INO_DATA_INVAL_DEFER);
+TRACE_DEFINE_ENUM(NFS_INO_INVALID_BLOCKS);
+TRACE_DEFINE_ENUM(NFS_INO_INVALID_NLINK);
+TRACE_DEFINE_ENUM(NFS_INO_INVALID_MODE);
+TRACE_DEFINE_ENUM(NFS_INO_INVALID_BTIME);
+TRACE_DEFINE_ENUM(NFS_INO_INVALID_WINATTR);
+TRACE_DEFINE_ENUM(NFS_INO_INVALID_UNCACHE);
 
 #define nfs_show_cache_validity(v) \
 	__print_flags(v, "|", \
@@ -59,7 +66,14 @@ TRACE_DEFINE_ENUM(NFS_INO_INVALID_OTHER);
 			{ NFS_INO_INVALID_CTIME, "INVALID_CTIME" }, \
 			{ NFS_INO_INVALID_MTIME, "INVALID_MTIME" }, \
 			{ NFS_INO_INVALID_SIZE, "INVALID_SIZE" }, \
-			{ NFS_INO_INVALID_OTHER, "INVALID_OTHER" })
+			{ NFS_INO_INVALID_OTHER, "INVALID_OTHER" }, \
+			{ NFS_INO_DATA_INVAL_DEFER, "DATA_INVAL_DEFER" }, \
+			{ NFS_INO_INVALID_BLOCKS, "INVALID_BLOCKS" }, \
+			{ NFS_INO_INVALID_NLINK, "INVALID_NLINK" }, \
+			{ NFS_INO_INVALID_MODE, "INVALID_MODE" }, \
+			{ NFS_INO_INVALID_BTIME, "INVALID_BTIME" }, \
+			{ NFS_INO_INVALID_WINATTR, "INVALID_WINATTR" }, \
+			{ NFS_INO_INVALID_UNCACHE, "INVALID_UNCACHE" })
 
 TRACE_DEFINE_ENUM(NFS_INO_ADVISE_RDPLUS);
 TRACE_DEFINE_ENUM(NFS_INO_STALE);
@@ -1300,26 +1314,46 @@ TRACE_DEFINE_ENUM(NFSERR_JUKEBOX);
 			{ NFSERR_BADTYPE, "BADTYPE" }, \
 			{ NFSERR_JUKEBOX, "JUKEBOX" })
 
-TRACE_EVENT(nfs_xdr_status,
+DECLARE_EVENT_CLASS(nfs_xdr_event,
 		TP_PROTO(
+			const struct xdr_stream *xdr,
 			int error
 		),
 
-		TP_ARGS(error),
+		TP_ARGS(xdr, error),
 
 		TP_STRUCT__entry(
+			__field(unsigned int, task_id)
+			__field(unsigned int, client_id)
+			__field(u32, xid)
 			__field(unsigned long, error)
 		),
 
 		TP_fast_assign(
+			const struct rpc_rqst *rqstp = xdr->rqst;
+			const struct rpc_task *task = rqstp->rq_task;
+
+			__entry->task_id = task->tk_pid;
+			__entry->client_id = task->tk_client->cl_clid;
+			__entry->xid = be32_to_cpu(rqstp->rq_xid);
 			__entry->error = error;
 		),
 
 		TP_printk(
-			"error=%ld (%s)",
+			"task:%u@%d xid=0x%08x error=%ld (%s)",
+			__entry->task_id, __entry->client_id, __entry->xid,
 			-__entry->error, nfs_show_status(__entry->error)
 		)
 );
+#define DEFINE_NFS_XDR_EVENT(name) \
+	DEFINE_EVENT(nfs_xdr_event, name, \
+			TP_PROTO( \
+				const struct xdr_stream *xdr, \
+				int error \
+			), \
+			TP_ARGS(xdr, error))
+DEFINE_NFS_XDR_EVENT(nfs_xdr_status);
+DEFINE_NFS_XDR_EVENT(nfs_xdr_bad_filehandle);
 
 #endif /* _TRACE_NFS_H */
 
