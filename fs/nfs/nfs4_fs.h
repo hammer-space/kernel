@@ -45,6 +45,7 @@ enum nfs4_client_state {
 	NFS4CLNT_RECALL_RUNNING,
 	NFS4CLNT_RECALL_ANY_LAYOUT_READ,
 	NFS4CLNT_RECALL_ANY_LAYOUT_RW,
+	NFS4CLNT_DELEGRETURN_DELAYED,
 };
 
 #define NFS4_RENEW_TIMEOUT		0x01
@@ -344,6 +345,8 @@ extern int nfs4_set_nfs4_statx(struct inode *inode,
 		struct nfs4_statx *statx,
 		struct nfs_fattr *fattr);
 
+extern int nfs4_proc_setlease(struct file *file, long arg,
+			      struct file_lock **lease, void **priv);
 extern int nfs4_proc_get_lease_time(struct nfs_client *clp,
 		struct nfs_fsinfo *fsinfo);
 #if defined(CONFIG_NFS_V4_1)
