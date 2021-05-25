@@ -1289,6 +1289,20 @@ rpcrdma_mr_unmap_and_put(struct rpcrdma_mr *mr)
 }
 
 /**
+ * rpcrdma_reply_put - Put reply buffers back into pool
+ * @buffers: buffer pool
+ * @req: object to return
+ *
+ */
+void rpcrdma_reply_put(struct rpcrdma_buffer *buffers, struct rpcrdma_req *req)
+{
+	if (req->rl_reply) {
+		rpcrdma_recv_buffer_put(req->rl_reply);
+		req->rl_reply = NULL;
+	}
+}
+
+/**
  * rpcrdma_buffer_get - Get a request buffer
  * @buffers: Buffer pool from which to obtain a buffer
  *
@@ -1317,21 +1331,12 @@ void
 rpcrdma_buffer_put(struct rpcrdma_req *req)
 {
 	struct rpcrdma_buffer *buffers = req->rl_buffer;
-	struct rpcrdma_rep *rep = req->rl_reply;
 
-	req->rl_reply = NULL;
+	rpcrdma_reply_put(buffers, req);
 
 	spin_lock(&buffers->rb_lock);
 	list_add(&req->rl_list, &buffers->rb_send_bufs);
-	if (rep) {
-		if (!rep->rr_temp) {
-			list_add(&rep->rr_list, &buffers->rb_recv_bufs);
-			rep = NULL;
-		}
-	}
 	spin_unlock(&buffers->rb_lock);
-	if (rep)
-		rpcrdma_destroy_rep(rep);
 }
 
 /*
