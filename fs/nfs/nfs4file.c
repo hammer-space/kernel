@@ -378,7 +378,8 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 			goto out;
 	}
 
-	if ((fattr_supported & NFS_ATTR_FATTR_BLOCKS_USED)) {
+	if (fattr_supported &
+	    (NFS_ATTR_FATTR_BLOCKS_USED | NFS_ATTR_FATTR_SPACE_USED)) {
 		args.fa_valid[0] |= NFS_FA_VALID_BLOCKS;
 		if (copy_to_user(&uarg->fa_blocks, &inode->i_blocks,
 				sizeof(uarg->fa_blocks)))
