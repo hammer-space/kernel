@@ -250,6 +250,7 @@ struct nfs4_statx {
 	int		real_fd;		/* real FD to use,
 						   -1 means use current file */
 	__u32		fa_options;		/* statx flags */
+	__u64		fa_request[2];		/* Attributes requested */
 	__u64		fa_valid[2];		/* Attributes set */
 
 	struct timespec64 fa_time_backup;	/* Backup time */
