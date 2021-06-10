@@ -108,6 +108,7 @@ u64 nfs_compat_user_ino64(u64 fileid)
 		ino ^= fileid >> (sizeof(fileid)-sizeof(ino)) * 8;
 	return ino;
 }
+EXPORT_SYMBOL_GPL(nfs_compat_user_ino64);
 
 int nfs_drop_inode(struct inode *inode)
 {

@@ -106,6 +106,7 @@ struct nfs_ioctl_nfs4_statx {
 #else
 #error edit for your odd byteorder.
 #endif
+	__u64		fa_request[2];		/* Attributes to retrieve */
 	__u64		fa_valid[2];		/* Attributes set */
 
 	struct timespec fa_time_backup;		/* Backup time */
