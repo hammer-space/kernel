@@ -8243,10 +8243,10 @@ static int _nfs4_set_nfs4_statx(struct inode *inode,
 		struct nfs4_statx *statx,
 		struct nfs_fattr *fattr)
 {
-	const __u64 statx_btime = NFS_FA_VALID_TIME_CREATE;
-	const __u64 statx_win = NFS_FA_VALID_TIME_BACKUP |
+	const __u64 statx_win = NFS_FA_VALID_TIME_CREATE |
+				NFS_FA_VALID_TIME_BACKUP |
 				NFS_FA_VALID_ARCHIVE | NFS_FA_VALID_HIDDEN |
-				NFS_FA_VALID_SYSTEM;
+				NFS_FA_VALID_SYSTEM | NFS_FA_VALID_UNCACHEABLE;
 	struct iattr sattr = {0};
 	struct nfs_server *server = NFS_SERVER(inode);
 	__u32 bitmask[3];
@@ -8307,24 +8307,45 @@ static int _nfs4_set_nfs4_statx(struct inode *inode,
 	nfs4_stateid_copy(&arg.stateid, &zero_stateid);
 
 	status = nfs4_call_sync(server->client, server, &msg, &arg.seq_args, &res.seq_res, 1);
-	if (status)
-		dprintk("%s failed: %d\n", __func__, status);
-	else {
-		if (statx->fa_valid[0] & statx_btime)
-			nfs_set_cache_invalid(inode,
-					      NFS_INO_INVALID_CHANGE |
-						  NFS_INO_INVALID_CTIME |
-						  NFS_INO_INVALID_BTIME |
-						  NFS_INO_REVAL_FORCED);
-		if (statx->fa_valid[0] & statx_win)
-			nfs_set_cache_invalid(inode,
-					      NFS_INO_INVALID_CHANGE |
-						  NFS_INO_INVALID_CTIME |
-						  NFS_INO_INVALID_WINATTR |
-						  NFS_INO_REVAL_FORCED);
+	if (!status) {
+		if (statx->fa_valid[0] & statx_win) {
+			struct nfs_inode *nfsi = NFS_I(inode);
+
+			spin_lock(&inode->i_lock);
+			if (statx->fa_valid[0] & NFS_FA_VALID_TIME_CREATE)
+				nfsi->timecreate = statx->fa_time_create;
+			if (statx->fa_valid[0] & NFS_FA_VALID_TIME_BACKUP)
+				nfsi->timebackup = statx->fa_time_backup;
+			if (statx->fa_valid[0] & NFS_FA_VALID_ARCHIVE)
+				nfsi->archive = (statx->fa_flags &
+						 NFS_FA_FLAG_ARCHIVE) != 0;
+			if (statx->fa_valid[0] & NFS_FA_VALID_SYSTEM)
+				nfsi->system = (statx->fa_flags &
+						NFS_FA_FLAG_SYSTEM) != 0;
+			if (statx->fa_valid[0] & NFS_FA_VALID_HIDDEN)
+				nfsi->hidden = (statx->fa_flags &
+						NFS_FA_FLAG_HIDDEN) != 0;
+			if (statx->fa_valid[0] & NFS_FA_VALID_OFFLINE)
+				nfsi->offline = (statx->fa_flags &
+						 NFS_FA_FLAG_OFFLINE) != 0;
+			if (statx->fa_valid[0] & NFS_FA_VALID_UNCACHEABLE)
+				nfsi->uncacheable =
+					(statx->fa_flags &
+					 NFS_FA_FLAG_UNCACHEABLE) != 0;
+
+			nfsi->cache_validity &= ~NFS_INO_INVALID_CTIME;
+			if (fattr->valid & NFS_ATTR_FATTR_CTIME)
+				inode->i_ctime = fattr->ctime;
+			else
+				nfs_set_cache_invalid(
+					inode, NFS_INO_INVALID_CHANGE |
+						   NFS_INO_INVALID_CTIME);
+			spin_unlock(&inode->i_lock);
+		}
 
 		nfs_setattr_update_inode(inode, &sattr, fattr);
-	}
+	} else
+		dprintk("%s failed: %d\n", __func__, status);
 
 	return status;
 }
