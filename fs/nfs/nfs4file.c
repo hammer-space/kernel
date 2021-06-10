@@ -416,10 +416,10 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	}
 
 	if (args.fa_request[0] & NFS_FA_VALID_INO) {
-		args.fa_valid[0] |= NFS_FA_VALID_INO;
-		if (copy_to_user(&uarg->fa_ino, &inode->i_ino,
-				 sizeof(uarg->fa_ino)))
+		u64 ino = nfs_compat_user_ino64(NFS_FILEID(inode));
+		if (unlikely(put_user(ino, &uarg->fa_ino) != 0))
 			goto out;
+		args.fa_valid[0] |= NFS_FA_VALID_INO;
 	}
 
 	if (args.fa_request[0] & NFS_FA_VALID_DEV) {
