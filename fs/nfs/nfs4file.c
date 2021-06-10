@@ -503,6 +503,14 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 
 	inode_lock(inode);
 
+	/* Write all dirty data */
+	if (S_ISREG(inode->i_mode)) {
+		ret = nfs_sync_inode(inode);
+		if (ret)
+			goto out;
+	}
+
+	ret = -EFAULT;
 	if (get_user(args.fa_valid[0], &uarg->fa_valid[0]))
 		goto out;
 	args.fa_valid[0] &= NFS_FA_VALID_ALL_ATTR_0;
@@ -569,12 +577,11 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 		if (copy_from_user(&args.fa_size, &uarg->fa_size,
 					sizeof(args.fa_size)))
 			goto out;
-		/* Write all dirty data */
-		if (S_ISREG(inode->i_mode)) {
-			ret = nfs_sync_inode(inode);
-			if (ret)
-				goto out;
-		}
+		ret = inode_newsize_ok(inode,args.fa_size);
+		if (ret)
+			goto out;
+		if (args.fa_size == i_size_read(inode))
+			args.fa_valid[0] &= ~NFS_FA_VALID_SIZE;
 	}
 
 	/*
