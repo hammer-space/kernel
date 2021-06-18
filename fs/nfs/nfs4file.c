@@ -562,15 +562,17 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 			goto out;
 	} else if ((args.fa_valid[0] & NFS_FA_VALID_ARCHIVE) &&
 			!(NFS_SERVER(inode)->fattr_valid & NFS_ATTR_FATTR_ARCHIVE)) {
-		nfs_revalidate_inode(inode, NFS_INO_INVALID_MTIME);
 		args.fa_valid[0] |= NFS_FA_VALID_TIME_BACKUP;
 		if (!(args.fa_flags & NFS_FA_FLAG_ARCHIVE)) {
+			nfs_revalidate_inode(inode, NFS_INO_INVALID_MTIME);
 			args.fa_time_backup.tv_sec = inode->i_mtime.tv_sec;
 			args.fa_time_backup.tv_nsec = inode->i_mtime.tv_nsec;
 		} else if (args.fa_valid[0] & NFS_FA_VALID_TIME_CREATE)
 			args.fa_time_backup = args.fa_time_create;
-		else
+		else {
+			nfs_revalidate_inode(inode, NFS_INO_INVALID_BTIME);
 			args.fa_time_backup = NFS_I(inode)->timecreate;
+		}
 	}
 
         if (args.fa_valid[0] & NFS_FA_VALID_SIZE) {
