@@ -1266,6 +1266,7 @@ static int nfs_parse_mount_options(char *raw,
 	int rc, sloppy = 0, invalid_option = 0;
 	unsigned short protofamily = AF_UNSPEC;
 	unsigned short mountfamily = AF_UNSPEC;
+	int ret;
 
 	if (!raw) {
 		dfprintk(MOUNT, "NFS: mount options string was NULL.\n");
@@ -1350,8 +1351,10 @@ static int nfs_parse_mount_options(char *raw,
 			break;
 		case Opt_rdma:
 			mnt->flags |= NFS_MOUNT_TCP; /* for side protocols */
-			mnt->nfs_server.protocol = XPRT_TRANSPORT_RDMA;
-			xprt_load_transport(p);
+			ret = xprt_find_transport_ident(p);
+			if (ret < 0)
+				goto out_bad_transport;
+			mnt->nfs_server.protocol = ret;
 			break;
 		case Opt_acl:
 			mnt->flags &= ~NFS_MOUNT_NOACL;
@@ -1532,15 +1535,17 @@ static int nfs_parse_mount_options(char *raw,
 				/* fall through */
 			case Opt_xprt_rdma:
 				/* vector side protocols to TCP */
-				mnt->flags |= NFS_MOUNT_TCP;
-				mnt->nfs_server.protocol = XPRT_TRANSPORT_RDMA;
-				xprt_load_transport(string);
+				mnt->flags |= NFS_MOUNT_TCP; /* for side protocols */
+				ret = xprt_find_transport_ident(string);
+				if (ret < 0) {
+					kfree(string);
+					goto out_bad_transport;
+				}
+				mnt->nfs_server.protocol = ret;
 				break;
 			default:
-				dfprintk(MOUNT, "NFS:   unrecognized "
-						"transport protocol\n");
 				kfree(string);
-				return 0;
+				goto out_bad_transport;
 			}
 			kfree(string);
 			break;
@@ -1747,6 +1752,9 @@ out_nomem:
 	return 0;
 out_security_failure:
 	printk(KERN_INFO "NFS: security options invalid: %d\n", rc);
+	return 0;
+out_bad_transport:
+	printk(KERN_INFO "NFS: Unrecognized transport protocol");
 	return 0;
 }
 
