@@ -274,6 +274,11 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 			return ret;
 	}
 
+	if ((dst_file->f_path.mnt->mnt_flags & MNT_NOATIME) ||
+	    ((dst_file->f_path.mnt->mnt_flags & MNT_NODIRATIME) &&
+	     S_ISDIR(inode->i_mode)))
+		reval_attr &= ~NFS_INO_INVALID_ATIME;
+
 	ret = nfs_getattr_revalidate(&dst_file->f_path, reval_attr,
 				     reval_flags);
 	if (ret != 0)
