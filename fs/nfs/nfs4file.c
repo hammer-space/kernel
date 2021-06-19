@@ -173,7 +173,8 @@ out:
 	return ERR_PTR(ret);
 }
 
-static unsigned long nfs4_statx_request_to_cache_validity(__u64 request)
+static unsigned long nfs4_statx_request_to_cache_validity(__u64 request,
+							  u64 fattr_supported)
 {
 	unsigned long ret = 0;
 
@@ -198,10 +199,17 @@ static unsigned long nfs4_statx_request_to_cache_validity(__u64 request)
 
 	if (request & NFS_FA_VALID_TIME_CREATE)
 		ret |= NFS_INO_INVALID_BTIME;
-	if (request & (NFS_FA_VALID_TIME_BACKUP | NFS_FA_VALID_ARCHIVE |
-		       NFS_FA_VALID_HIDDEN | NFS_FA_VALID_SYSTEM |
-		       NFS_FA_VALID_OFFLINE))
+
+	if (request & NFS_FA_VALID_ARCHIVE) {
+		if (fattr_supported & NFS_ATTR_FATTR_ARCHIVE)
+			ret |= NFS_INO_INVALID_WINATTR;
+		else if (fattr_supported & NFS_ATTR_FATTR_TIME_BACKUP)
+			ret |= NFS_INO_INVALID_WINATTR | NFS_INO_INVALID_MTIME;
+	}
+	if (request & (NFS_FA_VALID_TIME_BACKUP | NFS_FA_VALID_HIDDEN |
+		       NFS_FA_VALID_SYSTEM | NFS_FA_VALID_OFFLINE))
 		ret |= NFS_INO_INVALID_WINATTR;
+
 	if (request & NFS_FA_VALID_UNCACHEABLE)
 		ret |= NFS_INO_INVALID_UNCACHE;
 	return ret ? (ret | NFS_INO_INVALID_CHANGE) : 0;
@@ -262,10 +270,11 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	else
 		reval_flags = AT_STATX_SYNC_AS_STAT;
 
-	reval_attr = nfs4_statx_request_to_cache_validity(args.fa_request[0]);
+	reval_attr = nfs4_statx_request_to_cache_validity(args.fa_request[0],
+							  fattr_supported);
 
-	if ((args.fa_request[0] & (NFS_FA_VALID_CTIME | NFS_FA_VALID_MTIME)) &&
-	    S_ISREG(inode->i_mode)) {
+	if ((reval_attr & (NFS_INO_INVALID_CTIME | NFS_INO_INVALID_MTIME)) &&
+	    reval_flags != AT_STATX_DONT_SYNC && S_ISREG(inode->i_mode)) {
 		if (nfs_have_delegated_mtime(inode))
 			ret = filemap_fdatawrite(inode->i_mapping);
 		else
@@ -273,6 +282,11 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		if (ret)
 			return ret;
 	}
+
+	if ((dst_file->f_path.mnt->mnt_flags & MNT_NOATIME) ||
+	    ((dst_file->f_path.mnt->mnt_flags & MNT_NODIRATIME) &&
+	     S_ISDIR(inode->i_mode)))
+		reval_attr &= ~NFS_INO_INVALID_ATIME;
 
 	ret = nfs_getattr_revalidate(&dst_file->f_path, reval_attr,
 				     reval_flags);
