@@ -265,7 +265,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	reval_attr = nfs4_statx_request_to_cache_validity(args.fa_request[0]);
 
 	if ((args.fa_request[0] & (NFS_FA_VALID_CTIME | NFS_FA_VALID_MTIME)) &&
-	    S_ISREG(inode->i_mode)) {
+	    reval_flags != AT_STATX_DONT_SYNC && S_ISREG(inode->i_mode)) {
 		if (nfs_have_delegated_mtime(inode))
 			ret = filemap_fdatawrite(inode->i_mapping);
 		else
