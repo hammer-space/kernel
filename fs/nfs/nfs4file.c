@@ -230,6 +230,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	unsigned int reval_flags;
 	__u32 tmp;
 	int ret;
+
 	/*
 	 * We get the first word from the uarg as it tells us whether
 	 * to use the passed in struct file or use that fd to find the
@@ -238,17 +239,18 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	if (get_user(args.real_fd, &uarg->real_fd))
 		return -EFAULT;
 
+	if (get_user(args.fa_options, &uarg->fa_options))
+		return -EFAULT;
+
+	if (get_user(args.fa_request[0], &uarg->fa_request[0]))
+		return -EFAULT;
+
 	if (args.real_fd >= 0) {
 		dst_file = nfs4_get_real_file(dst_file, args.real_fd);
 		if (IS_ERR(dst_file))
 			return PTR_ERR(dst_file);
 	}
 
-	if (get_user(args.fa_options, &uarg->fa_options))
-		return -EFAULT;
-
-	if (get_user(args.fa_request[0], &uarg->fa_request[0]))
-		return -EFAULT;
 	/*
 	 * Backward compatibility: we stole the top 32 bits of 'real_fd'
 	 * to create the fa_options field, so if its value is -1, then
@@ -262,6 +264,8 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	nfsi = NFS_I(inode);
 	server = NFS_SERVER(inode);
 	fattr_supported = server->fattr_valid;
+
+	trace_nfs_ioctl_file_statx_get_enter(inode);
 
 	if (args.fa_options & NFS_FA_OPTIONS_FORCE_SYNC)
 		reval_flags = AT_STATX_FORCE_SYNC;
@@ -280,7 +284,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		else
 			ret = filemap_write_and_wait(inode->i_mapping);
 		if (ret)
-			return ret;
+			goto out;
 	}
 
 	if ((dst_file->f_path.mnt->mnt_flags & MNT_NOATIME) ||
@@ -291,7 +295,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	ret = nfs_getattr_revalidate(&dst_file->f_path, reval_attr,
 				     reval_flags);
 	if (ret != 0)
-		return ret;
+		goto out;
 
 	ret = -EFAULT;
 	if ((fattr_supported & NFS_ATTR_FATTR_OWNER) &&
@@ -476,6 +480,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 out:
 	if (args.real_fd >= 0)
 		fput(dst_file);
+	trace_nfs_ioctl_file_statx_get_exit(inode, ret);
 	return ret;
 }
 
@@ -493,10 +498,8 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 	 */
 	int ret = -EFAULT;
 
-	if (fattr == NULL) {
-		ret = -ENOMEM;
-		goto out;
-	}
+	if (fattr == NULL)
+		return -ENOMEM;
 
 	/*
 	 * We get the first u64 word from the uarg as it tells us whether
@@ -514,6 +517,7 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 		}
 	}
 	inode = file_inode(dst_file);
+	trace_nfs_ioctl_file_statx_set_enter(inode);
 
 	inode_lock(inode);
 
@@ -609,6 +613,7 @@ out:
 	inode_unlock(inode);
 	if (args.real_fd >= 0)
 		fput(dst_file);
+	trace_nfs_ioctl_file_statx_set_exit(inode, ret);
 out_free:
 	nfs_free_fattr(fattr);
 	return ret;
