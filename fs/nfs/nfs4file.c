@@ -493,10 +493,8 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 	 */
 	int ret = -EFAULT;
 
-	if (fattr == NULL) {
-		ret = -ENOMEM;
-		goto out;
-	}
+	if (fattr == NULL)
+		return -ENOMEM;
 
 	/*
 	 * We get the first u64 word from the uarg as it tells us whether
