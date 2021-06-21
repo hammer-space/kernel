@@ -238,17 +238,18 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	if (get_user(args.real_fd, &uarg->real_fd))
 		return -EFAULT;
 
+	if (get_user(args.fa_options, &uarg->fa_options))
+		return -EFAULT;
+
+	if (get_user(args.fa_request[0], &uarg->fa_request[0]))
+		return -EFAULT;
+
 	if (args.real_fd >= 0) {
 		dst_file = nfs4_get_real_file(dst_file, args.real_fd);
 		if (IS_ERR(dst_file))
 			return PTR_ERR(dst_file);
 	}
 
-	if (get_user(args.fa_options, &uarg->fa_options))
-		return -EFAULT;
-
-	if (get_user(args.fa_request[0], &uarg->fa_request[0]))
-		return -EFAULT;
 	/*
 	 * Backward compatibility: we stole the top 32 bits of 'real_fd'
 	 * to create the fa_options field, so if its value is -1, then
@@ -280,7 +281,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 		else
 			ret = filemap_write_and_wait(inode->i_mapping);
 		if (ret)
-			return ret;
+			goto out;
 	}
 
 	if ((dst_file->f_path.mnt->mnt_flags & MNT_NOATIME) ||
@@ -291,7 +292,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	ret = nfs_getattr_revalidate(&dst_file->f_path, reval_attr,
 				     reval_flags);
 	if (ret != 0)
-		return ret;
+		goto out;
 
 	ret = -EFAULT;
 	if ((fattr_supported & NFS_ATTR_FATTR_OWNER) &&
