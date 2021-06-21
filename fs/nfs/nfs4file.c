@@ -230,6 +230,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	unsigned int reval_flags;
 	__u32 tmp;
 	int ret;
+
 	/*
 	 * We get the first word from the uarg as it tells us whether
 	 * to use the passed in struct file or use that fd to find the
@@ -263,6 +264,8 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 	nfsi = NFS_I(inode);
 	server = NFS_SERVER(inode);
 	fattr_supported = server->fattr_valid;
+
+	trace_nfs_ioctl_file_statx_get_enter(inode);
 
 	if (args.fa_options & NFS_FA_OPTIONS_FORCE_SYNC)
 		reval_flags = AT_STATX_FORCE_SYNC;
@@ -477,6 +480,7 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 out:
 	if (args.real_fd >= 0)
 		fput(dst_file);
+	trace_nfs_ioctl_file_statx_get_exit(inode, ret);
 	return ret;
 }
 
@@ -513,6 +517,7 @@ static long nfs4_ioctl_file_statx_set(struct file *dst_file,
 		}
 	}
 	inode = file_inode(dst_file);
+	trace_nfs_ioctl_file_statx_set_enter(inode);
 
 	inode_lock(inode);
 
@@ -608,6 +613,7 @@ out:
 	inode_unlock(inode);
 	if (args.real_fd >= 0)
 		fput(dst_file);
+	trace_nfs_ioctl_file_statx_set_exit(inode, ret);
 out_free:
 	nfs_free_fattr(fattr);
 	return ret;
