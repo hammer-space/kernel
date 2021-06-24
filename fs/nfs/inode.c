@@ -633,7 +633,13 @@ nfs_update_clear_reval_forced(struct inode *inode)
 {
 	struct nfs_inode *nfsi = NFS_I(inode);
 
-	if (!(nfsi->cache_validity & (NFS_INO_INVALID_ATTR|NFS_INO_INVALID_ATIME)))
+	if (!(nfsi->cache_validity &
+	      (NFS_INO_INVALID_ATIME | NFS_INO_INVALID_CHANGE |
+	       NFS_INO_INVALID_CTIME | NFS_INO_INVALID_MTIME |
+	       NFS_INO_INVALID_SIZE | NFS_INO_INVALID_OTHER |
+	       NFS_INO_INVALID_BLOCKS | NFS_INO_INVALID_NLINK |
+	       NFS_INO_INVALID_MODE | NFS_INO_INVALID_BTIME |
+	       NFS_INO_INVALID_WINATTR | NFS_INO_INVALID_UNCACHE)))
 		nfsi->cache_validity &= ~NFS_INO_REVAL_FORCED;
 }
 
@@ -2140,10 +2146,14 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 	nfs_fattr_fixup_delegated(inode, fattr);
 
 	save_cache_validity = nfsi->cache_validity;
-	nfsi->cache_validity &= ~(NFS_INO_INVALID_ATTR
-			| NFS_INO_INVALID_ATIME
-			| NFS_INO_REVAL_FORCED
-			| NFS_INO_INVALID_BLOCKS);
+	nfsi->cache_validity &=
+		~(NFS_INO_INVALID_ATIME | NFS_INO_REVAL_FORCED |
+		  NFS_INO_INVALID_CHANGE | NFS_INO_INVALID_CTIME |
+		  NFS_INO_INVALID_MTIME | NFS_INO_INVALID_SIZE |
+		  NFS_INO_INVALID_OTHER | NFS_INO_INVALID_BLOCKS |
+		  NFS_INO_INVALID_NLINK | NFS_INO_INVALID_MODE |
+		  NFS_INO_INVALID_BTIME | NFS_INO_INVALID_WINATTR |
+		  NFS_INO_INVALID_UNCACHE);
 
 	/* Do atomic weak cache consistency updates */
 	nfs_wcc_update_inode(inode, fattr);
@@ -2211,45 +2221,40 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 	if (fattr->valid & NFS_ATTR_FATTR_TIME_CREATE) {
 		memcpy(&nfsi->timecreate, &fattr->time_create, sizeof(nfsi->timecreate));
 	} else if (fattr_supported & NFS_ATTR_FATTR_TIME_CREATE) {
-		nfsi->cache_validity |= save_cache_validity &
-				(NFS_INO_INVALID_BTIME
-				| NFS_INO_REVAL_FORCED);
+		nfsi->cache_validity |=
+			save_cache_validity & NFS_INO_INVALID_BTIME;
 		cache_revalidated = false;
 	}
 
 	if (fattr->valid & NFS_ATTR_FATTR_HIDDEN) {
 		nfsi->hidden = (fattr->hsa_flags & NFS_HSA_HIDDEN) != 0;
 	} else if (fattr_supported & NFS_ATTR_FATTR_HIDDEN) {
-		nfsi->cache_validity |= save_cache_validity &
-				(NFS_INO_INVALID_WINATTR
-				| NFS_INO_REVAL_FORCED);
+		nfsi->cache_validity |=
+			save_cache_validity & NFS_INO_INVALID_WINATTR;
 		cache_revalidated = false;
 	}
 
 	if (fattr->valid & NFS_ATTR_FATTR_SYSTEM) {
 		nfsi->system = (fattr->hsa_flags & NFS_HSA_SYSTEM) != 0;
 	} else if (fattr_supported & NFS_ATTR_FATTR_SYSTEM) {
-		nfsi->cache_validity |= save_cache_validity &
-				(NFS_INO_INVALID_WINATTR
-				| NFS_INO_REVAL_FORCED);
+		nfsi->cache_validity |=
+			save_cache_validity & NFS_INO_INVALID_WINATTR;
 		cache_revalidated = false;
 	}
 
 	if (fattr->valid & NFS_ATTR_FATTR_ARCHIVE) {
 		nfsi->archive = (fattr->hsa_flags & NFS_HSA_ARCHIVE) != 0;
 	} else if (fattr_supported & NFS_ATTR_FATTR_ARCHIVE) {
-		nfsi->cache_validity |= save_cache_validity &
-				(NFS_INO_INVALID_WINATTR
-				| NFS_INO_REVAL_FORCED);
+		nfsi->cache_validity |=
+			save_cache_validity & NFS_INO_INVALID_WINATTR;
 		cache_revalidated = false;
 	}
 
 	if (fattr->valid & NFS_ATTR_FATTR_TIME_BACKUP) {
 		memcpy(&nfsi->timebackup, &fattr->time_backup, sizeof(nfsi->timebackup));
 	} else if (fattr_supported & NFS_ATTR_FATTR_TIME_BACKUP) {
-		nfsi->cache_validity |= save_cache_validity &
-				(NFS_INO_INVALID_WINATTR
-				| NFS_INO_REVAL_FORCED);
+		nfsi->cache_validity |=
+			save_cache_validity & NFS_INO_INVALID_WINATTR;
 		cache_revalidated = false;
 	}
 
@@ -2363,9 +2368,8 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 	if (fattr->valid & NFS_ATTR_FATTR_OFFLINE) {
 		nfsi->offline = (fattr->hsa_flags & NFS_HSA_OFFLINE) != 0;
 	} else if (fattr_supported & NFS_ATTR_FATTR_OFFLINE) {
-		nfsi->cache_validity |= save_cache_validity &
-				(NFS_INO_INVALID_WINATTR
-				| NFS_INO_REVAL_FORCED);
+		nfsi->cache_validity |=
+			save_cache_validity & NFS_INO_INVALID_WINATTR;
 		cache_revalidated = false;
 	}
 
@@ -2373,9 +2377,8 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 		nfsi->uncacheable =
 				(fattr->hsa_flags & NFS_HSA_UNCACHEABLE) != 0;
 	} else if (fattr_supported & NFS_ATTR_FATTR_UNCACHEABLE) {
-		nfsi->cache_validity |= save_cache_validity &
-				(NFS_INO_INVALID_UNCACHE
-				| NFS_INO_REVAL_FORCED);
+		nfsi->cache_validity |=
+			save_cache_validity & NFS_INO_INVALID_UNCACHE;
 		cache_revalidated = false;
 	}
 
