@@ -633,7 +633,13 @@ nfs_update_clear_reval_forced(struct inode *inode)
 {
 	struct nfs_inode *nfsi = NFS_I(inode);
 
-	if (!(nfsi->cache_validity & (NFS_INO_INVALID_ATTR|NFS_INO_INVALID_ATIME)))
+	if (!(nfsi->cache_validity &
+	      (NFS_INO_INVALID_ATIME | NFS_INO_INVALID_CHANGE |
+	       NFS_INO_INVALID_CTIME | NFS_INO_INVALID_MTIME |
+	       NFS_INO_INVALID_SIZE | NFS_INO_INVALID_OTHER |
+	       NFS_INO_INVALID_BLOCKS | NFS_INO_INVALID_NLINK |
+	       NFS_INO_INVALID_MODE | NFS_INO_INVALID_BTIME |
+	       NFS_INO_INVALID_WINATTR | NFS_INO_INVALID_UNCACHE)))
 		nfsi->cache_validity &= ~NFS_INO_REVAL_FORCED;
 }
 
