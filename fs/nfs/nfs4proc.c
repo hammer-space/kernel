@@ -1227,9 +1227,7 @@ update_changeattr_locked(struct inode *dir, struct nfs4_change_info *cinfo,
 
 	switch (NFS_SERVER(dir)->change_attr_type) {
 	case NFS4_CHANGE_TYPE_IS_UNDEFINED:
-		break;
-	case NFS4_CHANGE_TYPE_IS_TIME_METADATA:
-		if ((s64)(change_attr - cinfo->after) > 0)
+		if (cinfo->after == change_attr)
 			goto out;
 		break;
 	default:
