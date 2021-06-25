@@ -1227,9 +1227,7 @@ update_changeattr_locked(struct inode *dir, struct nfs4_change_info *cinfo,
 
 	switch (NFS_SERVER(dir)->change_attr_type) {
 	case NFS4_CHANGE_TYPE_IS_UNDEFINED:
-		break;
-	case NFS4_CHANGE_TYPE_IS_TIME_METADATA:
-		if ((s64)(change_attr - cinfo->after) > 0)
+		if (cinfo->after == change_attr)
 			goto out;
 		break;
 	default:
@@ -7623,13 +7621,13 @@ static int nfs4_add_lease(struct file *file, long arg, struct file_lock **lease,
 
 	/* No delegation, no lease */
 	if (!nfs4_have_delegation(inode, type, 0))
-		return -ENOLCK;
+		return -EAGAIN;
 	ret = generic_setlease(file, arg, lease, priv);
 	if (ret || nfs4_have_delegation(inode, type, 0))
 		return ret;
 	/* We raced with a delegation return */
 	nfs4_delete_lease(file, priv);
-	return -ENOLCK;
+	return -EAGAIN;
 }
 
 int nfs4_proc_setlease(struct file *file, long arg, struct file_lock **lease,
