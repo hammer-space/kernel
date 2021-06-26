@@ -1235,15 +1235,18 @@ update_changeattr_locked(struct inode *dir, struct nfs4_change_info *cinfo,
 			goto out;
 	}
 
-	if (cinfo->atomic && cinfo->before == change_attr) {
-		nfsi->attrtimeo_timestamp = jiffies;
-	} else {
-		nfs_force_lookup_revalidate(dir);
-		if (cinfo->before != change_attr)
-			cache_validity |= NFS_INO_INVALID_ACCESS |
-						  NFS_INO_INVALID_ACL;
-	}
 	inode_set_iversion_raw(dir, cinfo->after);
+	if (!cinfo->atomic || cinfo->before != change_attr) {
+		nfs_force_lookup_revalidate(dir);
+		cache_validity |=
+			NFS_INO_INVALID_ACCESS | NFS_INO_INVALID_ACL |
+			NFS_INO_INVALID_SIZE | NFS_INO_INVALID_OTHER |
+			NFS_INO_INVALID_BLOCKS | NFS_INO_INVALID_NLINK |
+			NFS_INO_INVALID_MODE | NFS_INO_INVALID_BTIME |
+			NFS_INO_INVALID_WINATTR | NFS_INO_INVALID_UNCACHE;
+		nfsi->attrtimeo = NFS_MINATTRTIMEO(dir);
+	}
+	nfsi->attrtimeo_timestamp = jiffies;
 	nfsi->read_cache_jiffies = timestamp;
 	nfsi->attr_gencount = nfs_inc_attr_generation_counter();
 	nfsi->cache_validity &= ~NFS_INO_INVALID_CHANGE;
