@@ -1253,7 +1253,7 @@ struct nfs_open_context *nfs_find_open_context(struct inode *inode, const struct
 			continue;
 		if ((pos->mode & (FMODE_READ|FMODE_WRITE)) != mode)
 			continue;
-		if (!test_bit(NFS_CONTEXT_FILE_OPEN, &ctx->flags))
+		if (!test_bit(NFS_CONTEXT_FILE_OPEN, &pos->flags))
 			continue;
 		ctx = get_nfs_open_context(pos);
 		if (ctx)
