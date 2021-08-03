@@ -87,6 +87,11 @@ config NFS_V4
 
 	  If unsure, say Y.
 
+config NFS_IDMAP
+	tristate
+	depends on NFS_V4
+	default NFS_V4
+
 config NFS_SWAP
 	bool "Provide swap over NFS support"
 	default n
