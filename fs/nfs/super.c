@@ -1347,8 +1347,6 @@ EXPORT_SYMBOL_GPL(nfs_kill_super);
  */
 unsigned int nfs_callback_set_tcpport;
 unsigned short nfs_callback_nr_threads;
-/* Default cache timeout is 10 minutes */
-unsigned int nfs_idmap_cache_timeout = 600;
 /* Turn off NFSv4 uid/gid mapping when using AUTH_SYS */
 bool nfs4_disable_idmapping = true;
 unsigned short max_session_slots = NFS4_DEF_SLOT_TABLE_SIZE;
@@ -1359,7 +1357,6 @@ bool recover_lost_locks = false;
 
 EXPORT_SYMBOL_GPL(nfs_callback_nr_threads);
 EXPORT_SYMBOL_GPL(nfs_callback_set_tcpport);
-EXPORT_SYMBOL_GPL(nfs_idmap_cache_timeout);
 EXPORT_SYMBOL_GPL(nfs4_disable_idmapping);
 EXPORT_SYMBOL_GPL(max_session_slots);
 EXPORT_SYMBOL_GPL(max_session_cb_slots);
@@ -1392,7 +1389,6 @@ module_param_named(callback_tcpport, nfs_callback_set_tcpport, portnr, 0644);
 module_param_named(callback_nr_threads, nfs_callback_nr_threads, ushort, 0644);
 MODULE_PARM_DESC(callback_nr_threads, "Number of threads that will be "
 		"assigned to the NFSv4 callback channels.");
-module_param(nfs_idmap_cache_timeout, int, 0644);
 module_param(nfs4_disable_idmapping, bool, 0644);
 module_param_string(nfs4_unique_id, nfs4_client_id_uniquifier,
 			NFS4_CLIENT_ID_UNIQ_LEN, 0600);
