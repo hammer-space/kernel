@@ -10,7 +10,7 @@
 #include <linux/nfs_fs.h>
 
 #include "nfs4_fs.h"
-#include "nfs4idmap.h"
+#include <linux/nfs4idmap.h>
 #include "callback.h"
 
 static const int nfs_set_port_min;
