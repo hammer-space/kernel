@@ -64,7 +64,7 @@
 #include "pnfs.h"
 #include "netns.h"
 #include "sysfs.h"
-#include "nfs4idmap.h"
+#include <linux/nfs4idmap.h>
 #include "nfs4session.h"
 #include "fscache.h"
 #include "nfs42.h"
