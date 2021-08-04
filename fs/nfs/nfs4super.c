@@ -11,7 +11,7 @@
 #include "delegation.h"
 #include "internal.h"
 #include "nfs4_fs.h"
-#include "nfs4idmap.h"
+#include <linux/nfs4idmap.h>
 #include "dns_resolve.h"
 #include "pnfs.h"
 #include "nfs.h"
