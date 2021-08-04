@@ -56,7 +56,7 @@
 #include "nfs4_fs.h"
 #include "nfs4trace.h"
 #include "internal.h"
-#include "nfs4idmap.h"
+#include <linux/nfs4idmap.h>
 #include "nfs4session.h"
 #include "pnfs.h"
 #include "netns.h"
