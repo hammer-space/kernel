@@ -18,7 +18,7 @@
 
 #include "flexfilelayout.h"
 #include "../nfs4session.h"
-#include "../nfs4idmap.h"
+#include <linux/nfs4idmap.h>
 #include "../internal.h"
 #include "../delegation.h"
 #include "../nfs4trace.h"

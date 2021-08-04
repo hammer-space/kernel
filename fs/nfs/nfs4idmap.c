@@ -50,7 +50,7 @@
 
 #include "internal.h"
 #include "netns.h"
-#include "nfs4idmap.h"
+#include <linux/nfs4idmap.h>
 #include "idmaptrace.h"
 
 #define NFS_UINT_MAXLEN 11
@@ -59,6 +59,8 @@
 unsigned int nfs_idmap_cache_timeout = 600;
 EXPORT_SYMBOL_GPL(nfs_idmap_cache_timeout);
 module_param(nfs_idmap_cache_timeout, int, 0644);
+
+MODULE_LICENSE("GPL");
 
 static const struct cred *id_resolver_cache;
 static struct key_type key_type_id_resolver_legacy;
