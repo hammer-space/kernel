@@ -1089,7 +1089,6 @@ struct nfs_server *nfs_clone_server(struct nfs_server *source,
 				    rpc_authflavor_t flavor)
 {
 	struct nfs_server *server;
-	struct nfs_fattr *fattr_fsinfo;
 	int error;
 
 	server = nfs_alloc_server();
@@ -1097,11 +1096,6 @@ struct nfs_server *nfs_clone_server(struct nfs_server *source,
 		return ERR_PTR(-ENOMEM);
 
 	server->cred = get_cred(source->cred);
-
-	error = -ENOMEM;
-	fattr_fsinfo = nfs_alloc_fattr();
-	if (fattr_fsinfo == NULL)
-		goto out_free_server;
 
 	/* Copy data from the source */
 	server->nfs_client = source->nfs_client;
@@ -1118,7 +1112,7 @@ struct nfs_server *nfs_clone_server(struct nfs_server *source,
 		goto out_free_server;
 
 	/* probe the filesystem info for this server filesystem */
-	error = nfs_probe_fsinfo(server, fh, fattr_fsinfo);
+	error = nfs_probe_server(server, fh);
 	if (error < 0)
 		goto out_free_server;
 
@@ -1132,11 +1126,9 @@ struct nfs_server *nfs_clone_server(struct nfs_server *source,
 	nfs_server_insert_lists(server);
 	server->mount_time = jiffies;
 
-	nfs_free_fattr(fattr_fsinfo);
 	return server;
 
 out_free_server:
-	nfs_free_fattr(fattr_fsinfo);
 	nfs_free_server(server);
 	return ERR_PTR(error);
 }
