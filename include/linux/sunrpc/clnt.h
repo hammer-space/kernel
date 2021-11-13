@@ -31,6 +31,7 @@
 
 struct rpc_inode;
 struct rpc_sysfs_client;
+struct idmap;
 
 /*
  * The high-level client handle
@@ -84,6 +85,9 @@ struct rpc_clnt {
 	};
 	const struct cred	*cl_cred;
 	unsigned int		cl_max_connect; /* max number of transports not to the same IP */
+
+	/* idmapper */
+	struct idmap *		cl_idmap;
 };
 
 /*
