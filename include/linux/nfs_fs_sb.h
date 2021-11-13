@@ -80,9 +80,6 @@ struct nfs_client {
 
 	struct rpc_wait_queue	cl_rpcwaitq;
 
-	/* idmapper */
-	struct idmap *		cl_idmap;
-
 	/* Client owner identifier */
 	const char *		cl_owner_id;
 
