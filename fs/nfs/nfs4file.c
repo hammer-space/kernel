@@ -287,7 +287,10 @@ static long nfs4_ioctl_file_statx_get(struct file *dst_file,
 
 	if ((reval_attr & (NFS_INO_INVALID_CTIME | NFS_INO_INVALID_MTIME)) &&
 	    reval_flags != AT_STATX_DONT_SYNC && S_ISREG(inode->i_mode)) {
-		ret = filemap_write_and_wait(inode->i_mapping);
+		if (nfs_have_delegated_mtime(inode))
+			ret = filemap_fdatawrite(inode->i_mapping);
+		else
+			ret = filemap_write_and_wait(inode->i_mapping);
 		if (ret)
 			goto out;
 	}
