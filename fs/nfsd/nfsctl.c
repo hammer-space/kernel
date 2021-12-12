@@ -709,6 +709,7 @@ static ssize_t __write_ports_addfd(char *buf, struct net *net, const struct cred
 	char *mesg = buf;
 	int fd, err;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	int flags = SVC_SOCK_DEFAULTS;
 	struct svc_serv *serv;
 
 	err = get_int(&mesg, &fd);
@@ -720,8 +721,10 @@ static ssize_t __write_ports_addfd(char *buf, struct net *net, const struct cred
 		return err;
 
 	serv = nn->nfsd_serv;
-	err = svc_addsock(serv, net, fd, buf, SIMPLE_TRANSACTION_LIMIT, cred);
-
+	if (!nfsd_rpcbind_error_is_fatal())
+		flags |= SVC_SOCK_RPCBIND_NOERR;
+	err = svc_addsock(serv, net, fd, buf, SIMPLE_TRANSACTION_LIMIT,
+			flags, cred);
 	if (err < 0 && !serv->sv_nrthreads && !nn->keep_active)
 		nfsd_last_thread(net);
 	else if (err >= 0 && !serv->sv_nrthreads && !xchg(&nn->keep_active, 1))
