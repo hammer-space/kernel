@@ -289,17 +289,21 @@ static int nfsd_init_socks(struct net *net, const struct cred *cred)
 {
 	int error;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	int flags = SVC_SOCK_DEFAULTS;
 
 	if (!list_empty(&nn->nfsd_serv->sv_permsocks))
 		return 0;
 
+	if (!nfsd_rpcbind_error_is_fatal())
+		flags |= SVC_SOCK_RPCBIND_NOERR;
+
 	error = svc_create_xprt(nn->nfsd_serv, "udp", net, PF_INET, NFS_PORT,
-					SVC_SOCK_DEFAULTS, cred);
+				flags, cred);
 	if (error < 0)
 		return error;
 
 	error = svc_create_xprt(nn->nfsd_serv, "tcp", net, PF_INET, NFS_PORT,
-					SVC_SOCK_DEFAULTS, cred);
+				flags, cred);
 	if (error < 0)
 		return error;
 
@@ -338,6 +342,16 @@ static void nfsd_shutdown_generic(void)
 
 	nfs4_state_shutdown();
 	nfsd_file_cache_shutdown();
+}
+
+static bool nfsd_rpcbind_error_fatal = false;
+module_param(nfsd_rpcbind_error_fatal, bool, 0644);
+MODULE_PARM_DESC(nfsd_rpcbind_error_fatal,
+		 "rpcbind errors are fatal when starting nfsd.");
+
+bool nfsd_rpcbind_error_is_fatal(void)
+{
+	return nfsd_rpcbind_error_fatal;
 }
 
 /*
