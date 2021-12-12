@@ -1314,14 +1314,15 @@ static struct svc_sock *svc_setup_socket(struct svc_serv *serv,
 	inet = sock->sk;
 
 	/* Register socket with portmapper */
-	if (pmap_register)
+	if (pmap_register) {
 		err = svc_register(serv, sock_net(sock->sk), inet->sk_family,
 				     inet->sk_protocol,
 				     ntohs(inet_sk(inet)->inet_sport));
 
-	if (err < 0) {
-		kfree(svsk);
-		return ERR_PTR(err);
+		if (err < 0 && !(flags & SVC_SOCK_RPCBIND_NOERR)) {
+			kfree(svsk);
+			return ERR_PTR(err);
+		}
 	}
 
 	svsk->sk_sock = sock;
@@ -1369,6 +1370,7 @@ EXPORT_SYMBOL_GPL(svc_alien_sock);
  * @fd: file descriptor of the new listener
  * @name_return: pointer to buffer to fill in with name of listener
  * @len: size of the buffer
+ * @flags: flags argument for svc_setup_socket()
  * @cred: credential
  *
  * Fills in socket name and returns positive length of name if successful.
@@ -1376,7 +1378,7 @@ EXPORT_SYMBOL_GPL(svc_alien_sock);
  * value.
  */
 int svc_addsock(struct svc_serv *serv, const int fd, char *name_return,
-		const size_t len, const struct cred *cred)
+		const size_t len, int flags, const struct cred *cred)
 {
 	int err = 0;
 	struct socket *so = sockfd_lookup(fd, &err);
@@ -1400,7 +1402,7 @@ int svc_addsock(struct svc_serv *serv, const int fd, char *name_return,
 	err = -ENOENT;
 	if (!try_module_get(THIS_MODULE))
 		goto out;
-	svsk = svc_setup_socket(serv, so, SVC_SOCK_DEFAULTS);
+	svsk = svc_setup_socket(serv, so, flags);
 	if (IS_ERR(svsk)) {
 		module_put(THIS_MODULE);
 		err = PTR_ERR(svsk);
