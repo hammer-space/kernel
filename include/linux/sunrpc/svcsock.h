@@ -61,8 +61,8 @@ void		svc_drop(struct svc_rqst *);
 void		svc_sock_update_bufs(struct svc_serv *serv);
 bool		svc_alien_sock(struct net *net, int fd);
 int		svc_addsock(struct svc_serv *serv, const int fd,
-					char *name_return, const size_t len,
-					const struct cred *cred);
+			    char *name_return, const size_t len, int flags,
+			    const struct cred *cred);
 void		svc_init_xprt_sock(void);
 void		svc_cleanup_xprt_sock(void);
 struct svc_xprt *svc_sock_create(struct svc_serv *serv, int prot);
@@ -74,5 +74,6 @@ void		svc_sock_destroy(struct svc_xprt *);
 #define SVC_SOCK_DEFAULTS	(0U)
 #define SVC_SOCK_ANONYMOUS	(1U << 0)	/* don't register with pmap */
 #define SVC_SOCK_TEMPORARY	(1U << 1)	/* flag socket as temporary */
+#define SVC_SOCK_RPCBIND_NOERR	(1U << 2)	/* Ignore pmap errors */
 
 #endif /* SUNRPC_SVCSOCK_H */
