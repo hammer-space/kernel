@@ -708,6 +708,8 @@ void nfs_readdir_record_entry_cache_miss(struct inode *dir)
 static void nfs_lookup_advise_force_readdirplus(struct inode *dir,
 						unsigned int flags)
 {
+	if (nfs_server_capable(dir, NFS_CAP_CASE_INSENSITIVE))
+		return;
 	if (flags & (LOOKUP_EXCL | LOOKUP_PARENT | LOOKUP_REVAL))
 		return;
 	nfs_readdir_record_entry_cache_miss(dir);
