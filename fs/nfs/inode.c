@@ -211,6 +211,8 @@ void nfs_set_cache_invalid(struct inode *inode, unsigned long flags)
 	if (flags & NFS_INO_INVALID_DATA)
 		nfs_fscache_invalidate(inode);
 	flags &= ~(NFS_INO_REVAL_PAGECACHE | NFS_INO_REVAL_FORCED);
+	if (S_ISDIR(inode->i_mode))
+		flags &= ~(NFS_INO_INVALID_DATA | NFS_INO_DATA_INVAL_DEFER);
 
 	nfsi->cache_validity |= flags;
 
@@ -1436,10 +1438,7 @@ static void nfs_wcc_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 			&& (fattr->valid & NFS_ATTR_FATTR_CHANGE)
 			&& inode_eq_iversion_raw(inode, fattr->pre_change_attr)) {
 		inode_set_iversion_raw(inode, fattr->change_attr);
-		if (S_ISDIR(inode->i_mode))
-			nfs_set_cache_invalid(inode, NFS_INO_INVALID_DATA);
-		else if (nfs_server_capable(inode, NFS_CAP_XATTR))
-			nfs_set_cache_invalid(inode, NFS_INO_INVALID_XATTR);
+		nfs_set_cache_invalid(inode, NFS_INO_INVALID_XATTR);
 	}
 	/* If we have atomic WCC data, we may update some attributes */
 	ts = inode->i_ctime;
@@ -1858,8 +1857,6 @@ EXPORT_SYMBOL_GPL(nfs_refresh_inode);
 static int nfs_post_op_update_inode_locked(struct inode *inode,
 		struct nfs_fattr *fattr, unsigned int invalid)
 {
-	if (S_ISDIR(inode->i_mode))
-		invalid |= NFS_INO_INVALID_DATA;
 	nfs_set_cache_invalid(inode, invalid);
 	if ((fattr->valid & NFS_ATTR_FATTR) == 0)
 		return 0;

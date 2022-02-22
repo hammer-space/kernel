@@ -361,8 +361,6 @@ static inline void nfs_mark_for_revalidate(struct inode *inode)
 		| NFS_INO_INVALID_ACL
 		| NFS_INO_INVALID_CHANGE
 		| NFS_INO_INVALID_CTIME;
-	if (S_ISDIR(inode->i_mode))
-		nfsi->cache_validity |= NFS_INO_INVALID_DATA;
 	spin_unlock(&inode->i_lock);
 }
 
