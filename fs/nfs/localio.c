@@ -860,6 +860,7 @@ nfs_client_add_addr(struct nfs_client *clnt, char *buf, gfp_t flags)
 		return -EINVAL;
 	}
 	list_add(&addr->cl_addrs, &clnt->cl_local_addrs);
+	trace_nfs_local_address_detect(clnt, buf);
 
 	return 0;
 }
