@@ -1709,6 +1709,32 @@ DECLARE_EVENT_CLASS(nfs_local_client_event,
 DEFINE_NFS_LOCAL_CLIENT_EVENT(nfs_local_enable);
 DEFINE_NFS_LOCAL_CLIENT_EVENT(nfs_local_disable);
 
+TRACE_EVENT(nfs_local_address_detect,
+		TP_PROTO(
+			const struct nfs_client *clp,
+			const char *address
+		),
+
+		TP_ARGS(clp, address),
+
+		TP_STRUCT__entry(
+			__field(unsigned int, protocol)
+			__string(server, clp->cl_hostname)
+			__string(addr, address)
+		),
+
+		TP_fast_assign(
+			__entry->protocol = clp->rpc_ops->version;
+			__assign_str(server, clp->cl_hostname);
+			__assign_str(addr, address);
+		),
+
+		TP_printk(
+			"server=%s NFSv%u localaddr=%s", __get_str(server),
+			__entry->protocol, __get_str(addr)
+		)
+);
+
 DECLARE_EVENT_CLASS(nfs_xdr_event,
 		TP_PROTO(
 			const struct xdr_stream *xdr,
