@@ -5705,9 +5705,17 @@ static int nfs4_proc_renew(struct nfs_client *clp, const struct cred *cred)
 	return 0;
 }
 
-static inline int nfs4_server_supports_acls(struct nfs_server *server)
+static bool nfs4_server_supports_acls(const struct nfs_server *server,
+				      enum nfs4_acl_type type)
 {
-	return server->caps & NFS_CAP_ACLS;
+	switch (type) {
+	default:
+		return server->attr_bitmask[0] & FATTR4_WORD0_ACL;
+	case NFS4ACL_DACL:
+		return server->attr_bitmask[1] & FATTR4_WORD1_DACL;
+	case NFS4ACL_SACL:
+		return server->attr_bitmask[1] & FATTR4_WORD1_SACL;
+	}
 }
 
 /* Assuming that XATTR_SIZE_MAX is a multiple of PAGE_SIZE, and that
@@ -5746,6 +5754,7 @@ unwind:
 }
 
 struct nfs4_cached_acl {
+	enum nfs4_acl_type type;
 	int cached;
 	size_t len;
 	char data[];
@@ -5766,7 +5775,8 @@ static void nfs4_zap_acl_attr(struct inode *inode)
 	nfs4_set_cached_acl(inode, NULL);
 }
 
-static inline ssize_t nfs4_read_cached_acl(struct inode *inode, char *buf, size_t buflen)
+static ssize_t nfs4_read_cached_acl(struct inode *inode, char *buf,
+				    size_t buflen, enum nfs4_acl_type type)
 {
 	struct nfs_inode *nfsi = NFS_I(inode);
 	struct nfs4_cached_acl *acl;
@@ -5775,6 +5785,8 @@ static inline ssize_t nfs4_read_cached_acl(struct inode *inode, char *buf, size_
 	spin_lock(&inode->i_lock);
 	acl = nfsi->nfs4_acl;
 	if (acl == NULL)
+		goto out;
+	if (acl->type != type)
 		goto out;
 	if (buf == NULL) /* user is just asking for length */
 		goto out_len;
@@ -5791,7 +5803,9 @@ out:
 	return ret;
 }
 
-static void nfs4_write_cached_acl(struct inode *inode, struct page **pages, size_t pgbase, size_t acl_len)
+static void nfs4_write_cached_acl(struct inode *inode, struct page **pages,
+				  size_t pgbase, size_t acl_len,
+				  enum nfs4_acl_type type)
 {
 	struct nfs4_cached_acl *acl;
 	size_t buflen = sizeof(*acl) + acl_len;
@@ -5808,6 +5822,7 @@ static void nfs4_write_cached_acl(struct inode *inode, struct page **pages, size
 			goto out;
 		acl->cached = 0;
 	}
+	acl->type = type;
 	acl->len = acl_len;
 out:
 	nfs4_set_cached_acl(inode, acl);
@@ -5823,7 +5838,8 @@ out:
  * length. The next getxattr call will then produce another round trip to
  * the server, this time with the input buf of the required size.
  */
-static ssize_t __nfs4_get_acl_uncached(struct inode *inode, void *buf, size_t buflen)
+static ssize_t __nfs4_get_acl_uncached(struct inode *inode, void *buf,
+				       size_t buflen, enum nfs4_acl_type type)
 {
 	struct page **pages;
 	struct nfs_getaclargs args = {
@@ -5880,7 +5896,8 @@ static ssize_t __nfs4_get_acl_uncached(struct inode *inode, void *buf, size_t bu
 		ret = -ERANGE;
 		goto out_free;
 	}
-	nfs4_write_cached_acl(inode, pages, res.acl_data_offset, res.acl_len);
+	nfs4_write_cached_acl(inode, pages, res.acl_data_offset, res.acl_len,
+			      type);
 	if (buf) {
 		if (res.acl_len > buflen) {
 			ret = -ERANGE;
@@ -5900,14 +5917,15 @@ out_free:
 	return ret;
 }
 
-static ssize_t nfs4_get_acl_uncached(struct inode *inode, void *buf, size_t buflen)
+static ssize_t nfs4_get_acl_uncached(struct inode *inode, void *buf,
+				     size_t buflen, enum nfs4_acl_type type)
 {
 	struct nfs4_exception exception = {
 		.interruptible = true,
 	};
 	ssize_t ret;
 	do {
-		ret = __nfs4_get_acl_uncached(inode, buf, buflen);
+		ret = __nfs4_get_acl_uncached(inode, buf, buflen, type);
 		trace_nfs4_get_acl(inode, ret);
 		if (ret >= 0)
 			break;
@@ -5916,27 +5934,29 @@ static ssize_t nfs4_get_acl_uncached(struct inode *inode, void *buf, size_t bufl
 	return ret;
 }
 
-static ssize_t nfs4_proc_get_acl(struct inode *inode, void *buf, size_t buflen)
+static ssize_t nfs4_proc_get_acl(struct inode *inode, void *buf, size_t buflen,
+				 enum nfs4_acl_type type)
 {
 	struct nfs_server *server = NFS_SERVER(inode);
 	int ret;
 
-	if (!nfs4_server_supports_acls(server))
+	if (!nfs4_server_supports_acls(server, type))
 		return -EOPNOTSUPP;
 	ret = nfs_revalidate_inode(inode, NFS_INO_INVALID_CHANGE);
 	if (ret < 0)
 		return ret;
 	if (NFS_I(inode)->cache_validity & NFS_INO_INVALID_ACL)
 		nfs_zap_acl_cache(inode);
-	ret = nfs4_read_cached_acl(inode, buf, buflen);
+	ret = nfs4_read_cached_acl(inode, buf, buflen, type);
 	if (ret != -ENOENT)
 		/* -ENOENT is returned if there is no ACL or if there is an ACL
 		 * but no cached acl data, just the acl length */
 		return ret;
-	return nfs4_get_acl_uncached(inode, buf, buflen);
+	return nfs4_get_acl_uncached(inode, buf, buflen, type);
 }
 
-static int __nfs4_proc_set_acl(struct inode *inode, const void *buf, size_t buflen)
+static int __nfs4_proc_set_acl(struct inode *inode, const void *buf,
+			       size_t buflen, enum nfs4_acl_type type)
 {
 	struct nfs_server *server = NFS_SERVER(inode);
 	struct page *pages[NFS4ACL_MAXPAGES];
@@ -5957,7 +5977,7 @@ static int __nfs4_proc_set_acl(struct inode *inode, const void *buf, size_t bufl
 	/* You can't remove system.nfs4_acl: */
 	if (buflen == 0)
 		return -EINVAL;
-	if (!nfs4_server_supports_acls(server))
+	if (!nfs4_server_supports_acls(server, type))
 		return -EOPNOTSUPP;
 	if (npages > ARRAY_SIZE(pages))
 		return -ERANGE;
@@ -5988,12 +6008,13 @@ static int __nfs4_proc_set_acl(struct inode *inode, const void *buf, size_t bufl
 	return ret;
 }
 
-static int nfs4_proc_set_acl(struct inode *inode, const void *buf, size_t buflen)
+static int nfs4_proc_set_acl(struct inode *inode, const void *buf,
+			     size_t buflen, enum nfs4_acl_type type)
 {
 	struct nfs4_exception exception = { };
 	int err;
 	do {
-		err = __nfs4_proc_set_acl(inode, buf, buflen);
+		err = __nfs4_proc_set_acl(inode, buf, buflen, type);
 		trace_nfs4_set_acl(inode, err);
 		if (err == -NFS4ERR_BADOWNER || err == -NFS4ERR_BADNAME) {
 			/*
@@ -7592,19 +7613,19 @@ static int nfs4_xattr_set_nfs4_acl(const struct xattr_handler *handler,
 				   const char *key, const void *buf,
 				   size_t buflen, int flags)
 {
-	return nfs4_proc_set_acl(inode, buf, buflen);
+	return nfs4_proc_set_acl(inode, buf, buflen, NFS4ACL_ACL);
 }
 
 static int nfs4_xattr_get_nfs4_acl(const struct xattr_handler *handler,
 				   struct dentry *unused, struct inode *inode,
 				   const char *key, void *buf, size_t buflen)
 {
-	return nfs4_proc_get_acl(inode, buf, buflen);
+	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_ACL);
 }
 
 static bool nfs4_xattr_list_nfs4_acl(struct dentry *dentry)
 {
-	return nfs4_server_supports_acls(NFS_SERVER(d_inode(dentry)));
+	return nfs4_server_supports_acls(NFS_SB(dentry->d_sb), NFS4ACL_ACL);
 }
 
 #ifdef CONFIG_NFS_V4_SECURITY_LABEL
