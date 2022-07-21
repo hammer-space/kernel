@@ -1092,7 +1092,7 @@ iomap_finish_ioends(struct iomap_ioend *ioend, int error)
 	pages = iomap_finish_ioend(ioend, error);
 
 	while (!list_empty(&tmp)) {
-		if (pages > 32768) {
+		if (pages > 4096) {
 			cond_resched();
 			pages = 0;
 		}
