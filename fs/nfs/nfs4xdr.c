@@ -124,7 +124,8 @@ static int decode_layoutget(struct xdr_stream *xdr, struct rpc_rqst *req,
 				3*nfstime4_maxsz + \
 				nfs4_owner_maxsz + \
 				nfs4_group_maxsz + nfs4_label_maxsz + \
-				 decode_mdsthreshold_maxsz))
+				decode_mdsthreshold_maxsz) + \
+				(1 + 1 + 1 + 2 * nfstime4_maxsz + 1 + 1))
 #define nfs4_fattr_maxsz	(nfs4_fattr_bitmap_maxsz + \
 				nfs4_fattr_value_maxsz)
 #define decode_getattr_maxsz    (op_decode_hdr_maxsz + nfs4_fattr_maxsz)
