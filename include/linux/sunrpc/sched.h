@@ -221,6 +221,7 @@ struct rpc_task *rpc_run_bc_task(struct rpc_rqst *req,
 		struct rpc_timeout *timeout);
 void		rpc_put_task(struct rpc_task *);
 void		rpc_put_task_async(struct rpc_task *);
+bool		rpc_task_set_rpc_status(struct rpc_task *task, int rpc_status);
 void		rpc_signal_task(struct rpc_task *);
 void		rpc_exit_task(struct rpc_task *);
 void		rpc_exit(struct rpc_task *, int);
