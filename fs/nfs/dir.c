@@ -3086,9 +3086,10 @@ int nfs_get_access(struct inode *inode, const struct cred *cred,
 	 * Determine which access bits we want to ask for...
 	 */
 	cache->mask = NFS_ACCESS_READ | NFS_ACCESS_MODIFY | NFS_ACCESS_EXTEND |
+		      NFS_ACCESS_DELETE |
 		      nfs_access_xattr_mask(NFS_SERVER(inode));
 	if (S_ISDIR(inode->i_mode))
-		cache->mask |= NFS_ACCESS_DELETE | NFS_ACCESS_LOOKUP;
+		cache->mask |= NFS_ACCESS_LOOKUP;
 	else
 		cache->mask |= NFS_ACCESS_EXECUTE;
 	cache->cred = cred;
