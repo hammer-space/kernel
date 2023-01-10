@@ -506,6 +506,10 @@ __svc_create(struct svc_program *prog, struct svc_stat *stats,
 		INIT_LIST_HEAD(&pool->sp_sockets);
 		INIT_LIST_HEAD(&pool->sp_all_threads);
 		spin_lock_init(&pool->sp_lock);
+
+		percpu_counter_init(&pool->sp_sockets_queued, 0, GFP_KERNEL);
+		percpu_counter_init(&pool->sp_threads_woken, 0, GFP_KERNEL);
+		percpu_counter_init(&pool->sp_threads_timedout, 0, GFP_KERNEL);
 	}
 
 	return serv;
@@ -560,6 +564,7 @@ EXPORT_SYMBOL_GPL(svc_create_pooled);
 void
 svc_destroy(struct kref *ref)
 {
+	unsigned int i;
 	struct svc_serv *serv = container_of(ref, struct svc_serv, sv_refcnt);
 
 	dprintk("svc: svc_destroy(%s)\n", serv->sv_program->pg_name);
@@ -576,6 +581,13 @@ svc_destroy(struct kref *ref)
 
 	svc_pool_map_put(serv->sv_nrpools);
 
+	for (i = 0; i < serv->sv_nrpools; i++) {
+		struct svc_pool *pool = &serv->sv_pools[i];
+
+		percpu_counter_destroy(&pool->sp_sockets_queued);
+		percpu_counter_destroy(&pool->sp_threads_woken);
+		percpu_counter_destroy(&pool->sp_threads_timedout);
+	}
 	kfree(serv->sv_pools);
 	kfree(serv);
 }
