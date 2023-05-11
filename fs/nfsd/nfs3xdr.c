@@ -470,6 +470,16 @@ svcxdr_encode_post_op_attr_opportunistic(struct svc_rqst *rqstp,
 	return __svcxdr_encode_post_op_attr(rqstp, xdr, fhp, !fhp->fh_no_wcc);
 }
 
+static bool
+svcxdr_encode_post_op_attr_unless_nowcc(struct svc_rqst *rqstp,
+					struct xdr_stream *xdr,
+					const struct svc_fh *fhp)
+{
+	if (!fhp->fh_no_wcc)
+		return svcxdr_encode_post_op_attr(rqstp, xdr, fhp);
+	return xdr_stream_encode_item_absent(xdr) > 0;
+}
+
 /*
  * Encode weak cache consistency data
  */
@@ -871,11 +881,9 @@ nfs3svc_encode_readres(struct svc_rqst *rqstp, struct xdr_stream *xdr)
 
 	if (!svcxdr_encode_nfsstat3(xdr, resp->status))
 		return false;
-	switch (resp->status) {
-	case nfs_ok:
-		if (!svcxdr_encode_post_op_attr_opportunistic(rqstp, xdr,
-							      &resp->fh))
-			return false;
+	if (!svcxdr_encode_post_op_attr_unless_nowcc(rqstp, xdr, &resp->fh))
+		return false;
+	if (resp->status == nfs_ok) {
 		if (xdr_stream_encode_u32(xdr, resp->count) < 0)
 			return false;
 		if (xdr_stream_encode_bool(xdr, resp->eof) < 0)
@@ -885,11 +893,6 @@ nfs3svc_encode_readres(struct svc_rqst *rqstp, struct xdr_stream *xdr)
 		xdr_write_pages(xdr, resp->pages, rqstp->rq_res.page_base,
 				resp->count);
 		if (svc_encode_result_payload(rqstp, head->iov_len, resp->count) < 0)
-			return false;
-		break;
-	default:
-		if (!svcxdr_encode_post_op_attr_opportunistic(rqstp, xdr,
-							      &resp->fh))
 			return false;
 	}
 
