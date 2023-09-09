@@ -276,6 +276,18 @@ out:
 	return err;
 }
 
+static void
+commit_reset_write_verifier(struct nfsd_net *nn, int err)
+{
+	switch (err) {
+	case -EAGAIN:
+	case -ESTALE:
+		break;
+	default:
+		nfsd_reset_boot_verifier(nn);
+	}
+}
+
 /*
  * Commit metadata changes to stable storage.
  */
@@ -562,8 +574,9 @@ __be32 nfsd4_clone_file_range(struct svc_rqst *rqstp,
 					&nfsd4_get_cstate(rqstp)->current_fh,
 					dst_pos,
 					count, status);
-			nfsd_reset_boot_verifier(net_generic(nf_dst->nf_net,
-						 nfsd_net_id));
+			commit_reset_write_verifier(net_generic(nf_dst->nf_net,
+								nfsd_net_id),
+						    status);
 			ret = nfserrno(status);
 		}
 	}
@@ -1037,8 +1050,9 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 					nfsd_net_id));
 		host_err = vfs_iter_write(file, &iter, &pos, flags);
 		if (host_err < 0)
-			nfsd_reset_boot_verifier(net_generic(SVC_NET(rqstp),
-						 nfsd_net_id));
+			commit_reset_write_verifier(net_generic(SVC_NET(rqstp),
+								nfsd_net_id),
+						    host_err);
 	} else {
 		if (verf)
 			nfsd_copy_boot_verifier(verf,
@@ -1047,8 +1061,8 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 		host_err = vfs_iter_write(file, &iter, &pos, flags);
 	}
 	if (host_err < 0) {
-		nfsd_reset_boot_verifier(net_generic(SVC_NET(rqstp),
-					 nfsd_net_id));
+		commit_reset_write_verifier(
+			net_generic(SVC_NET(rqstp), nfsd_net_id), host_err);
 		goto out_nfserr;
 	}
 	*cnt = host_err;
@@ -1061,8 +1075,9 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfsd_file *nf,
 	if (stable && use_wgather) {
 		host_err = wait_for_concurrent_writes(file);
 		if (host_err < 0) {
-			nfsd_reset_boot_verifier(net_generic(SVC_NET(rqstp),
-						 nfsd_net_id));
+			commit_reset_write_verifier(net_generic(SVC_NET(rqstp),
+								nfsd_net_id),
+						    host_err);
 		}
 	}
 
@@ -1254,7 +1269,7 @@ nfsd_commit(struct svc_rqst *rqstp, struct svc_fh *fhp, u64 offset,
 					err2, nf->nf_file);
 			fallthrough;
 		default:
-			nfsd_reset_boot_verifier(nn);
+			commit_reset_write_verifier(nn, err2);
 			err = nfserrno(err2);
 			trace_nfsd_commit_err(rqstp, fhp, offset, err2);
 		}
