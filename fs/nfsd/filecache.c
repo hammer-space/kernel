@@ -940,10 +940,12 @@ nfsd_file_acquire(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	__be32	status;
 	struct net *net = SVC_NET(rqstp);
 	struct nfsd_file *nf, *new;
+	bool stale_retry = true;
 	struct inode *inode;
 	unsigned int hashval;
 	bool retry = true;
 
+retry:
 	/* FIXME: skip this if fh_dentry is already set? */
 	status = fh_verify(rqstp, fhp, S_IFREG,
 				may_flags|NFSD_MAY_OWNER_OVERRIDE);
@@ -952,7 +954,6 @@ nfsd_file_acquire(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	inode = d_inode(fhp->fh_dentry);
 	hashval = (unsigned int)hash_long(inode->i_ino, NFSD_FILE_HASH_BITS);
-retry:
 	rcu_read_lock();
 	nf = nfsd_file_find_locked(inode, may_flags, hashval, net);
 	rcu_read_unlock();
@@ -984,6 +985,7 @@ wait_for_construction:
 		}
 		retry = false;
 		nfsd_file_put_noref(nf);
+		fh_put(fhp);
 		goto retry;
 	}
 
@@ -1016,10 +1018,26 @@ open_file:
 		nfsd_file_gc();
 
 	nf->nf_mark = nfsd_file_mark_find_or_create(nf);
-	if (nf->nf_mark)
-		status = nfsd_open_verified(rqstp, fhp, S_IFREG,
-				may_flags, &nf->nf_file);
-	else
+	if (nf->nf_mark) {
+		int ret = nfsd_open_verified(rqstp, fhp, S_IFREG, may_flags,
+					     &nf->nf_file);
+		if (ret == -EOPENSTALE && stale_retry) {
+			bool do_free;
+
+			spin_lock(&nfsd_file_hashtbl[hashval].nfb_lock);
+			do_free = nfsd_file_unhash(nf);
+			spin_unlock(&nfsd_file_hashtbl[hashval].nfb_lock);
+			if (do_free)
+				nfsd_file_put_noref(nf);
+			clear_bit_unlock(NFSD_FILE_PENDING, &nf->nf_flags);
+			smp_mb__after_atomic();
+			wake_up_bit(&nf->nf_flags, NFSD_FILE_PENDING);
+			nfsd_file_put_noref(nf);
+			fh_put(fhp);
+			goto retry;
+		}
+		status = nfserrno(ret);
+	} else
 		status = nfserr_jukebox;
 	/*
 	 * If construction failed, or we raced with a call to unlink()
