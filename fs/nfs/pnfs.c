@@ -2535,7 +2535,7 @@ pnfs_mark_layout_for_return(struct inode *inode,
 
 	spin_lock(&inode->i_lock);
 	lo = NFS_I(inode)->layout;
-	if (!pnfs_layout_is_valid(lo)) {
+	if (!lo || !pnfs_layout_is_valid(lo)) {
 		spin_unlock(&inode->i_lock);
 		return;
 	}
