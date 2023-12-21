@@ -256,6 +256,9 @@ static int filldir_one(struct dir_context *ctx, const char *name, int len,
 	int result = 0;
 
 	buf->sequence++;
+	/* Ignore the '.' and '..' entries */
+	if (name[0] == '.' && (len == 1 || (name[1] == '.' && len == 2)))
+		return 0;
 	if (buf->ino == ino && len <= NAME_MAX) {
 		memcpy(buf->name, name, len);
 		buf->name[len] = '\0';
