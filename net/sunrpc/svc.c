@@ -1565,6 +1565,7 @@ bc_svc_process(struct svc_serv *serv, struct rpc_rqst *req,
 	struct kvec	*resv = &rqstp->rq_res.head[0];
 	struct rpc_task *task;
 	int proc_error;
+	struct rpc_timeout timeout;
 	int error;
 
 	dprintk("svc: %s(%p)\n", __func__, req);
@@ -1614,8 +1615,15 @@ bc_svc_process(struct svc_serv *serv, struct rpc_rqst *req,
 		goto out;
 	}
 	/* Finally, send the reply synchronously */
+	if (rqstp->bc_to_initval > 0) {
+		timeout.to_initval = rqstp->bc_to_initval;
+		timeout.to_retries = rqstp->bc_to_initval;
+	} else {
+		timeout.to_initval = req->rq_xprt->timeout->to_initval;
+		timeout.to_initval = req->rq_xprt->timeout->to_retries;
+	}
 	memcpy(&req->rq_snd_buf, &rqstp->rq_res, sizeof(req->rq_snd_buf));
-	task = rpc_run_bc_task(req);
+	task = rpc_run_bc_task(req, &timeout);
 	if (IS_ERR(task)) {
 		error = PTR_ERR(task);
 		goto out;
