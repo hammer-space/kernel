@@ -919,8 +919,11 @@ static int nfs4_set_client(struct nfs_server *server,
 		__set_bit(NFS_CS_REUSEPORT, &cl_init.init_flags);
 	else
 		cl_init.max_connect = max_connect;
-	if (proto == XPRT_TRANSPORT_TCP)
+	switch (proto) {
+	case XPRT_TRANSPORT_TCP:
+	case XPRT_TRANSPORT_RDMA:
 		cl_init.nconnect = nconnect;
+	}
 
 	if (server->flags & NFS_MOUNT_NORESVPORT)
 		__set_bit(NFS_CS_NORESVPORT, &cl_init.init_flags);
@@ -988,9 +991,13 @@ struct nfs_client *nfs4_set_ds_client(struct nfs_server *mds_srv,
 		return ERR_PTR(-EINVAL);
 	cl_init.hostname = buf;
 
-	if (mds_clp->cl_nconnect > 1 && ds_proto == XPRT_TRANSPORT_TCP) {
-		cl_init.nconnect = mds_clp->cl_nconnect;
-		cl_init.max_connect = NFS_MAX_TRANSPORTS;
+	switch (ds_proto) {
+	case XPRT_TRANSPORT_TCP:
+	case XPRT_TRANSPORT_RDMA:
+		if (mds_clp->cl_nconnect > 1) {
+			cl_init.nconnect = mds_clp->cl_nconnect;
+			cl_init.max_connect = NFS_MAX_TRANSPORTS;
+		}
 	}
 
 	if (mds_srv->flags & NFS_MOUNT_NORESVPORT)
