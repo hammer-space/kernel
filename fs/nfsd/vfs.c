@@ -351,7 +351,7 @@ nfsd_get_write_access(struct svc_rqst *rqstp, struct svc_fh *fhp,
  */
 __be32
 nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap,
-	     int check_guard, time64_t guardtime)
+	     const struct timespec64 *guardtime)
 {
 	struct dentry	*dentry;
 	struct inode	*inode;
@@ -405,9 +405,6 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap,
 
 	nfsd_sanitize_attrs(inode, iap);
 
-	if (check_guard && guardtime != inode->i_ctime.tv_sec)
-		return nfserr_notsync;
-
 	/*
 	 * The size case is special, it changes the file in addition to the
 	 * attributes, and file systems don't expect it to be mixed with
@@ -422,6 +419,16 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap,
 	}
 
 	fh_lock(fhp);
+	if (guardtime) {
+		struct timespec64 ctime = inode->i_ctime;
+		if ((u32)guardtime->tv_sec != (u32)ctime.tv_sec ||
+		    guardtime->tv_nsec != ctime.tv_nsec) {
+			fh_unlock(fhp);
+			if (size_change)
+				put_write_access(inode);
+			return nfserr_notsync;
+		}
+	}
 	if (size_change) {
 		/*
 		 * RFC5661, Section 18.30.4:
@@ -1204,7 +1211,7 @@ nfsd_create_setattr(struct svc_rqst *rqstp, struct svc_fh *resfhp,
 	if (!uid_eq(current_fsuid(), GLOBAL_ROOT_UID))
 		iap->ia_valid &= ~(ATTR_UID|ATTR_GID);
 	if (iap->ia_valid)
-		return nfsd_setattr(rqstp, resfhp, iap, 0, (time64_t)0);
+		return nfsd_setattr(rqstp, resfhp, iap, NULL);
 	/* Callers expect file metadata to be committed here */
 	return nfserrno(commit_metadata(resfhp));
 }
