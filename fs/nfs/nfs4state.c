@@ -514,7 +514,6 @@ nfs4_alloc_state_owner(struct nfs_server *server,
 	nfs4_init_seqid_counter(&sp->so_seqid);
 	atomic_set(&sp->so_count, 1);
 	INIT_LIST_HEAD(&sp->so_lru);
-	seqcount_spinlock_init(&sp->so_reclaim_seqcount, &sp->so_lock);
 	mutex_init(&sp->so_delegreturn_mutex);
 	return sp;
 }
@@ -1660,7 +1659,6 @@ static int nfs4_reclaim_open_state(struct nfs4_state_owner *sp, const struct nfs
 	 * server that doesn't support a grace period.
 	 */
 	spin_lock(&sp->so_lock);
-	raw_write_seqcount_begin(&sp->so_reclaim_seqcount);
 restart:
 	list_for_each_entry(state, &sp->so_states, open_states) {
 		if (!test_and_clear_bit(ops->state_flag_bit, &state->flags))
@@ -1728,7 +1726,6 @@ restart:
 		spin_lock(&sp->so_lock);
 		goto restart;
 	}
-	raw_write_seqcount_end(&sp->so_reclaim_seqcount);
 	spin_unlock(&sp->so_lock);
 #ifdef CONFIG_NFS_V4_2
 	if (found_ssc_copy_state)
@@ -1738,7 +1735,6 @@ restart:
 out_err:
 	nfs4_put_open_state(state);
 	spin_lock(&sp->so_lock);
-	raw_write_seqcount_end(&sp->so_reclaim_seqcount);
 	spin_unlock(&sp->so_lock);
 	return status;
 }
@@ -1921,8 +1917,11 @@ static int nfs4_do_reclaim(struct nfs_client *clp, const struct nfs4_state_recov
 	struct nfs_server *server;
 	struct rb_node *pos;
 	LIST_HEAD(freeme);
-	int status = 0;
+	int status;
 
+	status = nfs4_begin_drain_session(clp);
+	if (status < 0)
+		return status;
 restart:
 	rcu_read_lock();
 	list_for_each_entry_rcu(server, &clp->cl_superblocks, client_link) {
@@ -2678,6 +2677,9 @@ static void nfs4_state_manager(struct nfs_client *clp)
 		/* Detect expired delegations... */
 		if (test_and_clear_bit(NFS4CLNT_DELEGATION_EXPIRED, &clp->cl_state)) {
 			section = "detect expired delegations";
+			status = nfs4_begin_drain_session(clp);
+			if (status < 0)
+				goto out_error;
 			nfs_reap_expired_delegations(clp);
 			continue;
 		}
