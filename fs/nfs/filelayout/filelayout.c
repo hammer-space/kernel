@@ -864,8 +864,8 @@ filelayout_pg_init_read(struct nfs_pageio_descriptor *pgio,
 	if (!pgio->pg_lseg) {
 		pgio->pg_lseg = fl_pnfs_update_layout(pgio->pg_inode,
 						      nfs_req_openctx(req),
-						      0,
-						      NFS4_MAX_UINT64,
+						      req_offset(req),
+						      req->wb_bytes,
 						      IOMODE_READ,
 						      false,
 						      GFP_KERNEL);
@@ -888,8 +888,8 @@ filelayout_pg_init_write(struct nfs_pageio_descriptor *pgio,
 	if (!pgio->pg_lseg) {
 		pgio->pg_lseg = fl_pnfs_update_layout(pgio->pg_inode,
 						      nfs_req_openctx(req),
-						      0,
-						      NFS4_MAX_UINT64,
+						      req_offset(req),
+						      req->wb_bytes,
 						      IOMODE_RW,
 						      false,
 						      GFP_NOFS);
