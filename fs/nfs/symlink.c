@@ -41,7 +41,7 @@ static int nfs_symlink_filler(void *data, struct page *page)
 error:
 	SetPageError(page);
 	unlock_page(page);
-	return -EIO;
+	return error;
 }
 
 static const char *nfs_get_link(struct dentry *dentry,
