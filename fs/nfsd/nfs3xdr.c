@@ -1101,10 +1101,12 @@ compose_entry_fh(struct nfsd3_readdirres *cd, struct svc_fh *fhp,
 {
 	struct svc_export	*exp;
 	struct dentry		*dparent, *dchild;
+	struct inode *dir;
 	__be32 rv = nfserr_noent;
 
 	dparent = cd->fh.fh_dentry;
 	exp  = cd->fh.fh_export;
+	dir = d_inode(dparent);
 
 	if (isdotent(name, namlen)) {
 		if (namlen == 2) {
@@ -1119,10 +1121,20 @@ compose_entry_fh(struct nfsd3_readdirres *cd, struct svc_fh *fhp,
 				goto out;
 		} else
 			dchild = dget(dparent);
-	} else
+	} else if (dparent->d_sb->s_export_op->flags & EXPORT_OP_REMOTE_FS &&
+		   dir) {
+		inode_lock(dir);
+		dchild = try_lookup_one_len(name, dparent, namlen);
+		inode_unlock(dir);
+		if (IS_ERR_OR_NULL(dchild))
+			return rv;
+		if (d_flags_negative(smp_load_acquire(&dchild->d_flags)))
+			goto out;
+	} else {
 		dchild = lookup_positive_unlocked(name, dparent, namlen);
-	if (IS_ERR(dchild))
-		return rv;
+		if (IS_ERR(dchild))
+			return rv;
+	}
 	if (d_mountpoint(dchild))
 		goto out;
 	if (dchild->d_inode->i_ino != ino)
