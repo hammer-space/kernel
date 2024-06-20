@@ -3403,13 +3403,29 @@ nfsd4_encode_dirent_fattr(struct xdr_stream *xdr, struct nfsd4_readdir *cd,
 			const char *name, int namlen)
 {
 	struct svc_export *exp = cd->rd_fhp->fh_export;
-	struct dentry *dentry;
+	struct dentry *dentry, *dparent = cd->rd_fhp->fh_dentry;
+	struct inode *dir = d_inode(dparent);
 	__be32 nfserr;
 	int ignore_crossmnt = 0;
 
-	dentry = lookup_positive_unlocked(name, cd->rd_fhp->fh_dentry, namlen);
-	if (IS_ERR(dentry))
-		return nfserrno(PTR_ERR(dentry));
+	if (dparent->d_sb->s_export_op->flags & EXPORT_OP_REMOTE_FS &&
+	    dir) {
+		inode_lock(dir);
+		dentry = try_lookup_one_len(name, dparent, namlen);
+		inode_unlock(dir);
+		if (dentry == NULL)
+			return nfserr_jukebox;
+		if (IS_ERR(dentry))
+			return nfserrno(PTR_ERR(dentry));
+		if (d_flags_negative(smp_load_acquire(&dentry->d_flags))) {
+			dput(dentry);
+			return nfserr_jukebox;
+		}
+	} else {
+		dentry = lookup_positive_unlocked(name, dparent, namlen);
+		if (IS_ERR(dentry))
+			return nfserrno(PTR_ERR(dentry));
+	}
 
 	exp_get(exp);
 	/*
