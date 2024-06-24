@@ -561,8 +561,8 @@ void svc_wake_up(struct svc_serv *serv)
 {
 	struct svc_pool *pool = &serv->sv_pools[0];
 
-	if (!svc_pool_wake_idle_thread(pool))
-		set_bit(SP_TASK_PENDING, &pool->sp_flags);
+	set_bit(SP_TASK_PENDING, &pool->sp_flags);
+	svc_pool_wake_idle_thread(pool);
 }
 EXPORT_SYMBOL_GPL(svc_wake_up);
 
@@ -682,7 +682,7 @@ rqst_should_sleep(struct svc_rqst *rqstp)
 	struct svc_pool		*pool = rqstp->rq_pool;
 
 	/* did someone call svc_wake_up? */
-	if (test_and_clear_bit(SP_TASK_PENDING, &pool->sp_flags))
+	if (test_bit(SP_TASK_PENDING, &pool->sp_flags))
 		return false;
 
 	/* was a socket queued? */
@@ -726,6 +726,7 @@ static struct svc_xprt *svc_get_next_xprt(struct svc_rqst *rqstp)
 
 	set_bit(RQ_BUSY, &rqstp->rq_flags);
 	smp_mb__after_atomic();
+	clear_bit(SP_TASK_PENDING, &pool->sp_flags);
 	rqstp->rq_xprt = svc_xprt_dequeue(pool);
 	if (rqstp->rq_xprt)
 		goto out_found;
@@ -734,6 +735,7 @@ static struct svc_xprt *svc_get_next_xprt(struct svc_rqst *rqstp)
 		return NULL;
 	return NULL;
 out_found:
+	clear_bit(SP_TASK_PENDING, &pool->sp_flags);
 	/* Normally we will wait up to 5 seconds for any required
 	 * cache information to be provided.
 	 */
