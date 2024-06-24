@@ -509,7 +509,6 @@ __svc_create(struct svc_program *prog, struct svc_stat *stats,
 
 		percpu_counter_init(&pool->sp_sockets_queued, 0, GFP_KERNEL);
 		percpu_counter_init(&pool->sp_threads_woken, 0, GFP_KERNEL);
-		percpu_counter_init(&pool->sp_threads_timedout, 0, GFP_KERNEL);
 	}
 
 	return serv;
@@ -586,7 +585,6 @@ svc_destroy(struct kref *ref)
 
 		percpu_counter_destroy(&pool->sp_sockets_queued);
 		percpu_counter_destroy(&pool->sp_threads_woken);
-		percpu_counter_destroy(&pool->sp_threads_timedout);
 	}
 	kfree(serv->sv_pools);
 	kfree(serv);
