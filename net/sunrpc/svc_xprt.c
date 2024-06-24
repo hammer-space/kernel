@@ -263,8 +263,6 @@ void svc_xprt_received(struct svc_xprt *xprt)
 		return;
 	}
 
-	trace_svc_xprt_received(xprt);
-
 	/* As soon as we clear busy, the xprt could be closed and
 	 * 'put', so we need a reference to call svc_xprt_enqueue with:
 	 */
@@ -465,7 +463,7 @@ void svc_xprt_enqueue(struct svc_xprt *xprt)
 	lwq_enqueue(&xprt->xpt_ready, &pool->sp_xprts);
 
 	svc_pool_wake_idle_thread(pool);
-	trace_svc_xprt_do_enqueue(xprt, rqstp);
+	trace_svc_xprt_enqueue(xprt, rqstp);
 }
 EXPORT_SYMBOL_GPL(svc_xprt_enqueue);
 
@@ -806,8 +804,8 @@ static int svc_handle_xprt(struct svc_rqst *rqstp, struct svc_xprt *xprt)
 		atomic_add(rqstp->rq_reserved, &xprt->xpt_reserved);
 	} else
 		svc_xprt_received(xprt);
+
 out:
-	trace_svc_handle_xprt(xprt, len);
 	return len;
 }
 
