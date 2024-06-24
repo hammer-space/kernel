@@ -691,6 +691,10 @@ svc_thread_should_sleep(struct svc_rqst *rqstp)
 	if (svc_thread_should_stop(rqstp))
 		return false;
 
+	/* are we freezing? */
+	if (freezing(current))
+		return false;
+
 #if defined(CONFIG_SUNRPC_BACKCHANNEL)
 	if (svc_is_backchannel(rqstp)) {
 		if (!lwq_empty(&rqstp->rq_server->sv_cb_list))
@@ -706,10 +710,10 @@ static void svc_thread_wait_for_work(struct svc_rqst *rqstp)
 	struct svc_pool *pool = rqstp->rq_pool;
 
 	if (svc_thread_should_sleep(rqstp)) {
-		set_current_state(TASK_IDLE | TASK_FREEZABLE);
+		set_current_state(TASK_IDLE);
 		llist_add(&rqstp->rq_idle, &pool->sp_idle_threads);
 		if (likely(svc_thread_should_sleep(rqstp)))
-			schedule();
+			freezable_schedule();
 
 		while (!llist_del_first_this(&pool->sp_idle_threads,
 					     &rqstp->rq_idle)) {
@@ -721,8 +725,8 @@ static void svc_thread_wait_for_work(struct svc_rqst *rqstp)
 			 * for this new work.  This thread can safely sleep
 			 * until woken again.
 			 */
-			schedule();
-			set_current_state(TASK_IDLE | TASK_FREEZABLE);
+			freezable_schedule();
+			set_current_state(TASK_IDLE);
 		}
 		__set_current_state(TASK_RUNNING);
 	} else {
