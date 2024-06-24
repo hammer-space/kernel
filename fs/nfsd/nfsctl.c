@@ -733,7 +733,8 @@ static ssize_t __write_ports_addfd(char *buf, struct net *net, const struct cred
 	err = svc_addsock(serv, net, fd, buf, SIMPLE_TRANSACTION_LIMIT,
 			flags, cred);
 	if (!serv->sv_nrthreads && list_empty(&nn->nfsd_serv->sv_permsocks))
-		nfsd_last_thread(net);
+		nfsd_destroy_serv(net);
+
 	return err;
 }
 
@@ -779,7 +780,7 @@ out_close:
 	}
 out_err:
 	if (!serv->sv_nrthreads && list_empty(&nn->nfsd_serv->sv_permsocks))
-		nfsd_last_thread(net);
+		nfsd_destroy_serv(net);
 
 	return err;
 }
