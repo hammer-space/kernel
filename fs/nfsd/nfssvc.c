@@ -986,8 +986,7 @@ nfsd(void *vrqstp)
 			;
 		if (err == -EINTR)
 			break;
-		validate_process_creds();
-		svc_process(rqstp);
+
 		validate_process_creds();
 	}
 
