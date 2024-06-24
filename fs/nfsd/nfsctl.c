@@ -732,12 +732,8 @@ static ssize_t __write_ports_addfd(char *buf, struct net *net, const struct cred
 		flags |= SVC_SOCK_RPCBIND_NOERR;
 	err = svc_addsock(serv, net, fd, buf, SIMPLE_TRANSACTION_LIMIT,
 			flags, cred);
-	if (err < 0 && !serv->sv_nrthreads && !nn->keep_active)
+	if (!serv->sv_nrthreads && list_empty(&nn->nfsd_serv->sv_permsocks))
 		nfsd_last_thread(net);
-	else if (err >= 0 && !serv->sv_nrthreads && !xchg(&nn->keep_active, 1))
-		svc_get(serv);
-
-	svc_put(serv);
 	return err;
 }
 
@@ -774,10 +770,6 @@ static ssize_t __write_ports_addxprt(char *buf, struct net *net, const struct cr
 	if (err < 0 && err != -EAFNOSUPPORT)
 		goto out_close;
 
-	if (!serv->sv_nrthreads && !xchg(&nn->keep_active, 1))
-		svc_get(serv);
-
-	svc_put(serv);
 	return 0;
 out_close:
 	xprt = svc_find_xprt(serv, transport, net, PF_INET, port);
@@ -786,10 +778,9 @@ out_close:
 		svc_xprt_put(xprt);
 	}
 out_err:
-	if (!serv->sv_nrthreads && !nn->keep_active)
+	if (!serv->sv_nrthreads && list_empty(&nn->nfsd_serv->sv_permsocks))
 		nfsd_last_thread(net);
 
-	svc_put(serv);
 	return err;
 }
 
