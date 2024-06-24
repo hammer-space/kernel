@@ -1456,11 +1456,12 @@ err_system_err:
 	goto sendit;
 }
 
-/*
- * Process the RPC request.
+/**
+ * svc_process - Execute one RPC transaction
+ * @rqstp: RPC transaction context
+ *
  */
-int
-svc_process(struct svc_rqst *rqstp)
+void svc_process(struct svc_rqst *rqstp)
 {
 	struct kvec		*resv = &rqstp->rq_res.head[0];
 	__be32 *p;
@@ -1496,7 +1497,8 @@ svc_process(struct svc_rqst *rqstp)
 
 	if (!svc_process_common(rqstp))
 		goto out_drop;
-	return svc_send(rqstp);
+	svc_send(rqstp);
+	return;
 
 out_baddir:
 	svc_printk(rqstp, "bad direction 0x%08x, dropping request\n",
@@ -1505,7 +1507,6 @@ out_baddir:
 		rqstp->rq_server->sv_stats->rpcbadfmt++;
 out_drop:
 	svc_drop(rqstp);
-	return 0;
 }
 EXPORT_SYMBOL_GPL(svc_process);
 
