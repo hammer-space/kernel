@@ -638,6 +638,7 @@ restart:
 		if (inode == NULL) {
 			rcu_read_unlock();
 			iput(to_put);
+			cond_resched();
 			goto restart;
 		}
 		delegation = nfs_start_delegation_return_locked(NFS_I(inode));
