@@ -151,8 +151,8 @@ struct nfsd_net {
 	/*
 	 * Version information
 	 */
-	bool *nfsd_versions;
-	bool *nfsd4_minorversions;
+	bool nfsd_versions[NFSD_MAXVERS + 1];
+	bool nfsd4_minorversions[NFSD_SUPPORTED_MINOR_VERSION + 1];
 
 	/*
 	 * Duplicate reply cache
