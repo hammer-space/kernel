@@ -941,6 +941,13 @@ bl_pg_test_write(struct nfs_pageio_descriptor *pgio, struct nfs_page *prev,
 	return pnfs_generic_pg_test(pgio, prev, req);
 }
 
+static void
+bl_prepare_setattr(struct inode *inode, const struct iattr *sattr)
+{
+	if (sattr->ia_valid & ATTR_SIZE && sattr->ia_size < i_size_read(inode))
+		pnfs_commit_and_return_layout(inode);
+}
+
 static const struct nfs_pageio_ops bl_pg_read_ops = {
 	.pg_init = bl_pg_init_read,
 	.pg_test = bl_pg_test_read,
@@ -977,6 +984,7 @@ static struct pnfs_layoutdriver_type blocklayout_type = {
 	.pg_read_ops			= &bl_pg_read_ops,
 	.pg_write_ops			= &bl_pg_write_ops,
 	.sync				= pnfs_generic_sync,
+	.prepare_setattr		= bl_prepare_setattr,
 };
 
 static struct pnfs_layoutdriver_type scsilayout_type = {
@@ -1001,6 +1009,7 @@ static struct pnfs_layoutdriver_type scsilayout_type = {
 	.pg_read_ops			= &bl_pg_read_ops,
 	.pg_write_ops			= &bl_pg_write_ops,
 	.sync				= pnfs_generic_sync,
+	.prepare_setattr		= bl_prepare_setattr,
 };
 
 

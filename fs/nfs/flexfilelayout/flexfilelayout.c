@@ -2560,6 +2560,22 @@ ff_layout_set_layoutdriver(struct nfs_server *server,
 	return 0;
 }
 
+static void
+ff_layout_prepare_setattr(struct inode *inode, const struct iattr *sattr)
+{
+	if (sattr->ia_valid & (ATTR_MTIME_SET | ATTR_ATIME_SET)) {
+		struct pnfs_layout_range range = {
+			.length = NFS4_MAX_UINT64,
+		};
+
+		if (sattr->ia_valid & ATTR_ATIME_SET)
+			range.iomode = IOMODE_ANY;
+		else
+			range.iomode = IOMODE_RW;
+		pnfs_return_layout_by_range(inode, &range);
+	}
+}
+
 static const struct pnfs_commit_ops ff_layout_commit_ops = {
 	.setup_ds_info		= ff_layout_setup_ds_info,
 	.release_ds_info	= ff_layout_release_ds_info,
@@ -2593,6 +2609,7 @@ static struct pnfs_layoutdriver_type flexfilelayout_type = {
 	.sync			= pnfs_nfs_generic_sync,
 	.prepare_layoutstats	= ff_layout_prepare_layoutstats,
 	.cancel_io		= ff_layout_cancel_io,
+	.prepare_setattr	= ff_layout_prepare_setattr,
 };
 
 static int __init nfs4flexfilelayout_init(void)

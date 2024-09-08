@@ -1426,18 +1426,14 @@ static void pnfs_layoutreturn_before_put_layout_hdr(struct pnfs_layout_hdr *lo)
  * list when LAYOUTGET has failed, or when LAYOUTGET succeeded, but the
  * deviceid is marked invalid.
  */
-int
-_pnfs_return_layout(struct inode *ino)
+int pnfs_return_layout_by_range(struct inode *ino,
+				struct pnfs_layout_range *range)
 {
 	struct pnfs_layout_hdr *lo = NULL;
 	struct nfs_inode *nfsi = NFS_I(ino);
-	struct pnfs_layout_range range = {
-		.iomode		= IOMODE_ANY,
-		.offset		= 0,
-		.length		= NFS4_MAX_UINT64,
-	};
 	LIST_HEAD(tmp_list);
 	const struct cred *cred;
+	enum pnfs_iomode iomode;
 	nfs4_stateid stateid;
 	int status = 0;
 	bool send, valid_layout;
@@ -1463,10 +1459,10 @@ _pnfs_return_layout(struct inode *ino)
 	}
 	valid_layout = pnfs_layout_is_valid(lo);
 	pnfs_clear_layoutcommit(ino, &tmp_list);
-	pnfs_mark_matching_lsegs_return(lo, &tmp_list, &range, 0);
+	pnfs_mark_matching_lsegs_return(lo, &tmp_list, range, 0);
 
 	if (NFS_SERVER(ino)->pnfs_curr_ld->return_range)
-		NFS_SERVER(ino)->pnfs_curr_ld->return_range(lo, &range);
+		NFS_SERVER(ino)->pnfs_curr_ld->return_range(lo, range);
 
 	/* Don't send a LAYOUTRETURN if list was initially empty */
 	if (!test_bit(NFS_LAYOUT_RETURN_REQUESTED, &lo->plh_flags) ||
@@ -1476,11 +1472,10 @@ _pnfs_return_layout(struct inode *ino)
 		goto out_wait_layoutreturn;
 	}
 
-	send = pnfs_prepare_layoutreturn(lo, &stateid, &cred, NULL);
+	send = pnfs_prepare_layoutreturn(lo, &stateid, &cred, &iomode);
 	spin_unlock(&ino->i_lock);
 	if (send)
-		status = pnfs_send_layoutreturn(lo, &stateid, &cred, IOMODE_ANY,
-						0);
+		status = pnfs_send_layoutreturn(lo, &stateid, &cred, iomode, 0);
 out_wait_layoutreturn:
 	wait_on_bit(&lo->plh_flags, NFS_LAYOUT_RETURN, TASK_UNINTERRUPTIBLE);
 out_put_layout_hdr:
@@ -1489,6 +1484,26 @@ out_put_layout_hdr:
 out:
 	dprintk("<-- %s status: %d\n", __func__, status);
 	return status;
+}
+EXPORT_SYMBOL_GPL(pnfs_return_layout_by_range);
+
+/*
+ * Initiates a LAYOUTRETURN(FILE), and removes the pnfs_layout_hdr
+ * when the layout segment list is empty.
+ *
+ * Note that a pnfs_layout_hdr can exist with an empty layout segment
+ * list when LAYOUTGET has failed, or when LAYOUTGET succeeded, but the
+ * deviceid is marked invalid.
+ */
+int
+_pnfs_return_layout(struct inode *ino)
+{
+	struct pnfs_layout_range range = {
+		.iomode		= IOMODE_ANY,
+		.offset		= 0,
+		.length		= NFS4_MAX_UINT64,
+	};
+	return pnfs_return_layout_by_range(ino, &range);
 }
 
 int
@@ -1517,6 +1532,7 @@ pnfs_commit_and_return_layout(struct inode *inode)
 	pnfs_put_layout_hdr(lo);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(pnfs_commit_and_return_layout);
 
 static int pnfs_layout_return_on_reboot(struct pnfs_layout_hdr *lo)
 {

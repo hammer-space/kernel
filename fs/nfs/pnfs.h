@@ -178,6 +178,8 @@ struct pnfs_layoutdriver_type {
 	int (*prepare_layoutstats) (struct nfs42_layoutstat_args *args);
 
 	void (*cancel_io)(struct pnfs_layout_segment *lseg);
+
+	void (*prepare_setattr)(struct inode *inode, const struct iattr *sattr);
 };
 
 struct pnfs_commit_ops {
@@ -320,6 +322,8 @@ void pnfs_cleanup_layoutcommit(struct nfs4_layoutcommit_data *data);
 int pnfs_layoutcommit_inode(struct inode *inode, bool sync);
 int pnfs_generic_sync(struct inode *inode, bool datasync);
 int pnfs_nfs_generic_sync(struct inode *inode, bool datasync);
+int pnfs_return_layout_by_range(struct inode *,
+				struct pnfs_layout_range *range);
 int _pnfs_return_layout(struct inode *);
 int pnfs_commit_and_return_layout(struct inode *);
 void pnfs_ld_write_done(struct nfs_pgio_header *);
@@ -582,13 +586,17 @@ pnfs_search_commit_reqs(struct inode *inode, struct nfs_commit_info *cinfo,
 }
 
 /* Should the pNFS client commit and return the layout upon a setattr */
-static inline bool
-pnfs_ld_layoutret_on_setattr(struct inode *inode)
+static inline void
+pnfs_ld_prepare_setattr(struct inode *inode, const struct iattr *sattr)
 {
-	if (!pnfs_enabled_sb(NFS_SERVER(inode)))
-		return false;
-	return NFS_SERVER(inode)->pnfs_curr_ld->flags &
-		PNFS_LAYOUTRET_ON_SETATTR;
+	void (*prepare_setattr)(struct inode *, const struct iattr *);
+	struct nfs_server *server = NFS_SERVER(inode);
+
+	if (!pnfs_enabled_sb(server))
+		return;
+	prepare_setattr = server->pnfs_curr_ld->prepare_setattr;
+	if (prepare_setattr)
+		prepare_setattr(inode, sattr);
 }
 
 static inline bool
@@ -763,10 +771,9 @@ static inline int pnfs_commit_and_return_layout(struct inode *inode)
 	return 0;
 }
 
-static inline bool
-pnfs_ld_layoutret_on_setattr(struct inode *inode)
+static inline void
+pnfs_ld_prepare_setattr(struct inode *inode, const struct iattr *sattr)
 {
-	return false;
 }
 
 static inline bool
