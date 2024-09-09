@@ -241,7 +241,7 @@ static struct svc_xprt *__svc_xpo_create(struct svc_xprt_class *xcl,
 
 	xprt = xcl->xcl_ops->xpo_create(serv, net, sap, len, flags);
 	if (IS_ERR(xprt))
-		trace_svc_xprt_create_err(serv->sv_program->pg_name,
+		trace_svc_xprt_create_err(serv->sv_programs->pg_name,
 					  xcl->xcl_name, sap, len, xprt);
 	return xprt;
 }
