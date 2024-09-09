@@ -211,6 +211,11 @@ struct nfsd_net {
 	atomic_t		nfsd_courtesy_clients;
 	struct shrinker		nfsd_client_shrinker;
 	struct work_struct	nfsd_shrinker_work;
+
+#if IS_ENABLED(CONFIG_NFS_LOCALIO)
+	/* Local clients to be invalidated when net is shut down */
+	struct list_head	local_clients;
+#endif
 };
 
 /* Simple check to find out if a given net was properly initialized */
