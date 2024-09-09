@@ -12,6 +12,13 @@
 #include <linux/string.h>
 #include <uapi/linux/nfs.h>
 
+/* The LOCALIO program is entirely private to Linux and is
+ * NOT part of the uapi.
+ */
+#define NFS_LOCALIO_PROGRAM		400122
+#define LOCALIOPROC_NULL		0
+#define LOCALIOPROC_UUID_IS_LOCAL	1
+
 /*
  * This is the kernel NFS client file handle representation
  */
