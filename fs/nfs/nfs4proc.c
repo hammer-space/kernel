@@ -8321,6 +8321,8 @@ static int _nfs4_set_nfs4_statx(struct inode *inode,
 		sattr.ia_size = statx->fa_size;
 	}
 
+	pnfs_ld_prepare_setattr(inode, &sattr);
+
 	nfs4_stateid_copy(&arg.stateid, &zero_stateid);
 
 	status = nfs4_call_sync(server->client, server, &msg, &arg.seq_args, &res.seq_res, 1);
