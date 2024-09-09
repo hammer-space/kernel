@@ -453,6 +453,51 @@ extern int nfs_wait_atomic_killable(atomic_t *p, unsigned int mode);
 extern int nfs_getattr_revalidate(const struct path *path, unsigned long flags,
 				  unsigned int query_flags);
 
+#if IS_ENABLED(CONFIG_NFS_LOCALIO)
+/* localio.c */
+extern void nfs_local_disable(struct nfs_client *);
+extern void nfs_local_probe(struct nfs_client *);
+extern struct nfsd_file *nfs_local_open_fh(struct nfs_client *,
+					   const struct cred *,
+					   struct nfs_fh *,
+					   const fmode_t);
+extern int nfs_local_doio(struct nfs_client *,
+			  struct nfsd_file *,
+			  struct nfs_pgio_header *,
+			  const struct rpc_call_ops *);
+extern int nfs_local_commit(struct nfsd_file *,
+			    struct nfs_commit_data *,
+			    const struct rpc_call_ops *, int);
+extern bool nfs_server_is_local(const struct nfs_client *clp);
+
+#else /* CONFIG_NFS_LOCALIO */
+static inline void nfs_local_disable(struct nfs_client *clp) {}
+static inline void nfs_local_probe(struct nfs_client *clp) {}
+static inline struct nfsd_file *
+nfs_local_open_fh(struct nfs_client *clp, const struct cred *cred,
+		  struct nfs_fh *fh, const fmode_t mode)
+{
+	return NULL;
+}
+static inline int nfs_local_doio(struct nfs_client *clp,
+				 struct nfsd_file *localio,
+				 struct nfs_pgio_header *hdr,
+				 const struct rpc_call_ops *call_ops)
+{
+	return -EINVAL;
+}
+static inline int nfs_local_commit(struct nfsd_file *localio,
+				struct nfs_commit_data *data,
+				const struct rpc_call_ops *call_ops, int how)
+{
+	return -EINVAL;
+}
+static inline bool nfs_server_is_local(const struct nfs_client *clp)
+{
+	return false;
+}
+#endif /* CONFIG_NFS_LOCALIO */
+
 /* super.c */
 extern const struct super_operations nfs_sops;
 bool nfs_auth_info_match(const struct nfs_auth_info *, rpc_authflavor_t);
