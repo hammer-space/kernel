@@ -24,6 +24,7 @@
 #include <linux/nfs.h>
 #include <linux/nfs_fs.h>
 #include <linux/nfs_xdr.h>
+#include <linux/exportfs.h>
 
 #include "internal.h"
 #include "pnfs.h"
@@ -302,33 +303,35 @@ nfs_set_local_verifier(struct inode *inode,
 	verf->committed = how;
 }
 
-/* Factored out from fs/nfsd/vfs.h:fh_getattr() */
+/* Copied from fs/nfsd/vfs.c:nfsd_getattr() */
 static int __vfs_getattr(struct path *p, struct kstat *stat, int version)
 {
-	u32 request_mask = STATX_BASIC_STATS;
+	const struct export_operations *ops = p->dentry->d_sb->s_export_op;
+	int err;
 
-	if (version == 4)
-		request_mask |= (STATX_BTIME | STATX_CHANGE_COOKIE);
-	return vfs_getattr(p, stat, request_mask, AT_STATX_SYNC_AS_STAT);
+	if (ops->getattr)
+		err = ops->getattr(p, stat, true);
+	else
+		err = vfs_getattr(p, stat, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
+	return err;
 }
 
 /* Copied from fs/nfsd/nfsfh.c:nfsd4_change_attribute() */
-static u64 __nfsd4_change_attribute(const struct kstat *stat,
-				    const struct inode *inode)
+static u64 __nfsd4_change_attribute(struct kstat *stat,
+				    struct inode *inode)
 {
-	u64 chattr;
+	if (inode->i_sb->s_export_op->fetch_iversion)
+		return inode->i_sb->s_export_op->fetch_iversion(inode);
+	else if (IS_I_VERSION(inode)) {
+		u64 chattr;
 
-	if (stat->result_mask & STATX_CHANGE_COOKIE) {
-		chattr = stat->change_cookie;
-		if (S_ISREG(inode->i_mode) &&
-		    !(stat->attributes & STATX_ATTR_CHANGE_MONOTONIC)) {
-			chattr += (u64)stat->ctime.tv_sec << 30;
-			chattr += stat->ctime.tv_nsec;
-		}
-	} else {
-		chattr = time_to_chattr(&stat->ctime);
-	}
-	return chattr;
+		chattr =  stat->ctime.tv_sec;
+		chattr <<= 30;
+		chattr += stat->ctime.tv_nsec;
+		chattr += inode_query_iversion(inode);
+		return chattr;
+	} else
+		return time_to_chattr(&stat->ctime);
 }
 
 static void nfs_local_vfs_getattr(struct nfs_local_kiocb *iocb)
