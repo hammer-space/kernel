@@ -303,17 +303,27 @@ nfs_set_local_verifier(struct inode *inode,
 	verf->committed = how;
 }
 
-/* Copied from fs/nfsd/vfs.c:nfsd_getattr() */
+/* Derived from fs/nfsd/vfs.c:nfsd_getattr() */
 static int __vfs_getattr(struct path *p, struct kstat *stat, int version)
 {
 	const struct export_operations *ops = p->dentry->d_sb->s_export_op;
-	int err;
 
-	if (ops->getattr)
-		err = ops->getattr(p, stat, true);
-	else
-		err = vfs_getattr(p, stat, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
-	return err;
+	if (ops->getattr) {
+		bool fh_no_wcc = false;
+		/* set fh_no_wcc same as fs/nfsd/nfsfh.c:nfsd_set_fh_dentry */
+		switch (version) {
+		case 3:
+			if (ops->flags & EXPORT_OP_NOWCC)
+				fh_no_wcc = true;
+			break;
+		case 2:
+			fh_no_wcc = true;
+		}
+		/* pass equivalent of nfsd's force = !fhp->fh_no_wcc */
+		return ops->getattr(p, stat, !fh_no_wcc);
+	}
+
+	return vfs_getattr(p, stat, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
 }
 
 /* Copied from fs/nfsd/nfsfh.c:nfsd4_change_attribute() */
