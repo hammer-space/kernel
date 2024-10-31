@@ -868,7 +868,7 @@ filelayout_pg_init_read(struct nfs_pageio_descriptor *pgio,
 						      req->wb_bytes,
 						      IOMODE_READ,
 						      false,
-						      GFP_KERNEL);
+						      nfs_io_gfp_mask());
 		if (IS_ERR(pgio->pg_lseg)) {
 			pgio->pg_error = PTR_ERR(pgio->pg_lseg);
 			pgio->pg_lseg = NULL;
@@ -892,7 +892,7 @@ filelayout_pg_init_write(struct nfs_pageio_descriptor *pgio,
 						      req->wb_bytes,
 						      IOMODE_RW,
 						      false,
-						      GFP_NOFS);
+						      nfs_io_gfp_mask());
 		if (IS_ERR(pgio->pg_lseg)) {
 			pgio->pg_error = PTR_ERR(pgio->pg_lseg);
 			pgio->pg_lseg = NULL;
