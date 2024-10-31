@@ -224,9 +224,24 @@ struct export_operations {
 						  atomic attribute updates
 						*/
 #define EXPORT_OP_FLUSH_ON_CLOSE	(0x20) /* fs flushes file data on close */
+#define EXPORT_OP_NOLOCKSUPPORT		(0x40) /* no file locking support */
+
 	unsigned long	flags;
 	int (*getattr)(struct path *, struct kstat *, bool);
 };
+
+/**
+ * exportfs_lock_op_is_unsupported() - export does not support file locking
+ * @export_ops:	the nfs export operations to check
+ *
+ * Returns true if the nfs export_operations structure has
+ * EXPORT_OP_NOLOCKSUPPORT in their flags set
+ */
+static inline bool
+exportfs_lock_op_is_unsupported(const struct export_operations *export_ops)
+{
+	return export_ops->flags & EXPORT_OP_NOLOCKSUPPORT;
+}
 
 extern int exportfs_encode_inode_fh(struct inode *inode, struct fid *fid,
 				    int *max_len, struct inode *parent);
