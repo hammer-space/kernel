@@ -29,7 +29,7 @@ DECLARE_EVENT_CLASS(nfs_local_client_event,
 
 		TP_fast_assign(
 			__entry->protocol = clp->rpc_ops->version;
-			__assign_str(server);
+			__assign_str(server, clp->cl_hostname);
 		),
 
 		TP_printk(
