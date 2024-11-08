@@ -458,6 +458,7 @@ extern int nfs_getattr_revalidate(const struct path *path, unsigned long flags,
 /* localio.c */
 extern void nfs_local_disable(struct nfs_client *);
 extern void nfs_local_probe(struct nfs_client *);
+extern void nfs_local_probe_async(struct nfs_client *);
 extern struct nfsd_file *nfs_local_open_fh(struct nfs_client *,
 					   const struct cred *,
 					   struct nfs_fh *,
@@ -475,6 +476,7 @@ extern bool nfs_server_is_local(const struct nfs_client *clp);
 #else /* CONFIG_NFS_LOCALIO */
 static inline void nfs_local_disable(struct nfs_client *clp) {}
 static inline void nfs_local_probe(struct nfs_client *clp) {}
+static inline void nfs_local_probe_async(struct nfs_client *clp) {}
 static inline struct nfsd_file *
 nfs_local_open_fh(struct nfs_client *clp, const struct cred *cred,
 		  struct nfs_fh *fh, struct nfs_file_localio *nfl,

@@ -1956,6 +1956,7 @@ restart:
 	}
 	rcu_read_unlock();
 	nfs4_free_state_owners(&freeme);
+	nfs_local_probe_async(clp);
 	return 0;
 }
 
