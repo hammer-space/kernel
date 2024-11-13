@@ -1006,13 +1006,11 @@ restart:
 static int pnfs_layout_bulk_list_reboot(struct list_head *list)
 {
 	struct pnfs_layout_hdr *lo;
-	struct nfs_client *clp;
 	struct nfs_server *server;
 	int ret;
 
 	list_for_each_entry(lo, list, plh_bulk_destroy) {
 		server = NFS_SERVER(lo->plh_inode);
-		clp = server->nfs_client;
 		ret = pnfs_layout_return_on_reboot(lo);
 		switch (ret) {
 		case 0:

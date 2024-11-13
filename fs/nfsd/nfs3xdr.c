@@ -1036,7 +1036,7 @@ compose_entry_fh(struct nfsd3_readdirres *cd, struct svc_fh *fhp,
 		inode_lock(dir);
 		dchild = try_lookup_one_len(name, dparent, namlen);
 		inode_unlock(dir);
-		if (IS_ERR(dchild))
+		if (IS_ERR_OR_NULL(dchild))
 			return rv;
 		if (d_flags_negative(smp_load_acquire(&dchild->d_flags)))
 			goto out;

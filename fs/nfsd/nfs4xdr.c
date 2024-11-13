@@ -3532,6 +3532,8 @@ nfsd4_encode_dirent_fattr(struct xdr_stream *xdr, struct nfsd4_readdir *cd,
 		inode_lock(dir);
 		dentry = try_lookup_one_len(name, dparent, namlen);
 		inode_unlock(dir);
+		if (dentry == NULL)
+			return nfserr_jukebox;
 		if (IS_ERR(dentry))
 			return nfserrno(PTR_ERR(dentry));
 		if (d_flags_negative(smp_load_acquire(&dentry->d_flags))) {
