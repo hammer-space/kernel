@@ -1308,7 +1308,7 @@ pnfs_prepare_layoutreturn(struct pnfs_layout_hdr *lo,
 		enum pnfs_iomode *iomode)
 {
 	/* Serialise LAYOUTGET/LAYOUTRETURN */
-	if (atomic_read(&lo->plh_outstanding) != 0)
+	if (atomic_read(&lo->plh_outstanding) != 0 && lo->plh_return_seq == 0)
 		return false;
 	if (test_and_set_bit(NFS_LAYOUT_RETURN_LOCK, &lo->plh_flags))
 		return false;
@@ -2139,6 +2139,24 @@ lookup_again:
 				 PNFS_UPDATE_LAYOUT_BULK_RECALL);
 		dprintk("%s matches recall, use MDS\n", __func__);
 		goto out_unlock;
+	}
+
+	/* Return the layout first, if a recall is outstanding */
+	if (pnfs_layout_need_return(lo)) {
+		const struct cred *lr_cred;
+		enum pnfs_iomode lr_iomode;
+		bool send;
+
+		send = pnfs_prepare_layoutreturn(lo, &stateid, &lr_cred,
+						 &lr_iomode);
+		if (send) {
+			spin_unlock(&ino->i_lock);
+			pnfs_send_layoutreturn(lo, &stateid, &lr_cred,
+					       lr_iomode,
+					       PNFS_FL_LAYOUTRETURN_ASYNC);
+			pnfs_put_layout_hdr(lo);
+			goto lookup_again;
+		}
 	}
 
 	/* if LAYOUTGET already failed once we don't try again */
