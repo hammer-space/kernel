@@ -2295,6 +2295,14 @@ lookup_again:
 				lseg = NULL;
 			break;
 		case -ERECALLCONFLICT:
+			spin_lock(&ino->i_lock);
+			if (nfs4_stateid_match_other(&stateid,
+						     &lo->plh_stateid))
+				pnfs_mark_layout_stateid_return(
+					lo, &lo->plh_return_segs, IOMODE_ANY,
+					be32_to_cpu(stateid.seqid));
+			spin_unlock(&ino->i_lock);
+			break;
 		case -EAGAIN:
 			break;
 		case -ENODATA:
